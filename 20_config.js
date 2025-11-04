@@ -1,0 +1,554 @@
+// =============================================================
+// PROGETTO: GG GESTIONE GELATAMI V1
+// FILE: 20_config.js
+// VERSIONE: 25.1 (Header Filter Range + Safe Keys + Config Schema)
+// DESCRIZIONE: Gestore centrale schemi, indici e formati.
+// =============================================================
+
+const CONFIG = (function () {
+  const cache = {};
+  let cacheTimestamp = 0;
+  const CACHE_DURATION_MS = 300000; // 5 minuti
+
+  /**
+   * Parser robusto per valori di configurazione.
+   */
+  function _parseValue(v) {
+    if (v === null || v === undefined || v === '') return v;
+    if (typeof v === 'number' || typeof v === 'boolean' || v instanceof Date) return v;
+
+    if (typeof v === 'string') {
+      const sRaw = v.trim();
+      const s = sRaw.toLowerCase();
+
+      // booleani
+      if (s === 'true' || s === 'vero') return true;
+      if (s === 'false' || s === 'falso') return false;
+
+      // numeri (gestisce € e spazi)
+      const money = sRaw.replace(/[€\s]/g, '');
+      if (money.includes(',') && money.includes('.')) {
+        if (money.lastIndexOf('.') < money.lastIndexOf(',')) {
+          const n1 = parseFloat(money.replace(/\./g, '').replace(',', '.'));
+          if (!isNaN(n1)) return n1;
+        }
+      }
+      const n2 = parseFloat(money.replace(',', '.'));
+      if (!isNaN(n2) && /^-?\d+(\.\d+)?$/.test(money.replace(',', '.'))) return n2;
+
+      // date ISO
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const d = new Date(sRaw);
+        if (!isNaN(d.getTime())) return d;
+      }
+      // date IT: dd/mm/yyyy (con eventuale orario)
+      const mIT = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(sRaw);
+      if (mIT) {
+        const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = mIT;
+        const d = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`);
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+    return v; // Ritorna il valore originale se nessun parsing ha avuto successo
+  }
+
+  function _read() {
+    const now = Date.now();
+    if (cache.data && (now - cacheTimestamp < CACHE_DURATION_MS)) {
+      return cache.data;
+    }
+    const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Config');
+
+    if (!sh) {
+      LOG?.error('CONFIG_READ', "Il foglio 'Config' non è stato trovato. Uso configurazione vuota.");
+      cache.data = {};
+      cacheTimestamp = now;
+      return cache.data;
+    }
+
+    const lastRow = sh.getLastRow();
+    const cfg = {};
+    if (lastRow > 1) {
+      // Assume header sempre in riga 1 per Config
+      const headerRowCfg = 1;
+      // Legge solo le prime 2 colonne (Key, Value)
+      const data = sh.getRange(headerRowCfg + 1, 1, lastRow - headerRowCfg, 2).getValues();
+      for (const [key, raw] of data) {
+        const trimmedKey = String(key ?? '').trim();
+        if (trimmedKey) {
+          cfg[trimmedKey] = _parseValue(raw);
+        }
+      }
+    }
+    cache.data = cfg;
+    cacheTimestamp = now;
+    return cfg;
+  }
+
+  return {
+    get(key, defaultValue = null) {
+      const cfg = _read();
+      return cfg[key] ?? defaultValue;
+    },
+    invalidateCache() {
+      cache.data = null;
+      cacheTimestamp = 0;
+    }
+  };
+})();
+
+
+const SHEETS = (function () {
+  // -----------------------------------------------------------
+  // Utils interni
+  // -----------------------------------------------------------
+  function _toSafe(s) {
+    return String(s ?? '')
+      .normalize('NFKC')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[ /()]/g, '_')
+      .replace(/_+/g, '_');
+  }
+
+  // -----------------------------------------------------------
+  // Definizione degli schemi
+  // -----------------------------------------------------------
+  const SCHEMAS = {
+    // --- SCHEMA CONFIG allineato (solo colonne base) ---
+    'Config': ['Key', 'Value', 'Description'],
+
+    'Fatture': [
+      'FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF',
+      'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
+      'RegimeFiscale', 'Data', 'Anno', 'Mese', 'NumeroDoc', 'TipoDoc',
+      'TotImponibile', 'TotImposta', 'Valuta', 'TotDocumento',
+      'RigheImportate', 'ImportaRigheSrc', 'ImportedAt'
+    ],
+    'Righe': [
+      'FileID', 'Sede', 'DataDoc', 'Anno', 'Mese', 'NumeroDoc',
+      'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
+      'NumeroLinea', 'Codice Articolo Fornitore',
+      'CodiceTipo', 'CodiceValore', 'Descrizione', 'Quantita',
+      'PrezzoUnitario', 'PrezzoTotale', 'AliquotaIVA'
+    ],
+    'Fornitori': ['FornitoreID', 'Denominazione', 'Famiglia', 'Categoria', 'ImportaRighe'],
+    'Aziende': ['P_IVA_Azienda', 'Nome_Sede', 'Note'],
+    'Prodotti': ['CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM', 'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto', 'Note', 'CreatoIl', 'UltimoAgg'],
+    'Log': ['Timestamp', 'Level', 'Scope', 'Message', 'Context'],
+    'Regole_UM': ['CodiceInterno', 'Pezzi per Unità', 'Peso per Pezzo (KG)', 'UM Finale', 'Note'],
+    'Magazzino': [
+      'Codice Interno', 'Denominazione Fornitore', 'Codice Articolo Fornitore', 'Descrizione',
+      'Categoria Prodotto', 'Quantità Acquistata', 'UM Originale', 'Ultimo Prezzo Netto',
+      'Pezzi per Unità (Calc)', 'Peso per Pezzo (KG) (Calc)', 'UM Finale (Calc)',
+      'Quantità Standard', 'Prezzo Standardizzato'
+    ],
+    'Report Fornitori': ['Anno', 'FornitoreID', 'Denominazione Fornitore', 'Spesa Totale (IVA Incl.)'],
+    // --- SCHEMA DATI MENSILI ---
+    'Dati Mensili': [
+      'Sede', 'AnnoMese', 'Anno', 'Mese', 'Fatturato', 'Costo Personale',
+      'Costi', 'Fatture Ricevute', 'Spese Bancarie', 'Altre Spese N/F'
+    ],
+    // --- Filtro Righe Spazzatura ---
+    'Filtro Righe Spazzatura': ['ParolaChiaveDaIgnorare', 'Note']
+  };
+
+  // Mappa nomi sicuri -> nomi reali (es. Dati_Mensili -> "Dati Mensili")
+  const SHEET_NAMES = Object.keys(SCHEMAS).reduce((acc, key) => {
+    const safeKey = _toSafe(key);
+    acc[safeKey] = key;
+    return acc;
+  }, {});
+
+  const _cache = {}; // Cache interna per indici e headerRow
+
+  function _invalidateIndexCache(sheetName = null) {
+    try {
+      if (sheetName && _cache[sheetName]) {
+        delete _cache[sheetName];
+        LOG?.debug('SHEETS_CACHE', `Cache invalidata per ${sheetName}`);
+      } else if (!sheetName) {
+        Object.keys(_cache).forEach(k => delete _cache[k]);
+        LOG?.debug('SHEETS_CACHE', 'Cache intestazioni completamente invalidata.');
+      }
+    } catch (_) {}
+  }
+
+  function _findHeaderRow(sh, sheetName, forceRefresh = false) {
+    if (_cache[sheetName] && _cache[sheetName].headerRow && !forceRefresh) {
+      return _cache[sheetName].headerRow;
+    }
+    if (!SCHEMAS[sheetName]) {
+      LOG?.warn('SHEETS_FIND_HEADER', `Schema non definito per ${sheetName}, assumo riga 1.`);
+      return 1;
+    }
+    const schemaHeaders = new Set(SCHEMAS[sheetName]);
+    if (!sh || schemaHeaders.size === 0) return 1;
+
+    const maxRowsToCheck = Math.min(sh.getLastRow() || 10, 10);
+    if (maxRowsToCheck === 0) return 1;
+
+    let values;
+    try {
+      const lastColToCheck = sh.getLastColumn() || 1;
+      values = sh.getRange(1, 1, maxRowsToCheck, lastColToCheck).getValues();
+    } catch (e) {
+      LOG?.error('SHEETS_FIND_HEADER', `Errore lettura prime righe di ${sheetName}`, { error: e.message });
+      return 1;
+    }
+
+    let bestMatchRow = 1;
+    let maxMatchScore = 0;
+
+    for (let i = 0; i < values.length; i++) {
+      const rowHeaders = new Set(values[i].filter(String).map(h => String(h).trim()));
+      if (rowHeaders.size === 0) continue;
+
+      const intersection = [...schemaHeaders].filter(h => rowHeaders.has(String(h).trim()));
+      const matchScore = intersection.length / schemaHeaders.size;
+
+      if (matchScore > maxMatchScore) {
+        maxMatchScore = matchScore;
+        bestMatchRow = i + 1;
+      }
+      if (matchScore >= 0.7) {
+        if (!_cache[sheetName]) _cache[sheetName] = {};
+        _cache[sheetName].headerRow = bestMatchRow;
+        LOG?.debug('SHEETS_FIND_HEADER', `Riga header trovata per ${sheetName}: ${bestMatchRow} (score: ${matchScore.toFixed(2)})`);
+        return bestMatchRow;
+      }
+    }
+    if (maxMatchScore > 0) {
+      LOG?.warn('SHEETS_HEADER', `Riga intestazioni trovata con bassa confidenza (${(maxMatchScore*100).toFixed(0)}%) per ${sheetName}. Uso riga ${bestMatchRow}.`);
+      if (!_cache[sheetName]) _cache[sheetName] = {};
+      _cache[sheetName].headerRow = bestMatchRow;
+      return bestMatchRow;
+    } else {
+      LOG?.warn('SHEETS_HEADER', `Riga intestazioni non trovata con certezza per ${sheetName}. Assumo riga 1.`, { maxRowsChecked: maxRowsToCheck });
+      if (!_cache[sheetName]) _cache[sheetName] = {};
+      _cache[sheetName].headerRow = 1;
+      return 1;
+    }
+  }
+
+
+  function get(sheetName) {
+    return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  }
+
+  function headerIndex(sheetName, forceRefresh = false) {
+    if (_cache[sheetName] && _cache[sheetName].index && !forceRefresh) {
+      return _cache[sheetName].index;
+    }
+    const sh = get(sheetName);
+    if (!sh) return {};
+
+    const headerRow = _findHeaderRow(sh, sheetName, forceRefresh);
+    let headers = [];
+    try {
+      const lastCol = sh.getLastColumn();
+      headers = lastCol > 0 ? sh.getRange(headerRow, 1, 1, lastCol).getValues()[0] : [];
+    } catch (e) {
+      LOG?.error('SHEETS_INDEX', `Impossibile leggere riga intestazioni ${headerRow} per ${sheetName}`, { error: e.message });
+      return {};
+    }
+
+    const idx = {};
+    headers.forEach((h, i) => {
+      const headerString = String(h ?? '').trim();
+      if (headerString) {
+        const safeKey = _toSafe(headerString);
+        idx[safeKey] = i;
+      }
+    });
+
+    if (!_cache[sheetName]) _cache[sheetName] = {};
+    _cache[sheetName].index = idx;
+    return idx;
+  }
+
+  function _ensureHeaders(sh, schemaHeaders, sheetName) {
+    if (!sh || !Array.isArray(schemaHeaders) || schemaHeaders.length === 0) return;
+
+    const lastRow = sh.getLastRow();
+    const lastCol = sh.getLastColumn() || 1;
+
+    if (lastRow < 1 && lastCol <= 1 && sh.getRange('A1').getValue() === '') {
+      try {
+        const headerRange = sh.getRange(1, 1, 1, schemaHeaders.length);
+        headerRange.setValues([schemaHeaders]);
+        headerRange.setFontWeight('bold').setWrap(false);
+        sh.setFrozenRows(1);
+        LOG?.info('SHEETS_ENSURE_HDR', `Intestazioni create per foglio nuovo ${sheetName}.`);
+        _invalidateIndexCache(sheetName);
+      } catch (e) {
+        LOG?.error('SHEETS_ENSURE_HDR', `Errore scrittura intestazioni per foglio nuovo ${sheetName}`, { error: e.message });
+      }
+      return;
+    }
+
+    const headerRow = _findHeaderRow(sh, sheetName);
+    let actualHeaders = [];
+    try {
+      actualHeaders = lastCol > 0 ? sh.getRange(headerRow, 1, 1, lastCol).getValues()[0].map(h => String(h ?? '').trim()) : [];
+    } catch (e) {
+      LOG?.error('SHEETS_ENSURE_HDR', `Impossibile leggere header esistenti in ${sheetName} riga ${headerRow}`, { error: e.message });
+      return;
+    }
+
+    const schemaHeadersTrimmed = schemaHeaders.map(h => String(h).trim());
+    const schemaHeaderSet = new Set(schemaHeadersTrimmed);
+    const actualValidHeaders = actualHeaders.filter(h => h);
+    const actualHeaderSet = new Set(actualValidHeaders);
+
+    const missingHeaders = schemaHeadersTrimmed.filter(h => h && !actualHeaderSet.has(h));
+    const extraHeaders = actualValidHeaders.filter(h => h && !schemaHeaderSet.has(h));
+
+    let needsUpdate = false;
+    if (missingHeaders.length > 0) {
+      needsUpdate = true;
+    } else {
+      for (let i = 0; i < schemaHeadersTrimmed.length; i++) {
+        if (i >= actualHeaders.length || actualHeaders[i] !== schemaHeadersTrimmed[i]) {
+          needsUpdate = true;
+          break;
+        }
+      }
+    }
+
+    if (needsUpdate) {
+      const finalHeaders = [...schemaHeadersTrimmed, ...extraHeaders];
+      LOG?.warn('SHEETS_ENSURE_HDR', `Riallineamento intestazioni per ${sheetName} (riga ${headerRow}). Mancanti: [${missingHeaders.join(', ')}]. Extra preservate: [${extraHeaders.join(', ')}]`);
+
+      try {
+        const colsToWrite = finalHeaders.length;
+        const colsToClear = Math.max(lastCol, colsToWrite);
+
+        if (colsToClear > 0) {
+          sh.getRange(headerRow, 1, 1, colsToClear).clearContent().clearFormat();
+        }
+
+        if (colsToWrite > 0) {
+          const rng = sh.getRange(headerRow, 1, 1, colsToWrite);
+          rng.setValues([finalHeaders]).setFontWeight('bold').setWrap(false);
+        }
+
+        if (sh.getFrozenRows() < headerRow) {
+          try { sh.setFrozenRows(headerRow); } catch(_) {}
+          if (headerRow === 1 && sh.getFrozenRows() !== 1) { sh.setFrozenRows(1); }
+        }
+
+        _invalidateIndexCache(sheetName);
+        Utilities.sleep(250);
+      } catch (e) {
+        LOG?.error('SHEETS_ENSURE_HDR', `Errore during riscrittura intestazioni in ${sheetName}`, { error: e.message });
+      }
+    }
+
+    if (sheetName === SHEET_NAMES.Fatture || sheetName === SHEET_NAMES.Righe) {
+      try {
+        const existingFilter = sh.getFilter();
+        if (existingFilter) existingFilter.remove();
+
+        const filterHeaderRow = _findHeaderRow(sh, sheetName, true);
+        const lastCol2 = sh.getLastColumn();
+        const lastRow2 = sh.getLastRow();
+        if (lastRow2 >= filterHeaderRow && lastCol2 > 0) {
+          sh.getRange(filterHeaderRow, 1, lastRow2 - filterHeaderRow + 1, lastCol2).createFilter();
+        }
+      } catch (e) {
+        LOG?.warn('SHEETS_FILTER', `Impossibile gestire filtro per ${sheetName}`, { error: e.message });
+      }
+    }
+  }
+
+
+  function ensureAll() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    LOG?.info('SHEETS_ENSURE', 'Avvio verifica struttura fogli...');
+    for (const sheetName in SCHEMAS) {
+      if (!SCHEMAS.hasOwnProperty(sheetName)) continue;
+
+      let sh = ss.getSheetByName(sheetName);
+      if (!sh) {
+        sh = ss.insertSheet(sheetName);
+        LOG?.info('SHEETS_ENSURE', `Foglio ${sheetName} creato.`);
+        if (Array.isArray(SCHEMAS[sheetName]) && SCHEMAS[sheetName].length > 0) {
+          _ensureHeaders(sh, SCHEMAS[sheetName], sheetName);
+        }
+      } else {
+        if (Array.isArray(SCHEMAS[sheetName]) && SCHEMAS[sheetName].length > 0) {
+          _ensureHeaders(sh, SCHEMAS[sheetName], sheetName);
+        }
+      }
+    }
+    LOG?.info('SHEETS_ENSURE', 'Verifica struttura fogli completata.');
+  }
+
+  function _formatRange(sheetName, colNames, format) {
+    const sh = get(sheetName);
+    if (!sh) return;
+    const idx = headerIndex(sheetName, true);
+    const headerRow = _findHeaderRow(sh, sheetName, true);
+    if (sh.getLastRow() < headerRow + 1) return;
+
+    for (const colName of colNames) {
+      const safeColName = _toSafe(colName);
+      if (idx[safeColName] !== undefined) {
+        const colIndex0 = idx[safeColName];
+        const colNum = colIndex0 + 1;
+        if (colNum > 0 && colNum <= sh.getMaxColumns()) {
+          try {
+            const numRowsToFormat = sh.getLastRow() - headerRow;
+            if (numRowsToFormat > 0) {
+              sh.getRange(headerRow + 1, colNum, numRowsToFormat).setNumberFormat(format);
+            }
+          } catch (e) {
+            LOG?.error('SHEETS_FORMAT', `Errore formattazione colonna ${colName} (${colNum}) in ${sheetName}`, { error: e.message });
+          }
+        }
+      } else {
+        const optionalSheets = [SHEET_NAMES.Dati_Mensili];
+        if (!optionalSheets.includes(sheetName)) {
+          LOG?.warn('SHEETS_FORMAT', `Colonna "${colName}" (key: ${safeColName}) non trovata per formattazione in ${sheetName}.`);
+        }
+      }
+    }
+  }
+
+  function applyFormats() {
+    const FORMAT_RULES = {
+      [SHEET_NAMES.Fatture]: [
+        { format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00', cols: ['TotImponibile', 'TotImposta', 'TotDocumento'] },
+        { format: 'dd/mm/yyyy', cols: ['Data'] },
+        { format: 'dd/mm/yyyy hh:mm:ss', cols: ['ImportedAt'] },
+        { format: '@', cols: ['FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF', 'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria', 'RegimeFiscale', 'NumeroDoc', 'TipoDoc', 'Valuta', 'ImportaRigheSrc'] }
+      ],
+      [SHEET_NAMES.Righe]: [
+        { format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00', cols: ['PrezzoUnitario', 'PrezzoTotale'] },
+        { format: '#,##0.####', cols: ['Quantita'] },
+        { format: '@', cols: ['AliquotaIVA'] },
+        { format: 'dd/mm/yyyy', cols: ['DataDoc'] },
+        { format: '@', cols: ['FileID', 'Sede', 'NumeroDoc', 'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria', 'NumeroLinea', 'Codice Articolo Fornitore', 'CodiceTipo', 'CodiceValore', 'Descrizione'] }
+      ],
+      [SHEET_NAMES.Prodotti]: [
+        { format: '@', cols: ['CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM', 'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto', 'Note'] },
+        { format: 'dd/mm/yyyy hh:mm:ss', cols: ['CreatoIl', 'UltimoAgg'] }
+      ],
+      [SHEET_NAMES.Log]: [
+        { format: 'dd/mm/yyyy hh:mm:ss', cols: ['Timestamp'] },
+        { format: '@', cols: ['Level', 'Scope', 'Message', 'Context'] }
+      ],
+      [SHEET_NAMES.Regole_UM]: [
+        { format: '@', cols: ['CodiceInterno', 'UM Finale', 'Note'] },
+        { format: '#,##0.####', cols: ['Pezzi per Unità', 'Peso per Pezzo (KG)'] }
+      ],
+      [SHEET_NAMES.Magazzino]: [
+        { format: '@', cols: ['Codice Interno', 'Denominazione Fornitore', 'Codice Articolo Fornitore', 'Descrizione', 'Categoria Prodotto', 'UM Originale', 'UM Finale (Calc)'] },
+        { format: '#,##0.####', cols: ['Pezzi per Unità (Calc)', 'Peso per Pezzo (KG) (Calc)', 'Quantità Acquistata', 'Quantità Standard'] },
+        { format: '€ #,##0.0000', cols: ['Ultimo Prezzo Netto', 'Prezzo Standardizzato'] }
+      ],
+      [SHEET_NAMES.Report_Fornitori]: [
+        { format: '@', cols: ['Anno', 'FornitoreID', 'Denominazione Fornitore'] },
+        { format: '€ #,##0.00', cols: ['Spesa Totale (IVA Incl.)'] }
+      ],
+      [SHEET_NAMES.Dati_Mensili]: [
+        { format: '@', cols: ['Sede', 'AnnoMese', 'Anno', 'Mese'] },
+        { format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00', cols: [
+          'Fatturato', 'Costo Personale',
+          'Costi', 'Fatture Ricevute', 'Spese Bancarie', 'Altre Spese N/F'
+        ]}
+      ],
+      [SHEET_NAMES.Filtro_Righe_Spazzatura]: [
+        { format: '@', cols: ['ParolaChiaveDaIgnorare', 'Note'] }
+      ]
+    };
+
+    LOG?.info('SHEETS_FORMAT', 'Avvio applicazione formati...');
+    for (const sheetName in FORMAT_RULES) {
+      if (!FORMAT_RULES.hasOwnProperty(sheetName)) continue;
+      const sheet = get(sheetName);
+      if (!sheet) {
+        LOG?.warn('SHEETS_FORMAT', `Foglio ${sheetName} non trovato per formattazione.`);
+        continue;
+      }
+      const rulesForSheet = FORMAT_RULES[sheetName];
+      if (!Array.isArray(rulesForSheet)) {
+        LOG?.error('CONFIG_FORMAT', `Definizione FORMAT_RULES non valida per ${sheetName}.`, { rules: rulesForSheet });
+        continue;
+      }
+      for (const rule of rulesForSheet) {
+        if (rule && Array.isArray(rule.cols) && rule.format !== undefined) {
+          _formatRange(sheetName, rule.cols, rule.format);
+        } else {
+          LOG?.warn('CONFIG_FORMAT', `Regola formattazione non valida per ${sheetName}.`, { rule: rule });
+        }
+      }
+    }
+    LOG?.info('SHEETS_FORMAT', 'Applicazione formati completata.');
+  }
+
+
+  function getCompanyMap() {
+    const sheetName = SHEET_NAMES.Aziende;
+    const sh = get(sheetName);
+    const headerRow = sh ? _findHeaderRow(sh, sheetName) : 1;
+    if (!sh || sh.getLastRow() <= headerRow) return new Map();
+
+    let data = [];
+    try {
+      data = sh.getRange(headerRow + 1, 1, sh.getLastRow() - headerRow, 2).getValues();
+    } catch (e) {
+      LOG?.error('SHEETS_GETMAP', `Errore lettura dati da ${sheetName}`, { error: e.message });
+      return new Map();
+    }
+
+    const companyMap = new Map();
+    data.forEach(([key, val]) => {
+      const trimmedKey = String(key ?? '').trim();
+      const normalizedKey = trimmedKey.replace(/^IT/i, '').replace(/^0+/, '');
+      const trimmedVal = String(val ?? '').trim();
+      if (normalizedKey && trimmedVal) {
+        companyMap.set(normalizedKey, trimmedVal);
+      }
+    });
+    return companyMap;
+  }
+
+  function getProcessedFileIds() {
+    const sheetName = SHEET_NAMES.Fatture;
+    const sh = get(sheetName);
+    const headerRow = sh ? _findHeaderRow(sh, sheetName) : 1;
+    if (!sh || sh.getLastRow() <= headerRow) return new Set();
+
+    let data = [];
+    try {
+      data = sh.getRange(headerRow + 1, 1, sh.getLastRow() - headerRow, 1).getValues();
+    } catch (e) {
+      LOG?.error('SHEETS_GETIDS', `Errore lettura FileID da ${sheetName}`, { error: e.message });
+      return new Set();
+    }
+
+    const ids = new Set();
+    data.flat().forEach(id => {
+      const trimmedId = String(id ?? '').trim();
+      if (trimmedId) ids.add(trimmedId);
+    });
+    return ids;
+  }
+
+  // API Pubblica del modulo SHEETS
+  return {
+    get,
+    ensureAll,
+    applyFormats,
+    headerIndex,
+    invalidateHeaderIndexCache(sheetName = null) { _invalidateIndexCache(sheetName); },
+    getCompanyMap,
+    getProcessedFileIds,
+    SCHEMAS,
+    SHEET_NAMES,
+    _findHeaderRow,
+    _ensureHeaders
+  };
+})();
