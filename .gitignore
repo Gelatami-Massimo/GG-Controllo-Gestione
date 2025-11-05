@@ -1,0 +1,7 @@
+# File di configurazione locale di Clasp
+# Contiene l'ID dello script e non deve essere tracciato
+.clasp.json
+
+# Cartelle di cache e moduli di Node.js (opzionale ma consigliato)
+node_modules/
+.DS_Store
