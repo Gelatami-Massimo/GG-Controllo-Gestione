@@ -1,0 +1,120 @@
+<!--
+// =============================================================
+// PROGETTO: GG GESTIONE GELATAMI V1
+// FILE: PdfTemplate.html
+// VERSIONE: 25
+// DESCRIZIONE: Template HTML per la conversione in PDF delle fatture.
+// =============================================================
+-->
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <base target="_top">
+    <style>
+      /* Stili CSS ottimizzati per la conversione in PDF */
+      @page { size: A4; margin: 14mm 12mm; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #333; }
+      .container { width: 100%; padding: 10mm 0; margin: 0 auto; }
+      h1 { font-size: 16pt; color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 5px; margin: 0 0 12px 0; }
+      h2 { font-size: 12pt; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 18px 0 8px; }
+
+      .doc-info { margin: 6px 0 10px 0; }
+      .label { color: #555; }
+      /* Uso di CSS Grid per layout flessibile */
+      .header { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      .col { padding: 10px; border: 1px solid #eee; border-radius: 5px; break-inside: avoid; page-break-inside: avoid; }
+      .addr { line-height: 1.35; }
+
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; table-layout: fixed; }
+      th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+      th { background-color: #f2f2f2; font-weight: bold; }
+      td.wrap { word-break: break-word; white-space: pre-wrap; }
+      .right { text-align: right; white-space: nowrap; }
+      /* Previene la rottura delle righe su più pagine */
+      tbody tr { break-inside: avoid; page-break-inside: avoid; }
+
+      .summary-wrap { display: grid; grid-template-columns: 1fr 45%; }
+      .summary { margin-left: auto; width: 100%; margin-top: 16px; }
+      .summary th, .summary td { font-weight: bold; }
+      .muted { color: #666; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Copia di Cortesia - Fattura Elettronica</h1>
+
+      <div class="doc-info">
+        <span class="label"><strong>Numero:</strong></span> <?!= doc.numero ?>
+        &nbsp;&nbsp;&nbsp;
+        <span class="label"><strong>Data:</strong></span> <?!= doc.data ?>
+      </div>
+
+      <div class="header">
+        <div class="col">
+          <h2>Fornitore</h2>
+          <div><strong><?!= fornitore.nome ?></strong></div>
+          <div class="addr"><?!= fornitore.indirizzo ?></div>
+          <? if (fornitore.piva) { ?><div>P.IVA: <?!= fornitore.piva ?></div><? } ?>
+          <? if (fornitore.cf)   { ?><div>C.F.: <?!= fornitore.cf ?></div><? } ?>
+        </div>
+
+        <div class="col">
+          <h2>Cliente</h2>
+          <div><strong><?!= cliente.nome ?></strong></div>
+          <div class="addr"><?!= cliente.indirizzo ?></div>
+          <? if (cliente.piva) { ?><div>P.IVA: <?!= cliente.piva ?></div><? } ?>
+          <? if (cliente.cf)   { ?><div>C.F.: <?!= cliente.cf ?></div><? } ?>
+        </div>
+      </div>
+
+      <h2>Dettaglio</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40px;">#</th>
+            <th>Descrizione</th>
+            <th class="right" style="width: 60px;">Q.tà</th>
+            <th class="right" style="width: 90px;">Prezzo Unit.</th>
+            <th class="right" style="width: 100px;">Prezzo Tot.</th>
+            <th class="right" style="width: 60px;">IVA</th>
+          </tr>
+        </thead>
+        <tbody>
+          <? for (let i = 0; i < righe.length; i++) { ?>
+            <tr>
+              <td class="right"><?!= righe[i].numeroLinea ?></td>
+              <td class="wrap"><?!= righe[i].descrizione ?></td>
+              <td class="right"><?!= righe[i].quantita ?></td>
+              <td class="right"><?!= righe[i].prezzoUnitario ?> &euro;</td>
+              <td class="right"><?!= righe[i].prezzoTotale ?> &euro;</td>
+              <td class="right"><?!= righe[i].aliquotaIVA ?> %</td>
+            </tr>
+          <? } ?>
+        </tbody>
+      </table>
+
+      <div class="summary-wrap">
+        <div></div>
+        <table class="summary">
+          <tr>
+            <td>Totale Imponibile</td>
+            <td class="right"><?!= riepilogo.totaleImponibile ?> &euro;</td>
+          </tr>
+          <tr>
+            <td>Totale Imposta (IVA)</td>
+            <td class="right"><?!= riepilogo.totaleImposta ?> &euro;</td>
+          </tr>
+          <tr>
+            <th>Totale Documento</th>
+            <th class="right"><?!= riepilogo.totaleDocumento ?> &euro;</th>
+          </tr>
+          <tr>
+            <td class="muted" colspan="2">Documento generato automaticamente</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>

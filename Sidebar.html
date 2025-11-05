@@ -1,0 +1,262 @@
+<!--
+// =============================================================
+// PROGETTO: GG GESTIONE GELATAMI V1
+// FILE: Sidebar.html
+// VERSIONE: 25.1 (Fixed 'google is not defined' error)
+// DESCRIZIONE: Interfaccia utente (UI) per il Pannello di Controllo.
+// =============================================================
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+    <style>
+      :root { --primary: #1a73e8; --primary-dark: #185abc; --warn: #fbbc04; --ok: #1e8e3e; --err: #d93025; --bg-light: #f8f9fa; }
+      body { padding: 12px; font-family: 'Roboto', Arial, sans-serif; }
+      h4 { font-size: 1.2em; color: #202124; margin-bottom: 12px; }
+      h5 { font-size: 1.1em; color: var(--primary); border-bottom: 1px solid #ddd; padding-bottom: 5px; margin: 18px 0 10px; }
+      .block { margin-bottom: 10px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+      .row button, .block button { width: 100%; }
+
+      .info-panel { background-color: var(--bg-light); border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; margin-bottom: 16px; font-size: 13px; }
+      .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+      .info-row:last-child { margin-bottom: 0; }
+      .info-value { font-weight: bold; text-align: right; }
+      #last-run-info { font-size: 11px; color: #5f6368; text-align: right; margin-top: -4px; }
+      #last-run-row { display: none; }
+
+      .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+      .dot-active { background-color: var(--ok); }
+      .dot-inactive { background-color: #80868b; }
+
+      .progress-bar-container { display: none; margin-top: 8px; }
+      progress { width: 100%; height: 8px; }
+
+      .status { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 4px; background: #f1f3f4; font-size: 13px; margin-bottom: 12px; }
+      .spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.1); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; display: none; }
+      .status.busy .spinner { display: inline-block; }
+      .status.ok { background-color: #e6f4ea; color: #137333; }
+      .status.err { background-color: #fce8e6; color: #a50e0e; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .hint { font-size: 11px; color: #666; margin-top: 8px; padding-left: 2px; }
+
+      #continue-btn.highlight { background-color: var(--warn); color: #202124; font-weight: bold; animation: pulse 2s infinite; border: none; }
+      @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(251, 188, 4, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(251, 188, 4, 0); } 100% { box-shadow: 0 0 0 0 rgba(251, 188, 4, 0); } }
+    </style>
+  </head>
+  <body>
+    <h4>GG GESTIONE GELATAMI V1</h4>
+
+    <div class="info-panel">
+      <div class="info-row">
+        <span>📊 File Elaborati / Totali:</span>
+        <span class="info-value" id="file-counter">-- / --</span>
+      </div>
+      <div class="info-row">
+        <span>⏰ Import Automatico:</span>
+        <span class="info-value" id="trigger-status">Verifica...</span>
+      </div>
+      <div class="info-row" id="last-run-row">
+        <span></span>
+        <span class="info-value" id="last-run-info"></span>
+      </div>
+      <div class="progress-bar-container" id="progress-container">
+        <progress id="progress-bar" value="0" max="100"></progress>
+      </div>
+    </div>
+
+    <div class="status" id="statusBar">
+      <span class="spinner" id="spinner"></span>
+      <span id="statusText">Pronto</span>
+    </div>
+
+    <div class="block">
+      <h5>Azioni Principali</h5>
+      <button id="continue-btn" class="action" onclick="runServerFunction('<?!= App.ui.fn.runContinue ?>')">▶️ Continua Processo Interrotto</button>
+      <div class="row">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runImportHeaders ?>')">1. Importa Intestazioni</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runImportRows ?>')">2. Importa Righe</button>
+      </div>
+    </div>
+
+    <div class="block">
+      <h5>Report e Utility</h5>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runCreateWarehouse ?>')">📦 Crea/Aggiorna Magazzino</button>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runCreateDashboard ?>')">📈 Crea/Aggiorna Dashboard</button>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePnlSheet ?>')">📑 Crea/Aggiorna P&L</button>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runReconciliationReport ?>')">📊 Esegui Report di Audit</button>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePdfs ?>')">📄 Crea PDF Mancanti</button>
+    </div>
+
+    <div class="block">
+      <h5>Manutenzione</h5>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runSyncSuppliers ?>')">🖨️ Sincronizza Fornitori (Nuovi)</button>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runSyncCategoriesRetroactive ?>')">🔄 Riallinea Categorie (Storico)</button>
+
+      <div class="row" style="margin-top: 15px;">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runMarkDuplicateInvoices ?>')">🟡 Marca Duplicati</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.createDuplicateSnapshot ?>')">📸 Crea Snapshot Duplicati</button>
+        </div>
+      <div class="row">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runForceTextFormatOnCodes ?>')">🔠 Forza Testo Codici</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runClearCache ?>')">🧹 Pulisci Cache</button>
+      </div>
+    </div>
+
+    <div class="block">
+      <h5>Sistema</h5>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runInitialSetup ?>')">⚙️ Esegui Setup Guidato</button>
+      <div class="row">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runSheetCheckAndSetup ?>')">🔍 Verifica Fogli</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runSanityCheck ?>')">⚠️ Controllo Integrità</button>
+      </div>
+    </div>
+
+    <script>
+      // Riferimenti UI
+      const statusText = document.getElementById('statusText');
+      const statusBar = document.getElementById('statusBar');
+      const continueBtn = document.getElementById('continue-btn');
+      const fileCounterEl = document.getElementById('file-counter');
+      const triggerStatusEl = document.getElementById('trigger-status');
+      const lastRunInfoEl = document.getElementById('last-run-info');
+      const lastRunRowEl = document.getElementById('last-run-row');
+      const progressContainer = document.getElementById('progress-container');
+      const progressBar = document.getElementById('progress-bar');
+
+      let progressInterval = null;
+
+      // --- CORREZIONE "google is not defined" ---
+      // Usiamo window.onload per assicurarci che l'API google.script.run sia
+      // caricata prima di essere chiamata da updateStaticStatus.
+      window.onload = updateStaticStatus;
+      // --- FINE CORREZIONE ---
+
+
+      // Funzione updateStaticStatus in <script>
+      function updateStaticStatus() {
+        setStatus('busy', 'Verifica stato...');
+        google.script.run
+          .withSuccessHandler(status => {
+            if (!status || !status.success) {
+              setStatus('err', 'Errore verifica stato');
+              console.error('Stato ricevuto non valido:', status);
+              return;
+            }
+
+            // File (gestisce caso in cui totalFiles non sia numero)
+            const totalFilesDisplay = (typeof status.totalFiles === 'number' && status.totalFiles > 0) ? status.totalFiles : '?';
+            fileCounterEl.textContent = `${status.processedFiles} / ${totalFilesDisplay}`;
+
+            // Trigger (legge 'triggerEveryMinutes' da m97_status.gs)
+            if (status.triggerActive) {
+              const mins = status.triggerEveryMinutes || 15;
+              triggerStatusEl.innerHTML = `<span class="status-dot dot-active"></span>Attivo (ogni ${mins} min)`;
+            } else {
+              triggerStatusEl.innerHTML = `<span class="status-dot dot-inactive"></span>Non Attivo`;
+            }
+
+            // Ultima esecuzione (se disponibile)
+            if (status.lastRun && status.lastRun !== "Mai eseguito") {
+              lastRunInfoEl.textContent = `(Ultima esecuzione: ${status.lastRun})`;
+              lastRunRowEl.style.display = 'flex';
+            } else {
+              lastRunRowEl.style.display = 'none';
+            }
+
+            // Pulsante Continua
+            if (status.needsContinue) {
+              continueBtn.classList.add('highlight');
+              setStatus('ok', 'Ripresa disponibile!');
+              setTimeout(() => setStatus('', 'Pronto'), 3000);
+            } else {
+              continueBtn.classList.remove('highlight');
+              setStatus('', 'Pronto');
+            }
+          })
+          .withFailureHandler(err => {
+            setStatus('err', 'Errore di comunicazione');
+            console.error('Fallimento chiamata getSystemStatus:', err);
+          })
+          .getSystemStatus();
+      }
+
+
+      function setStatus(mode, text) {
+        statusBar.className = 'status';
+        if (mode) statusBar.classList.add(mode);
+        statusText.textContent = text;
+      }
+
+      function setDisabled(disabled) {
+        document.querySelectorAll('button').forEach(b => b.disabled = disabled);
+      }
+
+      // Polling avanzamento
+      function updateProgress() {
+        google.script.run
+          .withSuccessHandler(status => {
+            if (status && (status.total > 0 || status.message)) {
+              if (status.total > 0 && status.current !== undefined) { // Aggiunto check status.current
+                progressContainer.style.display = 'block';
+                progressBar.value = status.current;
+                progressBar.max = status.total;
+              } else {
+                progressContainer.style.display = 'none';
+              }
+              setStatus('busy', status.message || 'In esecuzione...');
+            } else if (status === null) {
+              // Processo concluso
+            }
+          })
+          .withFailureHandler(err => {
+            console.warn('Polling fallito (può essere normale a fine processo):', err);
+          })
+          .getRunningStatus();
+      }
+
+      function runServerFunction(fnName) {
+        setDisabled(true);
+        setStatus('busy', 'Avvio in corso...');
+        continueBtn.classList.remove('highlight'); // Rimuove highlight all'avvio
+
+        // Pulisce la progress bar precedente
+        progressContainer.style.display = 'none';
+        progressBar.value = 0;
+        progressBar.max = 100;
+
+        // Avvia il polling solo se non è già attivo
+        if (progressInterval === null) {
+          progressInterval = setInterval(updateProgress, 1500);
+          updateProgress(); // Chiamata immediata per feedback rapido
+        }
+
+
+        google.script.run
+          .withSuccessHandler(() => {
+            clearInterval(progressInterval);
+            progressInterval = null; // Resetta l'ID dell'intervallo
+            progressContainer.style.display = 'none';
+            setStatus('ok', 'Operazione completata');
+            setDisabled(false);
+            setTimeout(() => updateStaticStatus(), 500); // Aggiorna stato statico dopo successo
+          })
+          .withFailureHandler(err => {
+            clearInterval(progressInterval);
+            progressInterval = null; // Resetta l'ID dell'intervallo
+            progressContainer.style.display = 'none';
+            console.error('Errore dall\'esecuzione server:', err);
+            const msg = (err && err.message) ? err.message : 'Operazione fallita.';
+            // Mostra solo la prima riga dell'errore nella status bar
+            setStatus('err', 'Errore: ' + msg.split('\n')[0]);
+            setDisabled(false);
+            setTimeout(() => updateStaticStatus(), 500); // Aggiorna stato statico anche dopo errore
+          })
+          [fnName](); // Esegue la funzione backend dinamicamente
+      }
+    </script>
+  </body>
+</html>

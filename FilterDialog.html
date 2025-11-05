@@ -1,0 +1,157 @@
+<!--
+// =============================================================
+// PROGETTO: GG GESTIONE GELATAMI V1
+// FILE: FilterDialog.html
+// VERSIONE: 25
+// DESCRIZIONE: UI per la finestra di dialogo del filtro manuale.
+// =============================================================
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+  <style>
+    body {
+      font-family: 'Roboto', Arial, sans-serif;
+      padding: 15px;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    label {
+      font-weight: bold;
+      color: #5f6368;
+    }
+    select, input[type=text] {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      width: 100%;
+      box-sizing: border-box; /* Assicura che padding non alteri la larghezza */
+    }
+    .button-group {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    #error-message {
+      color: #d93025;
+      font-size: 12px;
+      display: none;
+      margin-top: -10px;
+    }
+    /* Stile per lo spinner di caricamento */
+    .spinner {
+        display: none;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3498db;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="form-group">
+      <label for="columnSelect">1. Seleziona Colonna:</label>
+      <select id="columnSelect">
+        <? for (var i = 0; i < headers.length; i++) { ?>
+          <option value="<?!= headers[i] ?>"><?!= headers[i] ?></option>
+        <? } ?>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="filterValue">2. Inserisci Valore/Espressione:</label>
+      <input type="text" id="filterValue" placeholder="Es: 'Mario', '=ABC', '>=10', '10..20', '21/10/25', '01/01/25..31/01/25'">
+    </div>
+
+    <div id="error-message"></div>
+
+    <div class="button-group">
+      <div class="spinner" id="spinner"></div>
+      <button class="button" onclick="google.script.host.close()">Annulla</button>
+      <button class="button action" id="applyButton" onclick="applyFilter()">Applica Filtro</button>
+    </div>
+  </div>
+
+  <script>
+    // Passa il nome del foglio dal server al client-side JS
+    const SHEET_NAME = '<?!= sheetName ?>';
+
+    window.onload = function() {
+      // Imposta il focus sul campo di input quando la dialog si apre
+      document.getElementById('filterValue').focus();
+    };
+
+    function setProcessing(isProcessing) {
+        document.getElementById('applyButton').disabled = isProcessing;
+        document.getElementById('spinner').style.display = isProcessing ? 'block' : 'none';
+    }
+
+    function showError(message) {
+        const errorDiv = document.getElementById('error-message');
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
+
+    function applyFilter() {
+      const colName = document.getElementById('columnSelect').value;
+      const filterValue = document.getElementById('filterValue').value;
+
+      if (!colName) {
+        showError("Per favore, seleziona una colonna.");
+        return;
+      }
+
+      setProcessing(true);
+      document.getElementById('error-message').style.display = 'none';
+
+      // Chiama la funzione lato server runManualFilter (definita in m20_filters.gs)
+      google.script.run
+        .withSuccessHandler(function(response) {
+          // Il server ritorna { success: boolean, error?: string }
+          if (response.success) {
+            // Se il filtro è applicato con successo, chiude il dialogo
+            google.script.host.close();
+          } else {
+            showError("Errore: " + (response.error || 'Errore sconosciuto dal server.'));
+            setProcessing(false);
+          }
+        })
+        .withFailureHandler(function(error) {
+          // Gestisce errori di comunicazione
+          showError("Errore di comunicazione: " + error.message);
+          setProcessing(false);
+        })
+        .runManualFilter(colName, filterValue, SHEET_NAME);
+    }
+
+    // Permette di premere Invio nel campo di testo per applicare il filtro
+    document.getElementById('filterValue').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            // Previene l'invio del form (che non c'è, ma è buona pratica)
+            e.preventDefault();
+            applyFilter();
+        }
+    });
+  </script>
+</body>
+</html>

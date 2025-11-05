@@ -1,0 +1,791 @@
+// =============================================================
+// PROGETTO: GG GESTIONE GELATAMI V1
+// FILE: 130_debug.js
+// VERSIONE: 25 (Safe syncCategoriesRetroactive - Fills empty only)
+// DESCRIZIONE: Suite di strumenti di manutenzione e diagnostica.
+// =============================================================
+
+const DEBUG = (function () {
+
+  // --- CHIAVI CURSORI E CACHE ---
+  const MARK_CURSOR_KEY = App.config.keys.cursors.markDuplicates;
+  const MARK_DATA_CACHE_BASE_KEY = 'MARK_DUPLICATES_DATA_CACHE_V1'; // Base per CacheService (chunked)
+  const SYNC_CAT_CURSOR_KEY = App.config.keys.cursors.syncCategories;
+  const SYNC_SUPPLIERS_CURSOR_KEY = App.config.keys.cursors.syncSuppliers; // Assicurati sia in App.config
+  const FORCE_TEXT_CURSOR_KEY = App.config.keys.cursors.forceText; // Assicurati sia in App.config
+  // Chiave globale per il conteggio duplicati letta dal reporting
+  const DUPLICATE_COUNT_KEY = App.config.keys.duplicateCount;
+
+  /**
+   * Esegue controlli di base sull'integrità del sistema.
+   * (Verifica accesso cartelle e fogli principali)
+   */
+  function sanityCheck() {
+    Logger.log('DEBUG.sanityCheck: Funzione avviata.');
+    console.log('DEBUG.sanityCheck: Funzione avviata.');
+    LOG.info('SANITY_CHECK', 'Avvio controllo integrità...');
+    let errors = 0;
+    let warnings = 0;
+
+    // Controllo Cartella Input
+    const inputFolderId = CONFIG.get('CARTELLA_INPUT_ID');
+    if (!inputFolderId) {
+      LOG.error('SANITY_CHECK', 'CARTELLA_INPUT_ID non configurata!');
+      errors++;
+    } else {
+      try { DriveApp.getFolderById(inputFolderId); }
+      catch (e) { LOG.error('SANITY_CHECK', `Impossibile accedere a CARTELLA_INPUT_ID: ${inputFolderId}`, { error: e.message }); errors++; }
+    }
+
+    // Controllo Cartella Output (per PDF)
+    const outputFolderId = CONFIG.get('CARTELLA_OUTPUT_ID');
+      if (!outputFolderId) {
+      LOG.warn('SANITY_CHECK', 'CARTELLA_OUTPUT_ID non configurata (necessaria per PDF).'); // Warning, non bloccante
+      warnings++;
+    } else {
+      try { DriveApp.getFolderById(outputFolderId); }
+      catch (e) { LOG.error('SANITY_CHECK', `Impossibile accedere a CARTELLA_OUTPUT_ID: ${outputFolderId}`, { error: e.message }); errors++; }
+    }
+
+    // Controllo Fogli Essenziali (Config, Fatture, Righe, Fornitori, Prodotti)
+    const essentialSheets = [
+        SHEETS.SHEET_NAMES.Config,
+        SHEETS.SHEET_NAMES.Fatture,
+        SHEETS.SHEET_NAMES.Righe,
+        SHEETS.SHEET_NAMES.Fornitori,
+        SHEETS.SHEET_NAMES.Prodotti
+    ];
+    essentialSheets.forEach(name => {
+        if (name && !SHEETS.get(name)) { // Aggiunto controllo 'name' non sia undefined
+           LOG.error('SANITY_CHECK', `Foglio essenziale mancante: ${name}`);
+           errors++;
+        }
+    });
+
+    if (errors === 0 && warnings === 0) {
+      LOG.info('SANITY_CHECK', 'Controllo integrità completato: NESSUN PROBLEMA RILEVATO.');
+      UTIL.showToast('Controllo integrità: OK!', 'Completato', 5);
+    } else {
+      const msg = `Controllo completato: ${errors} ERRORE/I, ${warnings} AVVISO/I. Controlla il foglio Log.`;
+      LOG.warn('SANITY_CHECK', msg);
+      UTIL.showToast(msg, 'Attenzione', 10);
+    }
+  }
+
+
+  /**
+   * Riallinea Famiglia e Categoria nei fogli storici (Fatture, Righe). Resumibile.
+   * CORRETTO: Aggiorna SOLO le celle Famiglia o Categoria VUOTE.
+   */
+  function syncCategoriesRetroactive() {
+    const startTime = new Date();
+    const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
+    const CHUNK_SIZE = 500;
+
+    // 1) Mappa fornitori aggiornata
+    const supplierMap = _getCurrentSupplierMap();
+    if (supplierMap.size === 0) {
+      LOG.warn('SYNC_CATEGORIES', 'Mappa fornitori vuota o non leggibile. Operazione annullata.');
+      UTIL.showToast('Errore: impossibile leggere i fornitori.', 'Errore');
+      return;
+    }
+
+    const sheetsToSync = [SHEETS.SHEET_NAMES.Fatture, SHEETS.SHEET_NAMES.Righe];
+    let cursor = STATE.getJSON(SYNC_CAT_CURSOR_KEY, { sheetIndex: 0, nextRow: 0 });
+
+    // 2) Loop fogli
+    for (let i = cursor.sheetIndex; i < sheetsToSync.length; i++) {
+      const sheetName = sheetsToSync[i];
+      const sh = SHEETS.get(sheetName);
+      if (!sh) {
+        LOG.warn('SYNC_CATEGORIES', `Foglio ${sheetName} non trovato. Salto.`);
+        continue;
+      }
+
+      const headerRow = SHEETS._findHeaderRow(sh, sheetName);
+      const lastRow = sh.getLastRow();
+
+      if (cursor.sheetIndex !== i || cursor.nextRow === 0) cursor.nextRow = headerRow + 1;
+      if (cursor.nextRow > lastRow) {
+        cursor.sheetIndex = i + 1; cursor.nextRow = 0;
+        STATE.setJSON(SYNC_CAT_CURSOR_KEY, cursor);
+        continue;
+      }
+
+      const idx = SHEETS.headerIndex(sheetName);
+      if (idx.FornitoreID === undefined || idx.Famiglia === undefined || idx.Categoria === undefined) {
+        LOG.error('SYNC_CATEGORIES', `Colonne FornitoreID/Famiglia/Categoria mancanti in ${sheetName}.`);
+        cursor.sheetIndex = i + 1; cursor.nextRow = 0;
+        STATE.setJSON(SYNC_CAT_CURSOR_KEY, cursor);
+        continue;
+      }
+
+      let currentRow = cursor.nextRow;
+      let updates = {};
+      const maxColNeeded = Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria) + 1;
+
+      while (currentRow <= lastRow) {
+        const elapsed = (new Date() - startTime) / 1000;
+        if (elapsed > maxSec) {
+          if (Object.keys(updates).length > 0) {
+            UTIL.updateSheetInPlace(sh, updates, headerRow);
+            updates = {};
+          }
+          cursor.sheetIndex = i;
+          cursor.nextRow = currentRow;
+          STATE.setJSON(SYNC_CAT_CURSOR_KEY, cursor);
+          UTIL.showToast(`Timeout. Pausa (${sheetName}, riga ${currentRow}). Clicca di nuovo per riprendere.`, 'Pausa', 10);
+          LOG.warn('SYNC_CATEGORIES', `Timeout ${sheetName}. Ripresa da riga ${currentRow}.`);
+          return;
+        }
+
+        if (currentRow % 50 === 0) {
+          UTIL.showToast(`Riallineo ${sheetName}: riga ${currentRow}/${lastRow}...`, 'Manutenzione', -1);
+        }
+
+        const chunkRowCount = Math.min(CHUNK_SIZE, lastRow - currentRow + 1);
+        let chunkData;
+        try {
+          chunkData = sh.getRange(currentRow, 1, chunkRowCount, maxColNeeded).getValues();
+        } catch (e) {
+          LOG.error('SYNC_CATEGORIES', `Errore lettura chunk ${sheetName} da riga ${currentRow}`, { error: e.message });
+          currentRow += chunkRowCount;
+          continue;
+        }
+
+        // --- INIZIO LOGICA CORRETTA (SOLO CELLE VUOTE) ---
+        for (let j = 0; j < chunkData.length; j++) {
+          const rowData = chunkData[j];
+          const rowNum = currentRow + j;
+
+          const idNorm = UTIL.normKey(rowData[idx.FornitoreID]).replace(/^0+/, '');
+          if (!idNorm) continue;
+
+          const curr = supplierMap.get(idNorm);
+          if (!curr) continue; // Fornitore non in mappa
+
+          const existingFamiglia = String(rowData[idx.Famiglia] ?? '').trim();
+          const existingCategoria = String(rowData[idx.Categoria] ?? '').trim();
+          
+          let needsUpdate = false;
+          let rowUpdates = {}; // Aggiornamenti solo per questa riga
+
+          // Condizione 1: Famiglia è vuota E il fornitore ha una famiglia da impostare
+          if (existingFamiglia === '' && curr.famiglia) {
+            rowUpdates[idx.Famiglia] = curr.famiglia;
+            needsUpdate = true;
+          }
+
+          // Condizione 2: Categoria è vuota E il fornitore ha una categoria da impostare
+          if (existingCategoria === '' && curr.categoria) {
+            rowUpdates[idx.Categoria] = curr.categoria;
+            needsUpdate = true;
+          }
+          
+          // Se la riga deve essere aggiornata (anche solo uno dei due campi)
+          if (needsUpdate) {
+            if (!updates[rowNum]) updates[rowNum] = {};
+            // Applica solo gli aggiornamenti necessari a quella riga
+            Object.assign(updates[rowNum], rowUpdates);
+          }
+        }
+        // --- FINE LOGICA CORRETTA ---
+
+        currentRow += chunkRowCount;
+
+        if (Object.keys(updates).length >= CHUNK_SIZE * 2 || currentRow > lastRow) {
+          if (Object.keys(updates).length > 0) {
+            const flushed = UTIL.updateSheetInPlace(sh, updates, headerRow);
+            LOG.info('SYNC_CATEGORIES', `Aggiornate ${flushed} celle vuote in ${sheetName}.`);
+            updates = {};
+          }
+        }
+      }
+
+      cursor.sheetIndex = i + 1; cursor.nextRow = 0;
+      STATE.setJSON(SYNC_CAT_CURSOR_KEY, cursor);
+    }
+
+    STATE.clear(SYNC_CAT_CURSOR_KEY);
+    UTIL.showToast('Riallineamento categorie (solo vuote) completato!', 'Fatto!');
+    LOG.info('SYNC_CATEGORIES', 'Completato per tutti i fogli (solo celle vuote).');
+  }
+
+  /**
+   * Helper: Legge l'anagrafica fornitori corrente.
+   * Ritorna Map<FornitoreID_norm, { famiglia, categoria }>
+   * @private
+   */
+  function _getCurrentSupplierMap() {
+    const map = new Map();
+    try {
+      const sh = SHEETS.get(SHEETS.SHEET_NAMES.Fornitori);
+      if (!sh) return map;
+      const headerRow = SHEETS._findHeaderRow(sh, SHEETS.SHEET_NAMES.Fornitori);
+      if (sh.getLastRow() <= headerRow) return map;
+
+      const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fornitori);
+      if (idx.FornitoreID === undefined || idx.Famiglia === undefined || idx.Categoria === undefined) {
+        LOG.error('DEBUG_SUPPLIER_MAP', 'Colonne FornitoreID/Famiglia/Categoria mancanti in Fornitori.');
+        return map;
+      }
+
+      const lastCol = Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria) + 1;
+      const rows = sh.getRange(headerRow + 1, 1, sh.getLastRow() - headerRow, lastCol).getValues();
+
+      rows.forEach(r => {
+        const idNorm = UTIL.normKey(r[idx.FornitoreID]).replace(/^0+/, '');
+        if (!idNorm) return;
+        map.set(idNorm, {
+          famiglia: String(r[idx.Famiglia] ?? '').trim() || 'Non Categorizzato', // Default a 'Non Categorizzato'
+          categoria: String(r[idx.Categoria] ?? '').trim() || '' // Default a vuoto
+        });
+      });
+    } catch (e) {
+      LOG.error('DEBUG_SUPPLIER_MAP', 'Errore lettura Fornitori.', { error: e.message });
+    }
+    return map;
+  }
+
+  /**
+   * Sincronizza l'anagrafica Fornitori leggendo le fatture (aggiunge mancanti).
+   * CORRETTO: Resa riprendibile con cursore.
+   */
+  function syncSuppliersFromInvoices() {
+    const startTime = new Date();
+    const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
+    const CHUNK_SIZE = 1000;
+
+    const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+    const shFor = SHEETS.get(SHEETS.SHEET_NAMES.Fornitori);
+    if (!shF || !shFor) { UTIL.showToast("Fogli 'Fatture' o 'Fornitori' non trovati.", 'Errore'); return; }
+
+    const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
+    const headerRowFor = SHEETS._findHeaderRow(shFor, SHEETS.SHEET_NAMES.Fornitori);
+    const lastRowF = shF.getLastRow();
+
+    let cursor = STATE.getJSON(SYNC_SUPPLIERS_CURSOR_KEY, { nextRow: headerRowF + 1 });
+    let currentRow = cursor.nextRow;
+
+    if (currentRow > lastRowF) { UTIL.showToast('Nessuna nuova fattura da cui sincronizzare fornitori.', 'Info'); STATE.clear(SYNC_SUPPLIERS_CURSOR_KEY); return; }
+
+    const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
+    const requiredF = ['FornitoreID', 'DenominazioneFornitore', 'RegimeFiscale'];
+    for (const k of requiredF) { if (idxF[k] === undefined) { UTIL.showToast(`Colonna mancante in Fatture: ${k}`, 'Errore'); return; } }
+
+    const existingIds = new Set();
+    try {
+      if (shFor.getLastRow() > headerRowFor) {
+        const idxFor = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fornitori);
+        if (idxFor.FornitoreID === undefined) throw new Error('Colonna FornitoreID mancante in Fornitori.');
+        const idValues = shFor.getRange(headerRowFor + 1, idxFor.FornitoreID + 1, shFor.getLastRow() - headerRowFor, 1).getValues();
+        idValues.forEach(([id]) => {
+          const idNorm = UTIL.normKey(id).replace(/^0+/, '');
+          if (idNorm) existingIds.add(idNorm);
+        });
+      }
+    } catch (e) {
+      LOG.error('DEBUG_SYNC_SUP_FROM_INV', 'Errore lettura ID esistenti in Fornitori.', { error: e.message });
+    }
+
+    const defaultImportRows = CONFIG.get('IMPORT_RIGHE_DEFAULT', false);
+    let newRowsBatch = [];
+    let added = 0;
+
+    UTIL.showToast('Sincronizzazione Fornitori da Fatture...', 'Manutenzione', -1);
+
+    while (currentRow <= lastRowF) {
+      const elapsed = (new Date() - startTime) / 1000;
+      if (elapsed > maxSec) {
+        if (newRowsBatch.length > 0) {
+          try { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); added += newRowsBatch.length; }
+          catch (e) { LOG.error('DEBUG_SYNC_SUP_FROM_INV', 'Errore scrittura batch fornitori.', { error: e.message }); }
+          finally { newRowsBatch = []; }
+        }
+        STATE.setJSON(SYNC_SUPPLIERS_CURSOR_KEY, { nextRow: currentRow });
+        UTIL.showToast(`Pausa per timeout: aggiunti finora ${added} fornitori. Riprendere.`, 'Pausa', 10);
+        LOG.warn('DEBUG_SYNC_SUP_FROM_INV', `Timeout dopo ${added} nuovi fornitori. Ripresa da riga ${currentRow}.`);
+        return;
+      }
+
+      const chunkSize = Math.min(CHUNK_SIZE, lastRowF - currentRow + 1);
+      let chunk;
+      try {
+        const lastColNeeded = Math.max(idxF.FornitoreID, idxF.DenominazioneFornitore, idxF.RegimeFiscale) + 1;
+        chunk = shF.getRange(currentRow, 1, chunkSize, lastColNeeded).getValues();
+      } catch (e) {
+        LOG.error('DEBUG_SYNC_SUP_FROM_INV', `Errore lettura chunk Fatture da riga ${currentRow}`, { error: e.message });
+        currentRow += chunkSize;
+        continue;
+      }
+
+      chunk.forEach(row => {
+        const idNorm = UTIL.normKey(row[idxF.FornitoreID]).replace(/^0+/, '');
+        const denom = String(row[idxF.DenominazioneFornitore] ?? '').trim();
+        if (!idNorm || !denom) return;
+        if (!existingIds.has(idNorm)) {
+          newRowsBatch.push([idNorm, denom, '', '', defaultImportRows]);
+          existingIds.add(idNorm);
+        }
+      });
+
+      if (newRowsBatch.length >= 1000) {
+        try { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); added += newRowsBatch.length; }
+        catch (e) { LOG.error('DEBUG_SYNC_SUP_FROM_INV', 'Errore scrittura batch fornitori.', { error: e.message }); }
+        finally { newRowsBatch = []; }
+      }
+
+      currentRow += chunkSize;
+      if (currentRow % (CHUNK_SIZE * 2) === 0) {
+        UTIL.showToast(`Sincronizzo fornitori... (riga ${currentRow}/${lastRowF})`, 'Manutenzione', -1);
+      }
+    }
+
+    if (newRowsBatch.length > 0) {
+      try { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); added += newRowsBatch.length; }
+      catch (e) { LOG.error('DEBUG_SYNC_SUP_FROM_INV', 'Errore scrittura batch finale fornitori.', { error: e.message }); }
+    }
+
+    STATE.clear(SYNC_SUPPLIERS_CURSOR_KEY);
+    UTIL.showToast(`Sincronizzazione completata. Aggiunti ${added} fornitori.`, 'Completato', 5);
+    LOG.info('DEBUG_SYNC_SUP_FROM_INV', `Sync fornitori completato. Aggiunti ${added}.`);
+  }
+
+
+  /**
+   * Forza il formato testo su colonne codici (Prodotti/Righe). Resumibile.
+   */
+  function forceTextFormatOnCodes() {
+    const startTime = new Date();
+    const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
+    const CHUNK_SIZE = 1000;
+
+    const sheetsAndCols = [
+      { name: SHEETS.SHEET_NAMES.Prodotti, cols: ['CodiceInterno', 'CodiceFornitore'] },
+      { name: SHEETS.SHEET_NAMES.Righe, cols: ['Codice Articolo Fornitore', 'CodiceValore', 'NumeroDoc'] }
+    ];
+
+    let cursor = STATE.getJSON(FORCE_TEXT_CURSOR_KEY, { sheetIndex: 0, nextRow: 0 });
+
+    for (let i = cursor.sheetIndex; i < sheetsAndCols.length; i++) {
+      const { name: sheetName, cols: colsToForce } = sheetsAndCols[i];
+      const sh = SHEETS.get(sheetName);
+      if (!sh) { LOG.warn('FORCE_TEXT', `Foglio ${sheetName} non trovato. Salto.`); continue; }
+
+      const headerRow = SHEETS._findHeaderRow(sh, sheetName);
+      const lastRow = sh.getLastRow();
+
+      if (cursor.sheetIndex !== i || cursor.nextRow === 0) cursor.nextRow = headerRow + 1;
+      if (cursor.nextRow > lastRow) { cursor.sheetIndex = i + 1; cursor.nextRow = 0; STATE.setJSON(FORCE_TEXT_CURSOR_KEY, cursor); continue; }
+
+      const idx = SHEETS.headerIndex(sheetName);
+      const colIndices = colsToForce.map(c => idx[c.replace(/ /g, '_')]).filter(v => v !== undefined);
+      if (colIndices.length === 0) {
+        LOG.warn('FORCE_TEXT', `Nessuna colonna valida in ${sheetName}. Cercate: ${colsToForce.join(', ')}`);
+        cursor.sheetIndex = i + 1; cursor.nextRow = 0; STATE.setJSON(FORCE_TEXT_CURSOR_KEY, cursor);
+        continue;
+      }
+
+      let currentRow = cursor.nextRow;
+      const maxColNeeded = Math.max(...colIndices) + 1;
+
+      while (currentRow <= lastRow) {
+        const elapsed = (new Date() - startTime) / 1000;
+        if (elapsed > maxSec) {
+          cursor.sheetIndex = i; cursor.nextRow = currentRow;
+          STATE.setJSON(FORCE_TEXT_CURSOR_KEY, cursor);
+          UTIL.showToast(`Timeout. Pausa (${sheetName}, riga ${currentRow}).`, 'Pausa', 10);
+          LOG.warn('FORCE_TEXT', `Timeout ${sheetName}. Ripresa da riga ${currentRow}.`);
+          return;
+        }
+
+        if (currentRow % 100 === 0) {
+          UTIL.showToast(`Applico formato testo ${sheetName}: riga ${currentRow}/${lastRow}...`, 'Manutenzione', -1);
+        }
+
+        const chunkRowCount = Math.min(CHUNK_SIZE, lastRow - currentRow + 1);
+        let range, chunkData;
+        try {
+          range = sh.getRange(currentRow, 1, chunkRowCount, maxColNeeded);
+          chunkData = range.getValues();
+        } catch (e) {
+          LOG.error('FORCE_TEXT', `Errore lettura chunk in ${sheetName} da riga ${currentRow}`, { error: e.message });
+          currentRow += chunkRowCount;
+          continue;
+        }
+
+        let changed = false;
+        chunkData.forEach(rowData => {
+          colIndices.forEach(ci => {
+            const o = rowData[ci];
+            const v = UTIL.forceText(o);
+            if (o !== v) { rowData[ci] = v; changed = true; }
+          });
+        });
+
+        if (changed) {
+          try { range.setValues(chunkData); }
+          catch (e) { LOG.error('FORCE_TEXT', `Errore scrittura chunk in ${sheetName}, riga ${currentRow}`, { error: e.message }); }
+        }
+
+        currentRow += chunkRowCount;
+      }
+
+      cursor.sheetIndex = i + 1; cursor.nextRow = 0;
+      STATE.setJSON(FORCE_TEXT_CURSOR_KEY, cursor);
+    }
+
+    STATE.clear(FORCE_TEXT_CURSOR_KEY);
+    UTIL.showToast('Formato testo applicato con successo!', 'Fatto!');
+    LOG.info('FORCE_TEXT', 'Applicazione formato testo completata.');
+  }
+
+  /**
+   * Identifica righe duplicate e le marca. Resumibile. Salva conteggio in STATE.
+   */
+  function markDuplicateInvoices() {
+    Logger.log('DEBUG.markDuplicateInvoices: Funzione avviata.');
+    console.log('DEBUG.markDuplicateInvoices: Funzione avviata.');
+
+    const startTime = new Date();
+    const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
+    const BATCH_SIZE_MARK = 200;
+
+    const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+    if (!shF) throw new Error('Foglio Fatture non trovato.');
+    const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
+
+    let cursor = STATE.getJSON(MARK_CURSOR_KEY, { phase: 'scan', index: 0, numChunks: 0 });
+    let rowsToMark = null;
+
+    // FASE 1: SCAN
+    if (cursor.phase === 'scan') {
+        Logger.log('DEBUG.markDuplicateInvoices: Inizio Fase SCAN.');
+        console.log('DEBUG.markDuplicateInvoices: Inizio Fase SCAN.');
+      UTIL.showToast('Fase 1: Ricerca duplicati...', 'Marca Duplicati', -1);
+      LOG.info('DEBUG_MARK_DUPLICATES', 'Fase 1 avviata.');
+
+      const lastRowF = shF.getLastRow();
+      if (lastRowF < headerRowF + 1) {
+        UTIL.showToast('Nessuna fattura da controllare.', 'Info');
+        _clearMarkingState(cursor);
+        return;
+      }
+
+      const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
+      const required = ['FornitoreID', 'NumeroDoc', 'Data', 'ImportedAt'];
+      for (const c of required) if (idxF[c] === undefined) throw new Error(`Colonna ${c} mancante in Fatture.`);
+      const lastColNeeded = Math.max(...required.map(c => idxF[c])) + 1;
+
+      let data;
+      try {
+        data = shF.getRange(headerRowF + 1, 1, lastRowF - headerRowF, lastColNeeded).getValues();
+      } catch (e) { throw new Error(`Impossibile leggere Fatture: ${e.message}`); }
+
+      const invoiceMap = new Map(); // key -> { rowNum, importedAt }
+      const dupSet = new Set();
+
+      data.forEach((row, i) => {
+        const rowNum = headerRowF + 1 + i;
+        const fornId = UTIL.normKey(row[idxF.FornitoreID]).replace(/^0+/, '');
+        const numDoc = UTIL.normKey(row[idxF.NumeroDoc]);
+        let dataDoc = row[idxF.Data];
+        const importedAt = row[idxF.ImportedAt] instanceof Date ? row[idxF.ImportedAt].getTime() : 0;
+
+        if (!fornId || !numDoc) return;
+
+        if (dataDoc instanceof Date && !isNaN(dataDoc.getTime())) {
+          dataDoc = Utilities.formatDate(dataDoc, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        } else {
+          LOG.warn('DEBUG_MARK_DUPLICATES', `Data non valida per riga ${rowNum}. Skippata.`);
+          return;
+        }
+
+        const key = `${fornId}|${numDoc}|${dataDoc}`;
+
+        if (invoiceMap.has(key)) {
+          const existing = invoiceMap.get(key);
+          if (importedAt > existing.importedAt) {
+            dupSet.add(existing.rowNum);
+            invoiceMap.set(key, { rowNum, importedAt });
+          } else {
+            dupSet.add(rowNum);
+          }
+        } else {
+          invoiceMap.set(key, { rowNum, importedAt });
+        }
+      });
+
+      const duplicateRowNumbers = Array.from(dupSet).sort((a, b) => a - b);
+      const duplicateCount = duplicateRowNumbers.length;
+      STATE.set(DUPLICATE_COUNT_KEY, duplicateCount);
+      LOG.info('DEBUG_MARK_DUPLICATES', `Scansione completata. Duplicati: ${duplicateCount}.`);
+
+      if (duplicateCount === 0) {
+        UTIL.showToast('Nessuna fattura duplicata trovata.', 'Completato');
+        _clearMarkingState(cursor);
+        return;
+      }
+
+      try {
+        const numChunks = STATE.cache.setLargeJSONArray(MARK_DATA_CACHE_BASE_KEY, duplicateRowNumbers);
+        if (numChunks === 0 && duplicateCount > 0) throw new Error('Cache setLargeJSONArray ha restituito 0 chunk.');
+        cursor.phase = 'mark'; cursor.index = 0; cursor.numChunks = numChunks;
+        STATE.setJSON(MARK_CURSOR_KEY, cursor);
+        LOG.info('DEBUG_MARK_DUPLICATES', `Salvate ${duplicateCount} righe in ${numChunks} chunk. Avvio fase 2.`);
+        markDuplicateInvoices();
+      } catch (cacheError) {
+        LOG.error('DEBUG_MARK_DUPLICATES', 'Errore salvataggio duplicati in CacheService.', { error: cacheError.message });
+        UTIL.showToast('Errore cache duplicati. Impossibile marcare.', 'Errore');
+        _clearMarkingState(cursor);
+        throw cacheError;
+      }
+      return;
+    }
+
+    // FASE 2: MARK
+    if (cursor.phase === 'mark') {
+        Logger.log('DEBUG.markDuplicateInvoices: Inizio Fase MARK.');
+        console.log('DEBUG.markDuplicateInvoices: Inizio Fase MARK.');
+      if (rowsToMark === null) {
+        rowsToMark = STATE.cache.getLargeJSONArray(MARK_DATA_CACHE_BASE_KEY, cursor.numChunks || 0);
+        if (!rowsToMark || (rowsToMark.length === 0 && cursor.numChunks > 0)) {
+          LOG.error('DEBUG_MARK_DUPLICATES', `Cache vuota o scaduta (chunks: ${cursor.numChunks}).`);
+          UTIL.showToast('Dati duplicati non trovati in cache. Ripetere la scansione.', 'Errore');
+          _clearMarkingState(cursor);
+          return;
+        }
+        LOG.info('DEBUG_MARK_DUPLICATES', `Caricate ${rowsToMark.length} righe da marcare.`);
+      }
+
+      const totalToMark = rowsToMark.length;
+      if (totalToMark === 0 || cursor.index >= totalToMark) {
+        LOG.info('DEBUG_MARK_DUPLICATES', 'Niente da marcare o già completato.');
+        _clearMarkingState(cursor);
+        UTIL.showToast(`Marcatura completata. ${totalToMark} righe evidenziate.`, 'Fatto!');
+        return;
+      }
+
+      let currentIndex = cursor.index;
+      const lastCol = shF.getLastColumn();
+      const lastColLetter = UTIL.getColumnLetter(lastCol - 1);
+
+      UTIL.showToast(`Fase 2: Marco duplicati ${currentIndex}/${totalToMark}...`, 'Marca Duplicati', -1);
+
+      while (currentIndex < totalToMark) {
+        const elapsed = (new Date() - startTime) / 1000;
+        if (elapsed > maxSec) {
+          cursor.index = currentIndex;
+          STATE.setJSON(MARK_CURSOR_KEY, cursor);
+          UTIL.showToast(`Pausa per timeout. Riprendi (${currentIndex}/${totalToMark}).`, 'Pausa', 10);
+          LOG.warn('DEBUG_MARK_DUPLICATES', `Timeout in marcatura. Ripresa da indice ${currentIndex}.`);
+          return;
+        }
+
+        const batchEndIndex = Math.min(currentIndex + BATCH_SIZE_MARK, totalToMark);
+        const batchRowNumbers = rowsToMark.slice(currentIndex, batchEndIndex);
+        const rangesToMark = batchRowNumbers.map(r => `A${r}:${lastColLetter}${r}`);
+
+        if (rangesToMark.length > 0) {
+          try {
+            shF.getRangeList(rangesToMark).setBackground('#FFFF00');
+          } catch (e) {
+            LOG.error('DEBUG_MARK_DUPLICATES', 'Errore setBackground batch; fallback riga per riga.', { error: e.message });
+            batchRowNumbers.forEach(r => {
+              try { shF.getRange(r, 1, 1, lastCol).setBackground('#FFFF00'); }
+              catch (e2) { LOG.error('DEBUG_MARK_DUPLICATES', `Errore fallback riga ${r}`, { error: e2.message }); }
+            });
+          }
+        }
+
+        currentIndex = batchEndIndex;
+        if (currentIndex % (BATCH_SIZE_MARK * 5) === 0) {
+          UTIL.showToast(`Fase 2: Marco duplicati ${currentIndex}/${totalToMark}...`, 'Marca Duplicati', -1);
+        }
+      }
+
+      LOG.info('DEBUG_MARK_DUPLICATES', `Marcatura completata: ${totalToMark} righe evidenziate.`);
+      _clearMarkingState(cursor);
+      UTIL.showToast(`Marcatura completata. ${totalToMark} righe evidenziate.`, 'Fatto!');
+    }
+  }
+
+  /**
+   * Rimuove la marcatura gialla dalle righe duplicate. Resumibile.
+   */
+  function clearDuplicateMarkings() {
+    const CLEAR_CURSOR_KEY = App.config.keys.cursors.clearMarkDuplicates || 'CLEAR_MARKING_CURSOR_V1';
+    const startTime = new Date();
+    const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
+    const BATCH_SIZE_CLEAR = 500;
+
+    const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+    if (!shF) throw new Error('Foglio Fatture non trovato.');
+    const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
+    const lastRowF = shF.getLastRow();
+    const lastColF = shF.getLastColumn();
+
+    if (lastRowF <= headerRowF) return;
+
+    let cursor = STATE.getJSON(CLEAR_CURSOR_KEY, { nextRow: headerRowF + 1 });
+    let currentRow = cursor.nextRow;
+
+    UTIL.showToast('Pulizia marcatura duplicati...', 'Manutenzione', -1);
+    LOG.info('DEBUG_CLEAR_MARKING', `Avvio pulizia da riga ${currentRow}.`);
+
+    while (currentRow <= lastRowF) {
+      const elapsed = (new Date() - startTime) / 1000;
+      if (elapsed > maxSec) {
+        STATE.setJSON(CLEAR_CURSOR_KEY, { nextRow: currentRow });
+        UTIL.showToast(`Timeout pulizia (riga ${currentRow}). Riprendere.`, 'Pausa', 10);
+        LOG.warn('DEBUG_CLEAR_MARKING', `Timeout. Ripresa da riga ${currentRow}.`);
+        return;
+      }
+
+      const chunkRowCount = Math.min(BATCH_SIZE_CLEAR, lastRowF - currentRow + 1);
+      const range = shF.getRange(currentRow, 1, chunkRowCount, lastColF);
+
+      try { range.setBackground(null); }
+      catch (e) { LOG.error('DEBUG_CLEAR_MARKING', `Errore reset sfondo da riga ${currentRow}`, { error: e.message }); }
+
+      currentRow += chunkRowCount;
+      if (currentRow % (BATCH_SIZE_CLEAR * 2) === 0) {
+        UTIL.showToast(`Pulisco marcatura: riga ${currentRow}/${lastRowF}...`, 'Manutenzione', -1);
+      }
+    }
+
+    STATE.clear(CLEAR_CURSOR_KEY);
+    UTIL.showToast('Marcatura duplicati rimossa.', 'Fatto!');
+    LOG.info('DEBUG_CLEAR_MARKING', 'Pulizia marcatura completata.');
+  }
+
+  /**
+   * Pulisce cache e proprietà di script (incl. cursori). Invalida cache moduli.
+   */
+  function clearCache() {
+    const ui = SpreadsheetApp.getUi();
+    const res = ui.alert(
+      'Conferma Pulizia Cache',
+      'Cancellerò TUTTI i dati temporanei e i progressi salvati (cursori). Sei sicuro?',
+      ui.ButtonSet.YES_NO
+    );
+    if (res !== ui.Button.YES) { UTIL.showToast('Pulizia cache annullata.', 'Info'); return; }
+
+    UTIL.showToast('Pulizia cache e cursori in corso...', 'Debug', -1);
+    LOG.warn('DEBUG_CACHE', 'Avvio pulizia completa cache e properties.');
+
+    const scriptProperties = PropertiesService.getScriptProperties();
+    const keys = scriptProperties.getKeys();
+    scriptProperties.deleteAllProperties();
+
+    try {
+      const scriptCache = CacheService.getScriptCache();
+      if (scriptCache) {
+        const knownBases = [MARK_DATA_CACHE_BASE_KEY, 'HEADERS_EXTRACTED_DATA_V23']; // V21 rimossa per pulizia
+        const removeKeys = new Set([...knownBases, ...keys]);
+        knownBases.forEach(base => { for (let i = 0; i < 100; i++) removeKeys.add(`${base}_${i}`); });
+        scriptCache.removeAll(Array.from(removeKeys));
+        LOG.info('DEBUG_CACHE', `Rimosse fino a ${removeKeys.size} chiavi cache.`);
+      }
+    } catch (e) {
+      LOG.error('DEBUG_CACHE', 'Errore pulizia CacheService.', { error: e.message });
+    }
+
+    SHEETS.invalidateHeaderIndexCache();
+    CONFIG.invalidateCache();
+
+    LOG.info('DEBUG_CACHE', 'Cache e cursori azzerati.');
+    UTIL.showToast('Cache e cursori azzerati!', 'Fatto!', 5);
+  }
+
+
+  /**
+   * CORRETTO: Rinominata da removeDuplicateInvoices
+   * Snapshot delle fatture duplicate in un foglio dedicato (non cancella).
+   */
+  function createDuplicateSnapshot() {
+    const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+    if (!shF) { UTIL.showToast('Foglio Fatture non trovato.', 'Errore'); return; }
+
+    const headerRow = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
+    if (shF.getLastRow() <= headerRow) { UTIL.showToast('Nessuna riga in Fatture.', 'Info'); return; }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const SNAP_NAME = 'Fatture Duplicate (Snapshot)';
+    let shSnap = ss.getSheetByName(SNAP_NAME);
+    if (!shSnap) shSnap = ss.insertSheet(SNAP_NAME);
+    shSnap.clear();
+
+    // Header
+    const srcHeaders = shF.getRange(headerRow, 1, 1, shF.getLastColumn()).getValues()[0];
+    const snapHeaders = ['_Riga', '_Link', ...srcHeaders];
+    shSnap.getRange(1, 1, 1, snapHeaders.length).setValues([snapHeaders]).setFontWeight('bold');
+    shSnap.setFrozenRows(1);
+
+    // Dati e background
+    const lastRow = shF.getLastRow();
+    const lastCol = shF.getLastColumn();
+    const dataRange = shF.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol);
+    const values = dataRange.getValues();
+    const backgrounds = dataRange.getBackgrounds();
+
+    const baseUrl = ss.getUrl();
+    const gid = shF.getSheetId();
+
+    const toCopy = [];
+    for (let i = 0; i < values.length; i++) {
+      const sheetRow = headerRow + 1 + i;
+      const rowBg = backgrounds[i];
+      const isYellow = rowBg.some(c => (c || '').toLowerCase() === '#ffff00');
+      if (!isYellow) continue;
+
+      const link = `=HYPERLINK("${baseUrl}#gid=${gid}&range=A${sheetRow}","Apri riga")`;
+      toCopy.push([sheetRow, link, ...values[i]]);
+    }
+
+    if (toCopy.length === 0) {
+      UTIL.showToast('Nessuna riga marcata come duplicata (sfondo giallo).', 'Info');
+      LOG.info('DEBUG_SNAPSHOT_DUP', 'Nessuna riga gialla trovata per snapshot.');
+      return;
+    }
+
+    try {
+      shSnap.getRange(2, 1, toCopy.length, snapHeaders.length).setValues(toCopy);
+      try { shSnap.autoResizeColumns(1, snapHeaders.length); } catch (_) {}
+      shSnap.getRange(1, snapHeaders.length + 2).setValue(`Snapshot: ${new Date().toLocaleString('it-IT')}`).setFontStyle('italic');
+      UTIL.showToast(`Snapshot creato: ${toCopy.length} righe duplicate su "${SNAP_NAME}".`, 'Completato', 8);
+      LOG.info('DEBUG_SNAPSHOT_DUP', `Snapshot duplicati completato (${toCopy.length} righe).`);
+    } catch (e) {
+      LOG.error('DEBUG_SNAPSHOT_DUP', 'Errore scrittura snapshot duplicati.', { error: e.message });
+      throw e;
+    }
+  }
+
+  // --- Utility Interne ---
+
+  /**
+   * Pulisce lo stato specifico della marcatura duplicati (cursore e cache) e azzera conteggio.
+   * @private
+   */
+  function _clearMarkingState(cursor) {
+    STATE.clear(MARK_CURSOR_KEY);
+    const numChunks = cursor?.numChunks;
+    if (numChunks > 0) {
+      STATE.cache.clearLargeJSON(MARK_DATA_CACHE_BASE_KEY, numChunks);
+      LOG.debug('DEBUG_MARK_DUPLICATES', `Puliti ${numChunks} chunk da cache per ${MARK_DATA_CACHE_BASE_KEY}.`);
+    }
+    STATE.clear(DUPLICATE_COUNT_KEY);
+  }
+
+  // --- Oggetto Pubblico Esportato ---
+  return {
+    clearCache: clearCache,
+    sanityCheck: sanityCheck,
+    markDuplicateInvoices: markDuplicateInvoices,
+    clearDuplicateMarkings: clearDuplicateMarkings,
+    forceTextFormatOnCodes: forceTextFormatOnCodes,
+    syncSuppliersFromInvoices: syncSuppliersFromInvoices,
+    syncCategoriesRetroactive: syncCategoriesRetroactive,
+    createDuplicateSnapshot: createDuplicateSnapshot,
+  };
+})();
