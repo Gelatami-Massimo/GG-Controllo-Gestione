@@ -16,6 +16,7 @@
     "001_module_registry.js",
     "005_namespace.js",
     "015_debug_utils.js",
+    "016_error_handler.js",
     "010_main.js",
     "020_config.js",
     "030_globals.js",
