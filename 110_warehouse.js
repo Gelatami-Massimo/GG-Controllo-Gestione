@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 110_warehouse.js
-// VERSIONE: 25 (Schema-aware write, netto quantità, ID fornitore allineati, conversioni UM robuste)
+// VERSIONE: 25.0 (Warehouse Manager)
 // DESCRIZIONE: Motore di calcolo magazzino.
 // =============================================================
 
@@ -375,3 +375,13 @@ const WAREHOUSE = (function () {
 
   return { create };
 })();
+
+// Registra WAREHOUSE nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('WAREHOUSE', ['SHEETS', 'LOG', 'UTIL', 'CONFIG']);
+}
+
+// Registra WAREHOUSE nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('WAREHOUSE', WAREHOUSE);
+}

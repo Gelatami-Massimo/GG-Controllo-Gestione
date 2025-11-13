@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 120_pnl.js
-// VERSIONE: 25 (Schema-aware formulas)
+// VERSIONE: 25.0 (P&L Engine)
 // DESCRIZIONE: Crea un P&L dinamico Multi-Anno per GLOBALE e per SEDE.
 // Novità v23:
 // - Ordinamento famiglie (prefisso numerico -> alfa) con "Non Categorizzato" in coda

@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 00_App.js
-// VERSIONE: 25 (Avvio Pulito)
+// VERSIONE: 25.0 (Core Application Configuration)
 // DESCRIZIONE: Hub di configurazione centrale e mappa funzioni UI.
 // =============================================================
 
@@ -13,7 +13,7 @@
  */
 
 const App = {
-  version: '25', // Versione aggiornata
+  version: '25.0', // Versione aggiornata
   meta: {
     project: 'GG GESTIONE GELATAMI V1', // Nome progetto aggiornato
     updated: '2025-11-04', // Data odierna

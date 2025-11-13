@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 70_import_rows.js
-// VERSIONE: 25 (Dynamic Junk Filter + Correct Skip Logic)
+// VERSIONE: 25.0 (Row Import)
 // DESCRIZIONE: Importa le righe. Filtro righe "spazzatura" dinamico
 //               e logica di skip corretta (non blocca import futuri).
 // =============================================================
@@ -428,3 +428,13 @@ const IMPORT_ROWS = (function () {
 
   return { run };
 })();
+
+// Registra IMPORT_ROWS nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('IMPORT_ROWS', ['SHEETS', 'LOG', 'UTIL', 'PRODUCTS', 'STATE', 'CONFIG']);
+}
+
+// Registra IMPORT_ROWS nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('IMPORT_ROWS', IMPORT_ROWS);
+}

@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 170_setup.js
-// VERSIONE: 25 (Fix prompt trigger, remove unused BATCH_SIZE)
+// VERSIONE: 25.0 (Setup Assistant)
 // DESCRIZIONE: Setup guidato (cartelle, fogli, configurazione).
 // =============================================================
 
@@ -146,3 +146,13 @@ const SETUP = (function () {
 
   return { run };
 })();
+
+// Registra SETUP nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('SETUP', ['SHEETS', 'UTIL', 'CONFIG', 'LOG', 'DEBUG']);
+}
+
+// Registra SETUP nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('SETUP', SETUP);
+}

@@ -1,5 +1,5 @@
 {
-  "scriptId": "19Ot21sA4yDf5MIe7AmpJA-9hyxg7-xeMhlQ0fDNujTEGus11ux890suN",
+  "scriptId": "1W_k0Zp-qUux1-mJLEhJqQnypr8l5kz9xCv1SC768Uv9hqjd4rZhx9hIk",
   "rootDir": "",
   "scriptExtensions": [
     ".js",
@@ -11,6 +11,28 @@
   "jsonExtensions": [
     ".json"
   ],
-  "filePushOrder": [],
+  "filePushOrder": [
+    "000_App.js",
+    "001_module_registry.js",
+    "005_namespace.js",
+    "015_debug_utils.js",
+    "010_main.js",
+    "020_config.js",
+    "030_globals.js",
+    "040_products.js",
+    "050_filters.js",
+    "060_import_headers.js",
+    "070_import_rows.js",
+    "080_pdf_export.js",
+    "090_dashboard.js",
+    "100_reporting.js",
+    "110_warehouse.js",
+    "120_pnl.js",
+    "130_debug.js",
+    "140_status.js",
+    "150_triggers.js",
+    "170_setup.js",
+    "appsscript.json"
+  ],
   "skipSubdirectories": false
 }

@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 100_reporting.js
-// VERSIONE: 25 (Read integrated audit counts from STATE)
+// VERSIONE: 25.0 (Reporting Engine)
 // DESCRIZIONE: Motore di audit e riconciliazione dati.
 //               Legge i conteggi file pre-calcolati da IMPORT_HEADERS.
 // =============================================================
@@ -370,3 +370,13 @@ const REPORTING = (function () {
   // Esporta solo la funzione run pubblica
   return { run };
 })();
+
+// Registra REPORTING nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('REPORTING', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG']);
+}
+
+// Registra REPORTING nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('REPORTING', REPORTING);
+}

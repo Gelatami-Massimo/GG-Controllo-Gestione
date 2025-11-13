@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 60_import_headers.js
-// VERSIONE: 25.1 (GoldenTotal persistente + Folder Path robusto + Progress UI)
+// VERSIONE: 25.0 (Header Import)
 // DESCRIZIONE: Motore di importazione testate OTTIMIZZATO (CacheService)
 //               • GoldenTotal calcolato SEMPRE (anche su file già importati)
 //               • Salvataggio/ripresa GoldenTotal durante SCAN_EXTRACT
@@ -551,3 +551,13 @@ const IMPORT_HEADERS = (function () {
   // ---------------------- Exports ----------------------
   return { run, runContinue };
 })();
+
+// Registra IMPORT_HEADERS nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('IMPORT_HEADERS', ['SHEETS', 'LOG', 'UTIL', 'XMLSAFE', 'STATE', 'CONFIG']);
+}
+
+// Registra IMPORT_HEADERS nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('IMPORT_HEADERS', IMPORT_HEADERS);
+}

@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 150_triggers.js
-// VERSIONE: 25 (Configurable interval, PDF call added, detailed logging restored)
+// VERSIONE: 25.0 (Trigger Manager)
 // DESCRIZIONE: Modulo Triggers (esecuzione automatica + gestione attivatori)
 // =============================================================
 

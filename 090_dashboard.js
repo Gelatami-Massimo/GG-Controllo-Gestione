@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 90_dashboard.js
-// VERSIONE: 25 (Schema-aware formulas, MOL mensile, MOL annuale robusto, ordinamenti e refactoring)
+// VERSIONE: 25.0 (Dashboard & Analytics)
 // DESCRIZIONE: Dashboard finanziaria con Totali Annuali e MOL Netto Annuale/Mensile.
 // =============================================================
 
@@ -493,3 +493,13 @@ const DASHBOARD = (function () {
 
   return { create };
 })();
+
+// Registra DASHBOARD nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('DASHBOARD', ['SHEETS', 'LOG', 'UTIL']);
+}
+
+// Registra DASHBOARD nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('DASHBOARD', DASHBOARD);
+}

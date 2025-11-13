@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 20_config.js
-// VERSIONE: 25.1 (Header Filter Range + Safe Keys + Config Schema)
+// VERSIONE: 25.0 (Configuration Manager)
 // DESCRIZIONE: Gestore centrale schemi, indici e formati.
 // =============================================================
 
@@ -96,6 +96,17 @@ const CONFIG = (function () {
     }
   };
 })();
+
+// Registra CONFIG nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('CONFIG', ['App']);
+}
+
+// Registra CONFIG nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('CONFIG', CONFIG);
+}
+
 
 
 const SHEETS = (function () {
@@ -552,3 +563,13 @@ const SHEETS = (function () {
     _ensureHeaders
   };
 })();
+
+// Registra SHEETS nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('SHEETS', ['App']);
+}
+
+// Registra SHEETS nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('SHEETS', SHEETS);
+}

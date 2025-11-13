@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 80_pdf_export.js
-// VERSIONE: 25 (lettura ottimizzata, indice PDF→URL, flush parziale, progress UI)
+// VERSIONE: 25.0 (PDF Export Engine)
 // DESCRIZIONE: Motore di creazione PDF (resumibile, chunked, robusto).
 // NOTA: Richiede un file Html "PdfTemplate" nel progetto.
 // =============================================================
@@ -342,3 +342,13 @@ const PDF = (function () {
 
   return { run };
 })();
+
+// Registra PDF nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('PDF', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG']);
+}
+
+// Registra PDF nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('PDF', PDF);
+}

@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 130_debug.js
-// VERSIONE: 25 (Safe syncCategoriesRetroactive - Fills empty only)
+// VERSIONE: 25.0 (Debug & Maintenance)
 // DESCRIZIONE: Suite di strumenti di manutenzione e diagnostica.
 // =============================================================
 
@@ -789,3 +789,13 @@ const DEBUG = (function () {
     createDuplicateSnapshot: createDuplicateSnapshot,
   };
 })();
+
+// Registra DEBUG nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG']);
+}
+
+// Registra DEBUG nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('DEBUG', DEBUG);
+}

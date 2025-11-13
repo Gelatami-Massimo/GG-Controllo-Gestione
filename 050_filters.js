@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 50_filters.js
-// VERSIONE: 25
+// VERSIONE: 25.0 (Filter Engine)
 // DESCRIZIONE: Gestore robusto per i filtri manuali dell'interfaccia utente.
 // NOTA: Richiede FilterDialog.html
 // =============================================================
@@ -283,6 +283,16 @@ const FILTERS = (function () {
     runManualFilter
   };
 })();
+
+// Registra FILTERS nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('FILTERS', ['SHEETS']);
+}
+
+// Registra FILTERS nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('FILTERS', FILTERS);
+}
 
 /**
  * Wrapper globale richiesto da HtmlService per la dialog box.

@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 140_status.js
-// VERSIONE: 25 (Optimized: Read total file count & trigger interval)
+// VERSIONE: 25.0 (System Status)
 // DESCRIZIONE: Moduli Status per Sidebar UI.
 // =============================================================
 

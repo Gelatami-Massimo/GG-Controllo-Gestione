@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 10_main.js
-// VERSIONE: 25 (Fixed createDuplicateSnapshot reference)
+// VERSIONE: 25.0 (Main Menu & Dispatcher)
 // DESCRIZIONE: Gestione dei menu, sidebar, trigger e dispatcher funzioni.
 // =============================================================
 
@@ -40,6 +40,21 @@ function onOpen() {
       }
   }
   // --- FINE LOG ---
+
+  // --- VALIDAZIONE DIPENDENZE MODULI ---
+  if (typeof ModuleRegistry !== 'undefined') {
+    const allDepsOk = ModuleRegistry.validateAll();
+    if (!allDepsOk) {
+      Logger.log('[onOpen] ⚠️ ATTENZIONE: Alcuni moduli hanno dipendenze non soddisfatte!');
+    }
+  }
+  // --- FINE VALIDAZIONE ---
+
+  // --- DIAGNOSTICA NAMESPACE GG ---
+  if (typeof GG !== 'undefined') {
+    Logger.log('[onOpen] 📦 Namespace GG disponibile con ' + GG.count() + ' moduli registrati');
+  }
+  // --- FINE DIAGNOSTICA ---
 
   const ui = SpreadsheetApp.getUi();
   const menu = ui.createMenu('FATTURE XML') // Puoi rinominare "FATTURE XML" se vuoi

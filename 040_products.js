@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 40_products.js
-// VERSIONE: 25
+// VERSIONE: 25.0 (Product Manager)
 // DESCRIZIONE: Gestore del catalogo prodotti (cache, creazione univoca).
 // =============================================================
 
@@ -220,3 +220,13 @@ const PRODUCTS = (() => {
   // API pubblica
   return { primeCache, ensureProduct, flushNewRows };
 })();
+
+// Registra PRODUCTS nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('PRODUCTS', ['SHEETS', 'LOG', 'UTIL']);
+}
+
+// Registra PRODUCTS nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('PRODUCTS', PRODUCTS);
+}

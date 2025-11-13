@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 30_globals.js
-// VERSIONE: 25.1 (Namespace & getText Fix)
+// VERSIONE: 25.0 (Global Utilities)
 // DESCRIZIONE: Utility globali (LOG, UTIL, XMLSAFE, STATE) — fix critico
 //               su XmlService: niente getTextTrim(), gestione namespace FPA.
 // =============================================================
@@ -118,6 +118,17 @@ const LOG = (function () {
     flush: _flush
   };
 })();
+
+// Registra LOG nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('LOG', ['App']);
+}
+
+// Registra LOG nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('LOG', LOG);
+}
+
 
 
 const UTIL = (function () {
@@ -352,6 +363,17 @@ const UTIL = (function () {
   };
 })();
 
+// Registra UTIL nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('UTIL', ['App']);
+}
+
+// Registra UTIL nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('UTIL', UTIL);
+}
+
+
 
 const XMLSAFE = (function () {
   const _stripBom = (s) => s.replace(/^\uFEFF/, '');
@@ -387,6 +409,17 @@ const XMLSAFE = (function () {
   }
   return { parseDriveXml };
 })();
+
+// Registra XMLSAFE nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('XMLSAFE', ['LOG', 'UTIL']);
+}
+
+// Registra XMLSAFE nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('XMLSAFE', XMLSAFE);
+}
+
 
 
 const STATE = (function () {
@@ -551,3 +584,13 @@ const STATE = (function () {
 
   return { ...standard, cache: cache };
 })();
+
+// Registra STATE nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('STATE', ['LOG']);
+}
+
+// Registra STATE nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('STATE', STATE);
+}
