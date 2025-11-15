@@ -5,3 +5,4 @@
 # Cartelle di cache e moduli di Node.js (opzionale ma consigliato)
 node_modules/
 .DS_Store
+*.bak
