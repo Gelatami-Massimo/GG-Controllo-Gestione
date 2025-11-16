@@ -109,14 +109,36 @@ function runAutomatedImport() {
 }
 
 /**
- * Disattiva in silenzio tutti i trigger time-based collegati all'handler
- * configurato in App.config.triggerHandler.
+ * PHASE 8.3 FIX: Disattiva condizionatamente il trigger time-based.
+ *
+ * Logica:
+ * 1. Se esiste un cursor HEADERS o ROWS → MANTIENI il trigger attivo
+ *    (c'è ancora lavoro in coda per il prossimo run)
+ * 2. Se NESSUNO dei due cursori esiste → DISATTIVA il trigger
+ *    (import completata, niente più da fare)
+ *
+ * Questo permette al trigger di continuare finché ci sono importazioni
+ * in sospeso, e spegnersi solo quando il lavoro è veramente finito.
  *
  * - Non usa UI (può essere chiamata da trigger time-based).
  * - Scrive solo nei log.
  */
 function _disableAutoTriggerSilently() {
   try {
+    // STEP 1: Verifica se c'è ancora lavoro in coda (cursori attivi)
+    var hasHeadersCursor = !!STATE.getJSON(App.config.keys.cursors.headers, null);
+    var hasRowsCursor    = !!STATE.getJSON(App.config.keys.cursors.rows, null);
+
+    if (hasHeadersCursor || hasRowsCursor) {
+      // Ci sono ancora importazioni in sospeso → NON spegnere il trigger
+      LOG.info('TRIGGER_AUTO_OFF', 'Trigger mantenuto attivo: lavoro ancora in corso.', {
+        hasHeadersCursor: hasHeadersCursor,
+        hasRowsCursor: hasRowsCursor
+      });
+      return;
+    }
+
+    // STEP 2: Nessun cursor attivo → import COMPLETATA → disattiva il trigger
     const handler =
       App && App.config && typeof App.config.triggerHandler === 'string'
         ? App.config.triggerHandler
@@ -147,7 +169,7 @@ function _disableAutoTriggerSilently() {
     if (!toDelete.length) {
       LOG.info(
         'TRIGGER_AUTO_OFF',
-        'Nessun attivatore time-based da disattivare automaticamente.'
+        'Nessun attivatore time-based da disattivare (import completata, nessun cursore attivo).'
       );
       return;
     }
@@ -164,13 +186,13 @@ function _disableAutoTriggerSilently() {
 
     LOG.info(
       'TRIGGER_AUTO_OFF',
-      'Trigger automatico disattivato dopo run completato.',
+      'Trigger automatico disattivato: import COMPLETATA (nessun cursore attivo).',
       { removed: toDelete.length }
     );
   } catch (e) {
     LOG.warn(
       'TRIGGER_AUTO_OFF',
-      'Errore inatteso durante auto-disattivazione trigger.',
+      'Errore inatteso durante auto-disattivazione condizionata trigger.',
       {
         error: e.message,
         stack: e.stack,
