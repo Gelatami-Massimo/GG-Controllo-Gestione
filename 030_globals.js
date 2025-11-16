@@ -354,6 +354,14 @@ const UTIL = (function () {
     textOf,
     writeBatched,
     normKey: (str) => String(str ?? '').trim().toUpperCase(),
+    // Supplier ID normalization - DRY utility per evitare duplicazione
+    normalizeSupplierId: (id) => {
+      const normalized = String(id ?? '')
+        .trim()
+        .replace(/^IT/i, '')  // Rimuovi prefisso IT
+        .replace(/^0+/, '');  // Rimuovi zeri iniziali
+      return normalized;
+    },
     getAllFilesRecursive,
     updateSheetInPlace,
     forceText,
