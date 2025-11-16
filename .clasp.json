@@ -11,6 +11,12 @@
   "jsonExtensions": [
     ".json"
   ],
+  "ignoreFilepaths": [
+    "tools/**",
+    "smoke_test_*.js.bak",
+    "**/*.md",
+    "**/*.txt"
+  ],
   "filePushOrder": [
     "000_App.js",
     "001_module_registry.js",
