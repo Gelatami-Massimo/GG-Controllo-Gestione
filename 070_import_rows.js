@@ -1,9 +1,10 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 70_import_rows.js
-// VERSIONE: 25.0 (Row Import)
+// VERSIONE: 25.1 (Row Import)
 // DESCRIZIONE: Importa le righe. Filtro righe "spazzatura" dinamico
-//               e logica di skip corretta (non blocca import futuri).
+//              • Logica di skip corretta (non blocca import futuri)
+//              • RigheImportate = TRUE solo se le righe sono state scritte
 // =============================================================
 
 const IMPORT_ROWS = (function () {
@@ -121,6 +122,9 @@ const IMPORT_ROWS = (function () {
     const CHUNK_SIZE = Number(CONFIG.get('ROWS_CHUNK_SIZE', 100)) || 100;
     const FLUSH_ROWS_EVERY = Number(CONFIG.get('ROWS_FLUSH_EVERY', 2000)) || 2000;
 
+    // Stati finali che indicano fattura già processata CON righe scritte
+    const finalStates = ['imported', 'total_mismatch'];
+
     if (!isSilent) {
       STATE.setJSON(App.config.keys.progress, {
         current: currentRow, total: lastInvoiceRow, message: 'Avvio import righe...'
@@ -165,33 +169,43 @@ const IMPORT_ROWS = (function () {
         const righeImportateFlag = invData[idxF.RigheImportate];
         const importaSrc = invData[idxF.ImportaRigheSrc];
 
-        // --- INIZIO CORREZIONE LOGICA SKIP ---
-        
-        // Stati finali che bloccano la rielaborazione
-        const finalStates = ['imported', 'total_mismatch', 'xml_error', 'processing_error', 'no_rows'];
-        
-        // 1. Salta se è già stato importato con successo o se ha un errore finale
+        // 1. Se la fattura ha già righe importate con stato finale (imported/total_mismatch), non rielaborare
         if (righeImportateFlag === true && finalStates.includes(importaSrc)) {
           continue;
         }
 
-        // 2. Controlla se il fornitore è abilitato
+        // 2. Fornitore abilitato/disabilitato
         if (enabledSupplierIds.has(fornitoreId)) {
           // Fornitore ABILITATO.
-          // Processa la fattura (questo sovrascriverà 'FALSE' o 'skipped' con 'imported' o un errore)
-          _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, flagUpdates, righeHeaders, junkKeywordsSet);
+          // Processa la fattura; la funzione restituisce:
+          //  - statusSrc: 'imported','total_mismatch','xml_error','processing_error','no_rows'
+          //  - hasImportedRows: TRUE solo se sono state scritte righe in 'Righe'
+          const { statusSrc, hasImportedRows } = _processInvoice(
+            invData,
+            invRowNum,
+            idxF,
+            productCache,
+            rowsBuffer,
+            righeHeaders,
+            junkKeywordsSet
+          );
+
+          _addFlagUpdate(flagUpdates, invRowNum, idxF, {
+            RigheImportate: !!hasImportedRows,
+            ImportaRigheSrc: statusSrc
+          });
+
           processedInvoices++;
         } else {
           // Fornitore DISABILITATO.
-          // Marca come 'skipped' solo se non è già marcato 'skipped'.
-          // Questo evita scritture inutili ma permette alla riga di essere rivalutata al prossimo giro
-          // se il fornitore viene abilitato.
-          if (importaSrc !== 'skipped') {
-             _addFlagUpdate(flagUpdates, invRowNum, idxF, { RigheImportate: true, ImportaRigheSrc: 'skipped' });
-          }
+          // Marca come 'skipped' ma lascia RigheImportate = FALSE
+          // (TRUE significa sempre "righe esistono in Righe").
+          _addFlagUpdate(flagUpdates, invRowNum, idxF, {
+            RigheImportate: false,
+            ImportaRigheSrc: 'skipped'
+          });
           skippedInvoices++;
         }
-        // --- FINE CORREZIONE LOGICA SKIP ---
 
         // Flush periodico
         if (rowsBuffer.length >= FLUSH_ROWS_EVERY) {
@@ -222,8 +236,11 @@ const IMPORT_ROWS = (function () {
 
   /**
    * Processa le righe di una singola fattura.
+   * Ritorna:
+   *  - statusSrc: stato finale (imported, total_mismatch, xml_error, processing_error, no_rows)
+   *  - hasImportedRows: TRUE se sono state scritte righe nel foglio Righe
    */
-  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, flagUpdates, righeHeaders, junkKeywordsSet) {
+  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsSet) {
     const fileId = invData[idxF.FileID];
     let statusSrc = 'imported'; // Default a successo
 
@@ -231,6 +248,7 @@ const IMPORT_ROWS = (function () {
     const categoriaFornitore = invData[idxF.Categoria];
 
     let sommaRigheNetto = 0;
+    let importedRowsCount = 0;
     const imponibileFattura = UTIL.parseNumSmart(invData[idxF.TotImponibile]);
     const TOLLERANZA_EURO = Number(CONFIG.get('ROWS_TOLLERANZA_EURO', 1.00)) || 1.00;
 
@@ -321,6 +339,7 @@ const IMPORT_ROWS = (function () {
                    (rowData[dataKey] !== undefined ? rowData[dataKey] : '');
           });
           rowsBuffer.push(row);
+          importedRowsCount++;
         } // fine loop for
 
         // Controllo totali
@@ -345,9 +364,10 @@ const IMPORT_ROWS = (function () {
           LOG?.info('ROWS_TOTAL_CHECK_IGNORE', `Discrepanza totali ignorata per ${docType}.`, { fileId });
         }
       }
-      // Aggiorna lo stato della fattura con il risultato finale (imported, xml_error, total_mismatch, ecc.)
-      _addFlagUpdate(flagUpdates, invRowNum, idxF, { RigheImportate: true, ImportaRigheSrc: statusSrc });
     }
+
+    const hasImportedRows = importedRowsCount > 0;
+    return { statusSrc, hasImportedRows };
   }
 
   // Scrive buffer righe + aggiorna flag + flush prodotti
@@ -374,7 +394,7 @@ const IMPORT_ROWS = (function () {
     PRODUCTS.flushNewRows(productCache);
   }
 
-  // Funzione _addFlagUpdate (invariata)
+  // Funzione _addFlagUpdate
   function _addFlagUpdate(flagUpdates, rowNum, idx, updates) {
     if (!flagUpdates[rowNum]) flagUpdates[rowNum] = {};
     for (const key in updates) {
@@ -387,7 +407,7 @@ const IMPORT_ROWS = (function () {
     }
   }
 
-  // Carica dati fornitori (invariato)
+  // Carica dati fornitori
   function _getSuppliersData() {
     const sh = SHEETS.get(SHEETS.SHEET_NAMES.Fornitori);
     const suppliers = new Map();

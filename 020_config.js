@@ -1,7 +1,7 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
-// FILE: 20_config.js
-// VERSIONE: 25.0 (Configuration Manager)
+// FILE: 020_config.js
+// VERSIONE: 25.2 (Configuration Manager + Reparto Fatture/Righe)
 // DESCRIZIONE: Gestore centrale schemi, indici e formati.
 // =============================================================
 
@@ -107,8 +107,6 @@ if (typeof GG !== 'undefined') {
   GG.register('CONFIG', CONFIG);
 }
 
-
-
 const SHEETS = (function () {
   // -----------------------------------------------------------
   // Utils interni
@@ -129,23 +127,31 @@ const SHEETS = (function () {
     // --- SCHEMA CONFIG allineato (solo colonne base) ---
     'Config': ['Key', 'Value', 'Description'],
 
+    // NB: Reparto subito dopo Categoria, Data resta tra RegimeFiscale e Anno
     'Fatture': [
       'FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF',
       'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
+      'Reparto',
       'RegimeFiscale', 'Data', 'Anno', 'Mese', 'NumeroDoc', 'TipoDoc',
       'TotImponibile', 'TotImposta', 'Valuta', 'TotDocumento',
       'RigheImportate', 'ImportaRigheSrc', 'ImportedAt'
     ],
+    // NB: Reparto ereditato da Fatture, in coda alle righe
     'Righe': [
       'FileID', 'Sede', 'DataDoc', 'Anno', 'Mese', 'NumeroDoc',
       'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
       'NumeroLinea', 'Codice Articolo Fornitore',
       'CodiceTipo', 'CodiceValore', 'Descrizione', 'Quantita',
-      'PrezzoUnitario', 'PrezzoTotale', 'AliquotaIVA'
+      'PrezzoUnitario', 'PrezzoTotale', 'AliquotaIVA',
+      'Reparto'
     ],
     'Fornitori': ['FornitoreID', 'Denominazione', 'Famiglia', 'Categoria', 'ImportaRighe'],
     'Aziende': ['P_IVA_Azienda', 'Nome_Sede', 'Note'],
-    'Prodotti': ['CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM', 'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto', 'Note', 'CreatoIl', 'UltimoAgg'],
+    'Prodotti': [
+      'CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM',
+      'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto',
+      'Note', 'CreatoIl', 'UltimoAgg'
+    ],
     'Log': ['Timestamp', 'Level', 'Scope', 'Message', 'Context'],
     'Regole_UM': ['CodiceInterno', 'Pezzi per Unità', 'Peso per Pezzo (KG)', 'UM Finale', 'Note'],
     'Magazzino': [
@@ -225,23 +231,32 @@ const SHEETS = (function () {
       if (matchScore >= 0.7) {
         if (!_cache[sheetName]) _cache[sheetName] = {};
         _cache[sheetName].headerRow = bestMatchRow;
-        LOG?.debug('SHEETS_FIND_HEADER', `Riga header trovata per ${sheetName}: ${bestMatchRow} (score: ${matchScore.toFixed(2)})`);
+        LOG?.debug(
+          'SHEETS_FIND_HEADER',
+          `Riga header trovata per ${sheetName}: ${bestMatchRow} (score: ${matchScore.toFixed(2)})`
+        );
         return bestMatchRow;
       }
     }
     if (maxMatchScore > 0) {
-      LOG?.warn('SHEETS_HEADER', `Riga intestazioni trovata con bassa confidenza (${(maxMatchScore*100).toFixed(0)}%) per ${sheetName}. Uso riga ${bestMatchRow}.`);
+      LOG?.warn(
+        'SHEETS_HEADER',
+        `Riga intestazioni trovata con bassa confidenza (${(maxMatchScore * 100).toFixed(0)}%) per ${sheetName}. Uso riga ${bestMatchRow}.`
+      );
       if (!_cache[sheetName]) _cache[sheetName] = {};
       _cache[sheetName].headerRow = bestMatchRow;
       return bestMatchRow;
     } else {
-      LOG?.warn('SHEETS_HEADER', `Riga intestazioni non trovata con certezza per ${sheetName}. Assumo riga 1.`, { maxRowsChecked: maxRowsToCheck });
+      LOG?.warn(
+        'SHEETS_HEADER',
+        `Riga intestazioni non trovata con certezza per ${sheetName}. Assumo riga 1.`,
+        { maxRowsChecked: maxRowsToCheck }
+      );
       if (!_cache[sheetName]) _cache[sheetName] = {};
       _cache[sheetName].headerRow = 1;
       return 1;
     }
   }
-
 
   function get(sheetName) {
     return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
@@ -260,7 +275,9 @@ const SHEETS = (function () {
       const lastCol = sh.getLastColumn();
       headers = lastCol > 0 ? sh.getRange(headerRow, 1, 1, lastCol).getValues()[0] : [];
     } catch (e) {
-      LOG?.error('SHEETS_INDEX', `Impossibile leggere riga intestazioni ${headerRow} per ${sheetName}`, { error: e.message });
+      LOG?.error('SHEETS_INDEX', `Impossibile leggere riga intestazioni ${headerRow} per ${sheetName}`, {
+        error: e.message
+      });
       return {};
     }
 
@@ -284,6 +301,7 @@ const SHEETS = (function () {
     const lastRow = sh.getLastRow();
     const lastCol = sh.getLastColumn() || 1;
 
+    // Foglio nuovo
     if (lastRow < 1 && lastCol <= 1 && sh.getRange('A1').getValue() === '') {
       try {
         const headerRange = sh.getRange(1, 1, 1, schemaHeaders.length);
@@ -293,7 +311,9 @@ const SHEETS = (function () {
         LOG?.info('SHEETS_ENSURE_HDR', `Intestazioni create per foglio nuovo ${sheetName}.`);
         _invalidateIndexCache(sheetName);
       } catch (e) {
-        LOG?.error('SHEETS_ENSURE_HDR', `Errore scrittura intestazioni per foglio nuovo ${sheetName}`, { error: e.message });
+        LOG?.error('SHEETS_ENSURE_HDR', `Errore scrittura intestazioni per foglio nuovo ${sheetName}`, {
+          error: e.message
+        });
       }
       return;
     }
@@ -301,9 +321,12 @@ const SHEETS = (function () {
     const headerRow = _findHeaderRow(sh, sheetName);
     let actualHeaders = [];
     try {
-      actualHeaders = lastCol > 0 ? sh.getRange(headerRow, 1, 1, lastCol).getValues()[0].map(h => String(h ?? '').trim()) : [];
+      actualHeaders =
+        lastCol > 0 ? sh.getRange(headerRow, 1, 1, lastCol).getValues()[0].map(h => String(h ?? '').trim()) : [];
     } catch (e) {
-      LOG?.error('SHEETS_ENSURE_HDR', `Impossibile leggere header esistenti in ${sheetName} riga ${headerRow}`, { error: e.message });
+      LOG?.error('SHEETS_ENSURE_HDR', `Impossibile leggere header esistenti in ${sheetName} riga ${headerRow}`, {
+        error: e.message
+      });
       return;
     }
 
@@ -329,7 +352,12 @@ const SHEETS = (function () {
 
     if (needsUpdate) {
       const finalHeaders = [...schemaHeadersTrimmed, ...extraHeaders];
-      LOG?.warn('SHEETS_ENSURE_HDR', `Riallineamento intestazioni per ${sheetName} (riga ${headerRow}). Mancanti: [${missingHeaders.join(', ')}]. Extra preservate: [${extraHeaders.join(', ')}]`);
+      LOG?.warn(
+        'SHEETS_ENSURE_HDR',
+        `Riallineamento intestazioni per ${sheetName} (riga ${headerRow}). Mancanti: [${missingHeaders.join(
+          ', '
+        )}]. Extra preservate: [${extraHeaders.join(', ')}]`
+      );
 
       try {
         const colsToWrite = finalHeaders.length;
@@ -345,14 +373,20 @@ const SHEETS = (function () {
         }
 
         if (sh.getFrozenRows() < headerRow) {
-          try { sh.setFrozenRows(headerRow); } catch(_) {}
-          if (headerRow === 1 && sh.getFrozenRows() !== 1) { sh.setFrozenRows(1); }
+          try {
+            sh.setFrozenRows(headerRow);
+          } catch (_) {}
+          if (headerRow === 1 && sh.getFrozenRows() !== 1) {
+            sh.setFrozenRows(1);
+          }
         }
 
         _invalidateIndexCache(sheetName);
         Utilities.sleep(250);
       } catch (e) {
-        LOG?.error('SHEETS_ENSURE_HDR', `Errore during riscrittura intestazioni in ${sheetName}`, { error: e.message });
+        LOG?.error('SHEETS_ENSURE_HDR', `Errore during riscrittura intestazioni in ${sheetName}`, {
+          error: e.message
+        });
       }
     }
 
@@ -372,7 +406,6 @@ const SHEETS = (function () {
       }
     }
   }
-
 
   function ensureAll() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -415,13 +448,18 @@ const SHEETS = (function () {
               sh.getRange(headerRow + 1, colNum, numRowsToFormat).setNumberFormat(format);
             }
           } catch (e) {
-            LOG?.error('SHEETS_FORMAT', `Errore formattazione colonna ${colName} (${colNum}) in ${sheetName}`, { error: e.message });
+            LOG?.error('SHEETS_FORMAT', `Errore formattazione colonna ${colName} (${colNum}) in ${sheetName}`, {
+              error: e.message
+            });
           }
         }
       } else {
         const optionalSheets = [SHEET_NAMES.Dati_Mensili];
         if (!optionalSheets.includes(sheetName)) {
-          LOG?.warn('SHEETS_FORMAT', `Colonna "${colName}" (key: ${safeColName}) non trovata per formattazione in ${sheetName}.`);
+          LOG?.warn(
+            'SHEETS_FORMAT',
+            `Colonna "${colName}" (key: ${safeColName}) non trovata per formattazione in ${sheetName}.`
+          );
         }
       }
     }
@@ -430,20 +468,48 @@ const SHEETS = (function () {
   function applyFormats() {
     const FORMAT_RULES = {
       [SHEET_NAMES.Fatture]: [
-        { format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00', cols: ['TotImponibile', 'TotImposta', 'TotDocumento'] },
+        {
+          format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00',
+          cols: ['TotImponibile', 'TotImposta', 'TotDocumento']
+        },
         { format: 'dd/mm/yyyy', cols: ['Data'] },
         { format: 'dd/mm/yyyy hh:mm:ss', cols: ['ImportedAt'] },
-        { format: '@', cols: ['FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF', 'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria', 'RegimeFiscale', 'NumeroDoc', 'TipoDoc', 'Valuta', 'ImportaRigheSrc'] }
+        {
+          format: '@',
+          cols: [
+            'FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF',
+            'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
+            'Reparto',
+            'RegimeFiscale', 'Anno', 'Mese', 'NumeroDoc', 'TipoDoc',
+            'Valuta', 'RigheImportate', 'ImportaRigheSrc'
+          ]
+        }
       ],
       [SHEET_NAMES.Righe]: [
-        { format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00', cols: ['PrezzoUnitario', 'PrezzoTotale'] },
+        {
+          format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00',
+          cols: ['PrezzoUnitario', 'PrezzoTotale']
+        },
         { format: '#,##0.####', cols: ['Quantita'] },
         { format: '@', cols: ['AliquotaIVA'] },
         { format: 'dd/mm/yyyy', cols: ['DataDoc'] },
-        { format: '@', cols: ['FileID', 'Sede', 'NumeroDoc', 'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria', 'NumeroLinea', 'Codice Articolo Fornitore', 'CodiceTipo', 'CodiceValore', 'Descrizione'] }
+        {
+          format: '@',
+          cols: [
+            'FileID', 'Sede', 'NumeroDoc', 'FornitoreID', 'DenominazioneFornitore',
+            'Famiglia', 'Categoria', 'NumeroLinea', 'Codice Articolo Fornitore',
+            'CodiceTipo', 'CodiceValore', 'Descrizione', 'Reparto'
+          ]
+        }
       ],
       [SHEET_NAMES.Prodotti]: [
-        { format: '@', cols: ['CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM', 'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto', 'Note'] },
+        {
+          format: '@',
+          cols: [
+            'CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM',
+            'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto', 'Note'
+          ]
+        },
         { format: 'dd/mm/yyyy hh:mm:ss', cols: ['CreatoIl', 'UltimoAgg'] }
       ],
       [SHEET_NAMES.Log]: [
@@ -455,8 +521,20 @@ const SHEETS = (function () {
         { format: '#,##0.####', cols: ['Pezzi per Unità', 'Peso per Pezzo (KG)'] }
       ],
       [SHEET_NAMES.Magazzino]: [
-        { format: '@', cols: ['Codice Interno', 'Denominazione Fornitore', 'Codice Articolo Fornitore', 'Descrizione', 'Categoria Prodotto', 'UM Originale', 'UM Finale (Calc)'] },
-        { format: '#,##0.####', cols: ['Pezzi per Unità (Calc)', 'Peso per Pezzo (KG) (Calc)', 'Quantità Acquistata', 'Quantità Standard'] },
+        {
+          format: '@',
+          cols: [
+            'Codice Interno', 'Denominazione Fornitore', 'Codice Articolo Fornitore',
+            'Descrizione', 'Categoria Prodotto', 'UM Originale', 'UM Finale (Calc)'
+          ]
+        },
+        {
+          format: '#,##0.####',
+          cols: [
+            'Pezzi per Unità (Calc)', 'Peso per Pezzo (KG) (Calc)',
+            'Quantità Acquistata', 'Quantità Standard'
+          ]
+        },
         { format: '€ #,##0.0000', cols: ['Ultimo Prezzo Netto', 'Prezzo Standardizzato'] }
       ],
       [SHEET_NAMES.Report_Fornitori]: [
@@ -465,10 +543,13 @@ const SHEETS = (function () {
       ],
       [SHEET_NAMES.Dati_Mensili]: [
         { format: '@', cols: ['Sede', 'AnnoMese', 'Anno', 'Mese'] },
-        { format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00', cols: [
-          'Fatturato', 'Costo Personale',
-          'Costi', 'Fatture Ricevute', 'Spese Bancarie', 'Altre Spese N/F'
-        ]}
+        {
+          format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00',
+          cols: [
+            'Fatturato', 'Costo Personale',
+            'Costi', 'Fatture Ricevute', 'Spese Bancarie', 'Altre Spese N/F'
+          ]
+        }
       ],
       [SHEET_NAMES.Filtro_Righe_Spazzatura]: [
         { format: '@', cols: ['ParolaChiaveDaIgnorare', 'Note'] }
@@ -485,7 +566,9 @@ const SHEETS = (function () {
       }
       const rulesForSheet = FORMAT_RULES[sheetName];
       if (!Array.isArray(rulesForSheet)) {
-        LOG?.error('CONFIG_FORMAT', `Definizione FORMAT_RULES non valida per ${sheetName}.`, { rules: rulesForSheet });
+        LOG?.error('CONFIG_FORMAT', `Definizione FORMAT_RULES non valida per ${sheetName}.`, {
+          rules: rulesForSheet
+        });
         continue;
       }
       for (const rule of rulesForSheet) {
@@ -498,7 +581,6 @@ const SHEETS = (function () {
     }
     LOG?.info('SHEETS_FORMAT', 'Applicazione formati completata.');
   }
-
 
   function getCompanyMap() {
     const sheetName = SHEET_NAMES.Aziende;
@@ -554,7 +636,9 @@ const SHEETS = (function () {
     ensureAll,
     applyFormats,
     headerIndex,
-    invalidateHeaderIndexCache(sheetName = null) { _invalidateIndexCache(sheetName); },
+    invalidateHeaderIndexCache(sheetName = null) {
+      _invalidateIndexCache(sheetName);
+    },
     getCompanyMap,
     getProcessedFileIds,
     SCHEMAS,
@@ -572,4 +656,23 @@ if (typeof ModuleRegistry !== 'undefined') {
 // Registra SHEETS nel namespace GG
 if (typeof GG !== 'undefined') {
   GG.register('SHEETS', SHEETS);
+}
+
+/**
+ * Dev helper: riallinea intestazioni + formati in base a SCHEMAS/FORMAT_RULES.
+ */
+function DEV_EnsureSheetsAndFormats() {
+  if (typeof SHEETS === 'undefined') {
+    SpreadsheetApp.getUi().alert('SHEETS non è definito. Controlla 020_config.js.');
+    return;
+  }
+
+  try {
+    SHEETS.ensureAll();     // riallinea intestazioni in base a SCHEMAS
+    SHEETS.applyFormats();  // riapplica tutti i formati
+    SpreadsheetApp.getUi().alert('Struttura e formati fogli aggiornati.');
+  } catch (e) {
+    Logger.log(e);
+    SpreadsheetApp.getUi().alert('Errore in DEV_EnsureSheetsAndFormats: ' + e.message);
+  }
 }
