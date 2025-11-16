@@ -1,9 +1,93 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 150_triggers.js
-// VERSIONE: 25.0 (Trigger Manager)
+// VERSIONE: 25.1 (Trigger Manager + Advanced Notifications)
 // DESCRIZIONE: Modulo Triggers (esecuzione automatica + gestione attivatori)
 // =============================================================
+
+/**
+ * Invia una notifica email all'admin quando il trigger viene disattivato
+ * o quando si verificano eventi importanti.
+ * 
+ * @param {string} reason - Motivo della notifica (es. 'TRIGGER_OFF', 'ERROR', 'RESUMED')
+ * @param {Object} details - Dettagli aggiuntivi da includere nel corpo email
+ */
+function _sendTriggerNotification(reason, details) {
+  try {
+    // Recupera email admin da CONFIG (fallback all'utente attivo)
+    var adminEmail = CONFIG.get('ADMIN_EMAIL', Session.getActiveUser().getEmail());
+    
+    if (!adminEmail || adminEmail === '') {
+      LOG.debug('TRIGGER_NOTIFY', 'Email admin non configurata, notifica saltata.');
+      return;
+    }
+
+    var subject = '[GG Gestione] ';
+    var bodyHtml = '';
+    
+    switch(reason) {
+      case 'TRIGGER_OFF_COMPLETED':
+        subject += 'Trigger Disattivato - Import Completata';
+        bodyHtml = '<h2>✅ Importazione Completata</h2>' +
+          '<p>Il trigger automatico è stato <strong>disattivato</strong> perché tutte le importazioni sono state completate.</p>' +
+          '<p><strong>Nessun cursore attivo</strong> (HEADERS/ROWS).</p>';
+        break;
+        
+      case 'TRIGGER_KEPT_ACTIVE':
+        subject += 'Trigger Mantenuto Attivo - Lavoro in Corso';
+        bodyHtml = '<h2>⏳ Lavoro in Corso</h2>' +
+          '<p>Il trigger automatico rimane <strong>attivo</strong> perché ci sono ancora importazioni in sospeso.</p>' +
+          '<ul>' +
+          '<li>Cursor HEADERS: <strong>' + (details.hasHeadersCursor ? 'ATTIVO' : 'inattivo') + '</strong></li>' +
+          '<li>Cursor ROWS: <strong>' + (details.hasRowsCursor ? 'ATTIVO' : 'inattivo') + '</strong></li>' +
+          '</ul>' +
+          '<p>Il sistema continuerà automaticamente al prossimo run.</p>';
+        break;
+        
+      case 'TRIGGER_ERROR':
+        subject += '⚠️ ERRORE nel Trigger Automatico';
+        bodyHtml = '<h2 style="color: red;">❌ Errore Critico</h2>' +
+          '<p>Si è verificato un <strong>errore grave</strong> durante l\'esecuzione del trigger automatico.</p>' +
+          '<p><strong>Errore:</strong> ' + (details.error || 'N/A') + '</p>' +
+          '<p><strong>Fase:</strong> ' + (details.phase || 'N/A') + '</p>' +
+          '<p><strong>Azione richiesta:</strong> Verifica i log e risolvi il problema prima di riavviare il trigger.</p>';
+        break;
+        
+      default:
+        subject += 'Notifica Trigger';
+        bodyHtml = '<h2>Notifica Trigger Automatico</h2>' +
+          '<p>Motivo: ' + reason + '</p>';
+    }
+    
+    // Aggiungi timestamp e dettagli completi
+    bodyHtml += '<hr>' +
+      '<p><small><strong>Timestamp:</strong> ' + new Date().toISOString() + '</small></p>' +
+      '<p><small><strong>Dettagli completi:</strong></small></p>' +
+      '<pre style="background: #f4f4f4; padding: 10px; border-radius: 4px; font-size: 11px;">' +
+      JSON.stringify(details, null, 2) +
+      '</pre>' +
+      '<hr>' +
+      '<p><small>Questa è una notifica automatica dal sistema GG Gestione Gelatami.</small></p>';
+    
+    MailApp.sendEmail({
+      to: adminEmail,
+      subject: subject,
+      htmlBody: bodyHtml
+    });
+    
+    LOG.info('TRIGGER_NOTIFY', 'Notifica email inviata con successo.', {
+      reason: reason,
+      recipient: adminEmail
+    });
+    
+  } catch (e) {
+    // Non bloccare il flusso principale se la notifica fallisce
+    LOG.warn('TRIGGER_NOTIFY', 'Errore invio notifica email.', {
+      error: e.message,
+      stack: e.stack
+    });
+  }
+}
 
 /**
  * Funzione principale eseguita dall'attivatore automatico.
@@ -12,30 +96,55 @@
 function runAutomatedImport() {
   const LOCK_TIMEOUT_MS = 5000; // attesa breve (5s)
   let hadError = false;
+  const startTime = Date.now();
+  const executionLog = {
+    startTime: new Date().toISOString(),
+    phases: {},
+    endTime: null,
+    duration: null,
+    success: false
+  };
 
   try {
     // L'automatico cede rapidamente se il sistema è occupato.
     if (!UTIL.acquireLock(LOCK_TIMEOUT_MS)) {
       LOG.info(
         'TRIGGER_LOCK',
-        'Importazione automatica saltata: Lock occupato.'
+        'Importazione automatica saltata: Lock occupato.',
+        { lockTimeout: LOCK_TIMEOUT_MS }
       );
       return;
     }
 
-    LOG.info('TRIGGER', 'AVVIO IMPORTAZIONE AUTOMATICA');
+    LOG.info('TRIGGER', 'AVVIO IMPORTAZIONE AUTOMATICA', {
+      timestamp: executionLog.startTime,
+      triggerSource: 'TIME_BASED'
+    });
 
     // ==========================
     // Fase 1: Headers (resume)
     // ==========================
     try {
+      const headersStart = Date.now();
       LOG.debug('TRIGGER', 'Esecuzione IMPORT_HEADERS.runContinue(true)...');
       IMPORT_HEADERS.runContinue(true); // true = silent mode
-      LOG.debug('TRIGGER', 'IMPORT_HEADERS completato.');
+      executionLog.phases.headers = {
+        success: true,
+        duration: Date.now() - headersStart
+      };
+      LOG.debug('TRIGGER', 'IMPORT_HEADERS completato.', {
+        duration: executionLog.phases.headers.duration + 'ms'
+      });
     } catch (e1) {
+      executionLog.phases.headers = {
+        success: false,
+        error: e1.message,
+        duration: Date.now() - (executionLog.phases.headers ? executionLog.phases.headers.duration : startTime)
+      };
       LOG.error('TRIGGER_HEADERS', 'Errore in IMPORT_HEADERS.runContinue', {
         error: e1.message,
         stack: e1.stack,
+        duration: executionLog.phases.headers.duration
       });
       throw e1; // interrompe il trigger (notifica via email di Apps Script)
     }
@@ -44,13 +153,26 @@ function runAutomatedImport() {
     // Fase 2: Rows
     // ==========================
     try {
+      const rowsStart = Date.now();
       LOG.debug('TRIGGER', 'Esecuzione IMPORT_ROWS.run(true)...');
       IMPORT_ROWS.run(true); // true = silent mode
-      LOG.debug('TRIGGER', 'IMPORT_ROWS completato.');
+      executionLog.phases.rows = {
+        success: true,
+        duration: Date.now() - rowsStart
+      };
+      LOG.debug('TRIGGER', 'IMPORT_ROWS completato.', {
+        duration: executionLog.phases.rows.duration + 'ms'
+      });
     } catch (e2) {
+      executionLog.phases.rows = {
+        success: false,
+        error: e2.message,
+        duration: Date.now() - (executionLog.phases.rows ? executionLog.phases.rows.duration : startTime)
+      };
       LOG.error('TRIGGER_ROWS', 'Errore in IMPORT_ROWS.run', {
         error: e2.message,
         stack: e2.stack,
+        duration: executionLog.phases.rows.duration
       });
       throw e2;
     }
@@ -59,19 +181,39 @@ function runAutomatedImport() {
     // Fase 3: PDF Generation
     // ==========================
     try {
+      const pdfStart = Date.now();
       LOG.debug('TRIGGER', 'Esecuzione PDF.run(true)...');
       PDF.run(true); // true = silent mode
-      LOG.debug('TRIGGER', 'PDF.run completato.');
+      executionLog.phases.pdf = {
+        success: true,
+        duration: Date.now() - pdfStart
+      };
+      LOG.debug('TRIGGER', 'PDF.run completato.', {
+        duration: executionLog.phases.pdf.duration + 'ms'
+      });
     } catch (e3) {
+      executionLog.phases.pdf = {
+        success: false,
+        error: e3.message,
+        duration: Date.now() - (executionLog.phases.pdf ? executionLog.phases.pdf.duration : startTime)
+      };
       // Logga l'errore ma NON rilancia - la generazione PDF è meno critica dell'import
       LOG.error('TRIGGER_PDF', 'Errore during PDF.run automatico', {
         error: e3.message,
         stack: e3.stack,
+        duration: executionLog.phases.pdf.duration
       });
       // Non fare 'throw e3;' per non bloccare il completamento e lastRun
     }
 
-    LOG.info('TRIGGER', 'FINE IMPORTAZIONE AUTOMATICA');
+    executionLog.success = true;
+    executionLog.endTime = new Date().toISOString();
+    executionLog.duration = Date.now() - startTime;
+    
+    LOG.info('TRIGGER', 'FINE IMPORTAZIONE AUTOMATICA', {
+      totalDuration: executionLog.duration + 'ms',
+      phases: executionLog.phases
+    });
   } catch (e) {
     hadError = true;
     LOG.error(
@@ -82,6 +224,15 @@ function runAutomatedImport() {
         stack: e.stack,
       }
     );
+    
+    // Notifica admin dell'errore critico
+    _sendTriggerNotification('TRIGGER_ERROR', {
+      error: e.message,
+      stack: e.stack,
+      phase: e.message.includes('HEADERS') ? 'HEADERS' : (e.message.includes('ROWS') ? 'ROWS' : 'UNKNOWN'),
+      timestamp: new Date().toISOString()
+    });
+    
     // Rilancia per notifica email Google
     throw e;
   } finally {
@@ -135,6 +286,17 @@ function _disableAutoTriggerSilently() {
         hasHeadersCursor: hasHeadersCursor,
         hasRowsCursor: hasRowsCursor
       });
+      
+      // Notifica admin che il trigger rimane attivo (solo in modalità verbose)
+      var notifyOnActive = CONFIG.get('TRIGGER_NOTIFY_ON_ACTIVE', false);
+      if (notifyOnActive) {
+        _sendTriggerNotification('TRIGGER_KEPT_ACTIVE', {
+          hasHeadersCursor: hasHeadersCursor,
+          hasRowsCursor: hasRowsCursor,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
       return;
     }
 
@@ -189,6 +351,15 @@ function _disableAutoTriggerSilently() {
       'Trigger automatico disattivato: import COMPLETATA (nessun cursore attivo).',
       { removed: toDelete.length }
     );
+    
+    // Notifica admin che il trigger è stato disattivato (import completata)
+    _sendTriggerNotification('TRIGGER_OFF_COMPLETED', {
+      removed: toDelete.length,
+      handler: handler,
+      timestamp: new Date().toISOString(),
+      reason: 'Tutte le importazioni sono state completate con successo'
+    });
+    
   } catch (e) {
     LOG.warn(
       'TRIGGER_AUTO_OFF',
