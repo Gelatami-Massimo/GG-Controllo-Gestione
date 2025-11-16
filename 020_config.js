@@ -178,6 +178,8 @@ const SHEETS = (function () {
   }, {});
 
   const _cache = {}; // Cache interna per indici e headerRow
+  const _dataCache = {}; // Cache avanzata per getCompanyMap e getProcessedFileIds
+  const DATA_CACHE_TTL = 600000; // 10 minuti per dati che cambiano meno spesso
 
   function _invalidateIndexCache(sheetName = null) {
     try {
@@ -583,17 +585,32 @@ const SHEETS = (function () {
   }
 
   function getCompanyMap() {
+    // Phase 8.3: Query result caching - avoid repeated sheet reads
+    const cacheKey = 'companyMap';
+    const now = Date.now();
+    
+    if (_dataCache[cacheKey] && _dataCache[cacheKey].timestamp && 
+        (now - _dataCache[cacheKey].timestamp) < DATA_CACHE_TTL) {
+      return _dataCache[cacheKey].data;
+    }
+    
     const sheetName = SHEET_NAMES.Aziende;
     const sh = get(sheetName);
     const headerRow = sh ? _findHeaderRow(sh, sheetName) : 1;
-    if (!sh || sh.getLastRow() <= headerRow) return new Map();
+    if (!sh || sh.getLastRow() <= headerRow) {
+      const emptyMap = new Map();
+      _dataCache[cacheKey] = { data: emptyMap, timestamp: now };
+      return emptyMap;
+    }
 
     let data = [];
     try {
       data = sh.getRange(headerRow + 1, 1, sh.getLastRow() - headerRow, 2).getValues();
     } catch (e) {
       LOG?.error('SHEETS_GETMAP', `Errore lettura dati da ${sheetName}`, { error: e.message });
-      return new Map();
+      const emptyMap = new Map();
+      _dataCache[cacheKey] = { data: emptyMap, timestamp: now };
+      return emptyMap;
     }
 
     const companyMap = new Map();
@@ -605,21 +622,44 @@ const SHEETS = (function () {
         companyMap.set(normalizedKey, trimmedVal);
       }
     });
+    
+    // Cache for next call
+    _dataCache[cacheKey] = { data: companyMap, timestamp: now };
+    LOG?.debug('SHEETS_CACHE', `getCompanyMap cached with ${companyMap.size} entries`, {
+      cacheKey,
+      entries: companyMap.size
+    });
+    
     return companyMap;
   }
 
   function getProcessedFileIds() {
+    // Phase 8.3: Query result caching - avoid repeated sheet reads
+    const cacheKey = 'processedFileIds';
+    const now = Date.now();
+    
+    if (_dataCache[cacheKey] && _dataCache[cacheKey].timestamp && 
+        (now - _dataCache[cacheKey].timestamp) < DATA_CACHE_TTL) {
+      return _dataCache[cacheKey].data;
+    }
+    
     const sheetName = SHEET_NAMES.Fatture;
     const sh = get(sheetName);
     const headerRow = sh ? _findHeaderRow(sh, sheetName) : 1;
-    if (!sh || sh.getLastRow() <= headerRow) return new Set();
+    if (!sh || sh.getLastRow() <= headerRow) {
+      const emptySet = new Set();
+      _dataCache[cacheKey] = { data: emptySet, timestamp: now };
+      return emptySet;
+    }
 
     let data = [];
     try {
       data = sh.getRange(headerRow + 1, 1, sh.getLastRow() - headerRow, 1).getValues();
     } catch (e) {
       LOG?.error('SHEETS_GETIDS', `Errore lettura FileID da ${sheetName}`, { error: e.message });
-      return new Set();
+      const emptySet = new Set();
+      _dataCache[cacheKey] = { data: emptySet, timestamp: now };
+      return emptySet;
     }
 
     const ids = new Set();
@@ -627,6 +667,14 @@ const SHEETS = (function () {
       const trimmedId = String(id ?? '').trim();
       if (trimmedId) ids.add(trimmedId);
     });
+    
+    // Cache for next call
+    _dataCache[cacheKey] = { data: ids, timestamp: now };
+    LOG?.debug('SHEETS_CACHE', `getProcessedFileIds cached with ${ids.size} entries`, {
+      cacheKey,
+      entries: ids.size
+    });
+    
     return ids;
   }
 
@@ -638,6 +686,17 @@ const SHEETS = (function () {
     headerIndex,
     invalidateHeaderIndexCache(sheetName = null) {
       _invalidateIndexCache(sheetName);
+    },
+    // Phase 8.3: Invalidate query result cache
+    invalidateDataCache(cacheKey = null) {
+      if (cacheKey) {
+        delete _dataCache[cacheKey];
+        LOG?.debug('SHEETS_CACHE', `Data cache invalidated for key: ${cacheKey}`);
+      } else {
+        // Clear all data cache
+        Object.keys(_dataCache).forEach(key => delete _dataCache[key]);
+        LOG?.debug('SHEETS_CACHE', `All data cache cleared`);
+      }
     },
     getCompanyMap,
     getProcessedFileIds,
