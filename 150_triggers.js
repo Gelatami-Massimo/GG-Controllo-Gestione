@@ -214,8 +214,18 @@ function runAutomatedImport() {
       totalDuration: executionLog.duration + 'ms',
       phases: executionLog.phases
     });
+    
+    // Registra esecuzione in dashboard
+    if (typeof DASHBOARD !== 'undefined' && DASHBOARD.recordExecution) {
+      DASHBOARD.recordExecution(executionLog);
+    }
   } catch (e) {
     hadError = true;
+    executionLog.success = false;
+    executionLog.error = e.message;
+    executionLog.endTime = new Date().toISOString();
+    executionLog.duration = Date.now() - startTime;
+    
     LOG.error(
       'TRIGGER_FAIL',
       "L'importazione automatica è fallita gravemente (HEADERS/ROWS)",
@@ -224,6 +234,11 @@ function runAutomatedImport() {
         stack: e.stack,
       }
     );
+    
+    // Registra esecuzione fallita in dashboard
+    if (typeof DASHBOARD !== 'undefined' && DASHBOARD.recordExecution) {
+      DASHBOARD.recordExecution(executionLog);
+    }
     
     // Notifica admin dell'errore critico
     _sendTriggerNotification('TRIGGER_ERROR', {
@@ -352,6 +367,11 @@ function _disableAutoTriggerSilently() {
       { removed: toDelete.length }
     );
     
+    // Aggiorna dashboard: trigger inattivo
+    if (typeof DASHBOARD !== 'undefined' && DASHBOARD.updateTriggerStatus) {
+      DASHBOARD.updateTriggerStatus(false);
+    }
+    
     // Notifica admin che il trigger è stato disattivato (import completata)
     _sendTriggerNotification('TRIGGER_OFF_COMPLETED', {
       removed: toDelete.length,
@@ -438,6 +458,11 @@ function createTimeBasedTrigger() {
   try {
     ScriptApp.newTrigger(handler).timeBased().everyMinutes(everyMin).create();
 
+    // Aggiorna dashboard: trigger attivo
+    if (typeof DASHBOARD !== 'undefined' && DASHBOARD.updateTriggerStatus) {
+      DASHBOARD.updateTriggerStatus(true);
+    }
+
     ui.alert(
       'Attivatore installato!',
       "L'importazione automatica verrà eseguita circa ogni " +
@@ -510,6 +535,11 @@ function deleteTriggers() {
       });
     }
   });
+
+  // Aggiorna dashboard: trigger inattivo
+  if (typeof DASHBOARD !== 'undefined' && DASHBOARD.updateTriggerStatus) {
+    DASHBOARD.updateTriggerStatus(false);
+  }
 
   ui.alert(
     'Attivatori rimossi',

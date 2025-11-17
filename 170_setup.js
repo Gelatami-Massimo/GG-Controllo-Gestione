@@ -61,6 +61,12 @@ const SETUP = (function () {
     UTIL.showToast('Creazione e formattazione fogli...', 'Setup');
     SHEETS.ensureAll();
     SHEETS.applyFormats();
+    
+    // 6.1) Inizializza Dashboard Trigger
+    if (typeof DASHBOARD !== 'undefined' && DASHBOARD.initSheet) {
+      UTIL.showToast('Inizializzazione Dashboard Trigger...', 'Setup');
+      DASHBOARD.initSheet();
+    }
 
     // 7) Scrittura configurazione
     UTIL.showToast('Scrittura configurazione...', 'Setup');
@@ -151,7 +157,7 @@ const SETUP = (function () {
 
 // Registra SETUP nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('SETUP', ['SHEETS', 'UTIL', 'CONFIG', 'LOG', 'DEBUG']);
+  ModuleRegistry.register('SETUP', ['SHEETS', 'UTIL', 'CONFIG', 'LOG', 'DEBUG', 'DASHBOARD']);
 }
 
 // Registra SETUP nel namespace GG
