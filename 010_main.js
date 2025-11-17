@@ -81,6 +81,7 @@ function onOpen() {
   // --- Menu Strumenti Avanzati ---
   menu.addSubMenu(ui.createMenu('Strumenti Avanzati')
     .addItem('⚙️ Esegui Setup Guidato', App.ui.fn.runInitialSetup)
+    .addItem('⚙️ Configurazione Sistema', runConfigDialog)
     .addSeparator()
     .addItem('🖨️ Sincronizza Anagrafica Fornitori (Nuovi)', App.ui.fn.runSyncSuppliers)
     .addItem('🔄 Riallinea Categorie Storiche', App.ui.fn.runSyncCategoriesRetroactive)
@@ -95,7 +96,6 @@ function onOpen() {
     .addSeparator()
     .addItem('🔍 Verifica Struttura Fogli', App.ui.fn.runSheetCheckAndSetup)
     .addItem('⚠️ Avvia Controllo Integrità', App.ui.fn.runSanityCheck)
-    // --- Voci Conteggio Rimosse (Integrate in Import) ---
     .addItem('🧹 Pulisci Cache e Cursori', App.ui.fn.runClearCache)
   );
 
@@ -221,6 +221,7 @@ function runClearDuplicateMarkings() { _runSafely(() => DEBUG.clearDuplicateMark
 function runForceTextFormatOnCodes() { _runSafely(() => DEBUG.forceTextFormatOnCodes(), 'Debug', 'Forzo formato testo codici...', 'Formato testo applicato!'); }
 function runSyncSuppliers() { _runSafely(() => DEBUG.syncSuppliersFromInvoices(), 'Debug', 'Sincronizzazione fornitori (nuovi)...', 'Anagrafica fornitori sincronizzata!'); }
 function runSyncCategoriesRetroactive() { _runSafely(() => DEBUG.syncCategoriesRetroactive(), 'Debug', 'Riallineamento categorie storiche...', 'Categorie storiche riallineate!'); }
+function runConfigDialog() { _runSafely(() => CONFIG_UI.openDialog(), 'Config', 'Apertura dialog configurazione...', 'Dialog chiuso.'); }
 
 // =============================================================
 // FUNZIONI DEFINITE IN ALTRI FILE (NON INCLUDERE QUI)
