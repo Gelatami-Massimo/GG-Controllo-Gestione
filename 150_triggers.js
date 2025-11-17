@@ -127,7 +127,19 @@ function runAutomatedImport() {
     try {
       const headersStart = Date.now();
       LOG.debug('TRIGGER', 'Esecuzione IMPORT_HEADERS.runContinue(true)...');
-      IMPORT_HEADERS.runContinue(true); // true = silent mode
+      
+      // Usa RETRY per gestire errori transitori
+      if (typeof RETRY !== 'undefined' && RETRY.withRetry) {
+        RETRY.withRetry(IMPORT_HEADERS.runContinue, {
+          context: IMPORT_HEADERS,
+          args: [true],
+          name: 'IMPORT_HEADERS.runContinue',
+          maxRetries: 2
+        });
+      } else {
+        IMPORT_HEADERS.runContinue(true); // Fallback senza retry
+      }
+      
       executionLog.phases.headers = {
         success: true,
         duration: Date.now() - headersStart
@@ -155,7 +167,19 @@ function runAutomatedImport() {
     try {
       const rowsStart = Date.now();
       LOG.debug('TRIGGER', 'Esecuzione IMPORT_ROWS.run(true)...');
-      IMPORT_ROWS.run(true); // true = silent mode
+      
+      // Usa RETRY per gestire errori transitori
+      if (typeof RETRY !== 'undefined' && RETRY.withRetry) {
+        RETRY.withRetry(IMPORT_ROWS.run, {
+          context: IMPORT_ROWS,
+          args: [true],
+          name: 'IMPORT_ROWS.run',
+          maxRetries: 2
+        });
+      } else {
+        IMPORT_ROWS.run(true); // Fallback senza retry
+      }
+      
       executionLog.phases.rows = {
         success: true,
         duration: Date.now() - rowsStart
@@ -183,7 +207,19 @@ function runAutomatedImport() {
     try {
       const pdfStart = Date.now();
       LOG.debug('TRIGGER', 'Esecuzione PDF.run(true)...');
-      PDF.run(true); // true = silent mode
+      
+      // Usa RETRY per gestire errori transitori
+      if (typeof RETRY !== 'undefined' && RETRY.withRetry) {
+        RETRY.withRetry(PDF.run, {
+          context: PDF,
+          args: [true],
+          name: 'PDF.run',
+          maxRetries: 2
+        });
+      } else {
+        PDF.run(true); // Fallback senza retry
+      }
+      
       executionLog.phases.pdf = {
         success: true,
         duration: Date.now() - pdfStart
