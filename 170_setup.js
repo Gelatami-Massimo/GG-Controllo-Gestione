@@ -130,7 +130,7 @@ const SETUP = (function () {
       ['PDF_CHUNK_SIZE', 80, 'Numero fatture da leggere in blocco (Crea PDF).'],
       ['PDF_FLUSH_EVERY', 200, 'Ogni quanti link PDF aggiornare sul foglio (Crea PDF).'],
       ['ROWS_TOLLERANZA_EURO', 1.00, 'Tolleranza (in €) per mismatch Totale Fattura vs Somma Righe (Import Righe).'],
-      ['ADMIN_EMAIL', Session.getActiveUser().getEmail(), 'Email destinatario notifiche trigger (errori, import completata).'],
+      ['ADMIN_EMAIL', '', 'Email destinatario notifiche trigger (errori, import completata). CONFIGURARE manualmente.'],
       ['TRIGGER_NOTIFY_ON_ACTIVE', 'FALSE', 'Inviare email anche quando trigger rimane attivo? (true/false). Default: FALSE.']
     ];
 

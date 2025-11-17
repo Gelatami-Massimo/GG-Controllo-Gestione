@@ -61,17 +61,25 @@ const ERROR_HANDLER = (function() {
   }
 
   /**
-   * Extract error context from Error object
+   * Extract detailed context from an error
    * @param {Error} error - Error object
    * @returns {Object} Error context
    */
   function extractErrorContext(error) {
+    var userId = 'unknown';
+    try {
+      userId = Session.getActiveUser().getEmail();
+    } catch (e) {
+      // Permessi mancanti, usa 'unknown'
+      userId = 'unknown';
+    }
+    
     return {
       name: error.name || 'Error',
       message: error.message || String(error),
       stack: error.stack || 'No stack trace',
       timestamp: new Date().toISOString(),
-      userId: Session.getActiveUser().getEmail(),
+      userId: userId,
       spreadsheetId: SpreadsheetApp.getActiveSpreadsheet().getId()
     };
   }

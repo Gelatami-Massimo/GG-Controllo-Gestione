@@ -178,6 +178,14 @@ var CONFIG_UI = (function() {
    * @returns {Object} Configurazione default
    */
   function getDefaultConfiguration() {
+    var defaultEmail = '';
+    try {
+      defaultEmail = Session.getActiveUser().getEmail();
+    } catch (e) {
+      // Permessi mancanti, usa stringa vuota
+      defaultEmail = '';
+    }
+    
     return {
       CARTELLA_INPUT_ID: '',
       CARTELLA_OUTPUT_ID: '',
@@ -191,7 +199,7 @@ var CONFIG_UI = (function() {
       PDF_CHUNK_SIZE: '80',
       PDF_FLUSH_EVERY: '200',
       ROWS_TOLLERANZA_EURO: '1.00',
-      ADMIN_EMAIL: Session.getActiveUser().getEmail(),
+      ADMIN_EMAIL: defaultEmail,
       TRIGGER_NOTIFY_ON_ACTIVE: 'FALSE'
     };
   }

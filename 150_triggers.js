@@ -14,8 +14,18 @@
  */
 function _sendTriggerNotification(reason, details) {
   try {
-    // Recupera email admin da CONFIG (fallback all'utente attivo)
-    var adminEmail = CONFIG.get('ADMIN_EMAIL', Session.getActiveUser().getEmail());
+    // Recupera email admin da CONFIG (fallback a stringa vuota se non disponibile)
+    var adminEmail = CONFIG.get('ADMIN_EMAIL', '');
+    
+    // Se ADMIN_EMAIL vuoto, prova Session (può fallire se permessi mancanti)
+    if (!adminEmail || adminEmail === '') {
+      try {
+        adminEmail = Session.getActiveUser().getEmail();
+      } catch (e) {
+        LOG.debug('TRIGGER_NOTIFY', 'Session.getActiveUser non disponibile (permessi mancanti), notifica saltata.');
+        return;
+      }
+    }
     
     if (!adminEmail || adminEmail === '') {
       LOG.debug('TRIGGER_NOTIFY', 'Email admin non configurata, notifica saltata.');
