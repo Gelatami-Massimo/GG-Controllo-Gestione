@@ -79,6 +79,7 @@ const App = {
       createDuplicateSnapshot: 'createDuplicateSnapshot',
       runMarkDuplicateInvoices: 'runMarkDuplicateInvoices',
       runClearDuplicateMarkings: 'runClearDuplicateMarkings',
+      runFindRigheDuplicate: 'runFindRigheDuplicate',
       // Le funzioni runCountFiles... sono state rimosse perché ora integrate in "Importa Intestazioni"
       runForceTextFormatOnCodes: 'runForceTextFormatOnCodes',
       runSyncSuppliers: 'runSyncSuppliers',
