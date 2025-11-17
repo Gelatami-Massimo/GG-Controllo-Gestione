@@ -928,6 +928,117 @@ const DEBUG = (function () {
     }
   }
 
+  /**
+   * DEV_DeleteRigheDuplicate()
+   * Elimina fisicamente le righe duplicate dal foglio "Righe" usando il foglio "Righe_Duplicate" come riferimento.
+   * ATTENZIONE: Operazione irreversibile! Crea un backup prima di eseguire.
+   * 
+   * Elimina le righe in ordine inverso (dal basso verso l'alto) per evitare
+   * problemi di spostamento degli indici durante l'eliminazione.
+   */
+  function DEV_DeleteRigheDuplicate() {
+    LOG.info('DEV_DELETE_DUP', 'Avvio eliminazione righe duplicate...');
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const shDup = ss.getSheetByName('Righe_Duplicate');
+    
+    if (!shDup) {
+      UTIL.showToast('Foglio "Righe_Duplicate" non trovato. Esegui prima "Trova Righe Duplicate".', 'Errore', 8);
+      LOG.error('DEV_DELETE_DUP', 'Foglio "Righe_Duplicate" non esistente.');
+      return;
+    }
+
+    const lastRow = shDup.getLastRow();
+    if (lastRow < 2) {
+      UTIL.showToast('Nessuna riga duplicata da eliminare.', 'Info', 5);
+      LOG.info('DEV_DELETE_DUP', 'Foglio "Righe_Duplicate" vuoto.');
+      return;
+    }
+
+    // Chiedi conferma all'utente
+    const ui = SpreadsheetApp.getUi();
+    const duplicateCount = lastRow - 1;
+    const response = ui.alert(
+      '⚠️ ATTENZIONE: Operazione Irreversibile',
+      `Stai per eliminare ${duplicateCount} righe duplicate dal foglio "Righe".\n\n` +
+      `CONSIGLIO IMPORTANTE:\n` +
+      `1. Crea un backup del foglio "Righe" prima di procedere\n` +
+      `2. Verifica il contenuto del foglio "Righe_Duplicate"\n` +
+      `3. Questa operazione NON può essere annullata\n\n` +
+      `Vuoi procedere con l'eliminazione?`,
+      ui.ButtonSet.YES_NO
+    );
+
+    if (response !== ui.Button.YES) {
+      UTIL.showToast('Operazione annullata dall\'utente.', 'Annullato', 5);
+      LOG.info('DEV_DELETE_DUP', 'Eliminazione annullata dall\'utente.');
+      return;
+    }
+
+    // Leggi gli indici delle righe da eliminare (colonna RowIndex)
+    const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
+    if (!shRighe) {
+      UTIL.showToast('Foglio "Righe" non trovato!', 'Errore');
+      LOG.error('DEV_DELETE_DUP', 'Foglio "Righe" non trovato.');
+      return;
+    }
+
+    try {
+      // Leggi colonna RowIndex (colonna 6)
+      const rowIndexCol = 6;
+      const rowIndices = shDup.getRange(2, rowIndexCol, duplicateCount, 1).getValues();
+      
+      // Converti in array di numeri e ordina in ordine DECRESCENTE
+      // (eliminare dal basso verso l'alto per evitare spostamenti di indice)
+      const rowsToDelete = rowIndices
+        .map(row => Number(row[0]))
+        .filter(idx => !isNaN(idx) && idx > 0)
+        .sort((a, b) => b - a); // Ordine DECRESCENTE
+
+      if (rowsToDelete.length === 0) {
+        UTIL.showToast('Nessun indice di riga valido trovato.', 'Errore');
+        LOG.error('DEV_DELETE_DUP', 'Nessun indice RowIndex valido.');
+        return;
+      }
+
+      LOG.info('DEV_DELETE_DUP', `Eliminazione di ${rowsToDelete.length} righe duplicate...`);
+      UTIL.showToast(`Eliminazione ${rowsToDelete.length} righe in corso...`, 'Attendere', -1);
+
+      // Elimina le righe una alla volta (dal basso verso l'alto)
+      let deletedCount = 0;
+      for (const rowIndex of rowsToDelete) {
+        try {
+          shRighe.deleteRow(rowIndex);
+          deletedCount++;
+          
+          // Toast di progresso ogni 50 righe
+          if (deletedCount % 50 === 0) {
+            UTIL.showToast(`Eliminate ${deletedCount}/${rowsToDelete.length} righe...`, 'In corso', -1);
+          }
+        } catch (e) {
+          LOG.error('DEV_DELETE_DUP', `Errore eliminazione riga ${rowIndex}`, { error: e.message });
+          // Continua con le altre righe
+        }
+      }
+
+      // Pulisci il foglio "Righe_Duplicate" dopo l'eliminazione
+      shDup.clear();
+      const schema = SHEETS.SCHEMAS['Righe_Duplicate'] || ['FileID', 'NumeroDoc', 'NumeroLinea', 'CodiceValore', 'Descrizione', 'RowIndex'];
+      shDup.getRange(1, 1, 1, schema.length).setValues([schema]).setFontWeight('bold');
+      shDup.setFrozenRows(1);
+
+      UTIL.showToast(`✅ Eliminate ${deletedCount} righe duplicate con successo!`, 'Completato', 8);
+      LOG.info('DEV_DELETE_DUP', `Eliminazione completata. Righe eliminate: ${deletedCount}`);
+      
+      // Torna al foglio Righe per mostrare il risultato
+      shRighe.activate();
+
+    } catch (e) {
+      LOG.error('DEV_DELETE_DUP', 'Errore durante l\'eliminazione delle righe duplicate', { error: e.message, stack: e.stack });
+      UTIL.showToast('Errore durante l\'eliminazione. Vedi Log.', 'Errore');
+    }
+  }
+
   // --- Utility Interne ---
 
   /**
