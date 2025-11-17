@@ -1065,7 +1065,8 @@ const DEBUG = (function () {
     syncSuppliersFromInvoices: syncSuppliersFromInvoices,
     syncCategoriesRetroactive: syncCategoriesRetroactive,
     createDuplicateSnapshot: createDuplicateSnapshot,
-    DEV_FindRigheDuplicate: DEV_FindRigheDuplicate
+    DEV_FindRigheDuplicate: DEV_FindRigheDuplicate,
+    DEV_DeleteRigheDuplicate: DEV_DeleteRigheDuplicate
   };
 })();
 
