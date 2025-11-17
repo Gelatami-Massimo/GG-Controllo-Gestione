@@ -262,7 +262,7 @@ function runAutomatedImport() {
     });
     
     // Registra esecuzione in dashboard
-    if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.recordExecution) {
+    if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.recordExecution) {
       TRIGGER_DASHBOARD.recordExecution(executionLog);
     }
   } catch (e) {
@@ -282,7 +282,7 @@ function runAutomatedImport() {
     );
     
     // Registra esecuzione fallita in dashboard
-    if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.recordExecution) {
+    if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.recordExecution) {
       TRIGGER_DASHBOARD.recordExecution(executionLog);
     }
     
@@ -414,7 +414,7 @@ function _disableAutoTriggerSilently() {
     );
     
     // Aggiorna dashboard: trigger inattivo
-    if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
+    if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
       TRIGGER_DASHBOARD.updateTriggerStatus(false);
     }
     
@@ -505,7 +505,7 @@ function createTimeBasedTrigger() {
     ScriptApp.newTrigger(handler).timeBased().everyMinutes(everyMin).create();
 
     // Aggiorna dashboard: trigger attivo
-    if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
+    if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
       TRIGGER_DASHBOARD.updateTriggerStatus(true);
     }
 
@@ -540,15 +540,25 @@ function createTimeBasedTrigger() {
  * Elimina tutti gli attivatori associati all'handler configurato.
  */
 function deleteTriggers() {
-  const ui = SpreadsheetApp.getUi();
+  // Try to get UI, but don't fail if not available
+  let ui = null;
+  try {
+    ui = SpreadsheetApp.getUi();
+  } catch (e) {
+    // UI not available (e.g., called from trigger context)
+    LOG.debug('TRIGGER_DELETE', 'UI non disponibile, modalità silent');
+  }
+
   const handler = App.config.triggerHandler;
 
   if (!handler || typeof handler !== 'string') {
-    ui.alert(
-      'Errore configurazione',
-      'Handler del trigger non definito in App.config.triggerHandler.',
-      ui.ButtonSet.OK
-    );
+    if (ui) {
+      ui.alert(
+        'Errore configurazione',
+        'Handler del trigger non definito in App.config.triggerHandler.',
+        ui.ButtonSet.OK
+      );
+    }
     LOG.error('TRIGGER_CFG', 'App.config.triggerHandler non definito.');
     return;
   }
@@ -563,11 +573,13 @@ function deleteTriggers() {
   });
 
   if (toDelete.length === 0) {
-    ui.alert(
-      'Nessun attivatore trovato',
-      'Non sono presenti attivatori installati.',
-      ui.ButtonSet.OK
-    );
+    if (ui) {
+      ui.alert(
+        'Nessun attivatore trovato',
+        'Non sono presenti attivatori installati.',
+        ui.ButtonSet.OK
+      );
+    }
     LOG.info('TRIGGER', 'Nessun attivatore da rimuovere.');
     return;
   }
@@ -583,14 +595,16 @@ function deleteTriggers() {
   });
 
   // Aggiorna dashboard: trigger inattivo
-  if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
+  if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
     TRIGGER_DASHBOARD.updateTriggerStatus(false);
   }
 
-  ui.alert(
-    'Attivatori rimossi',
-    "L'importazione automatica è stata disattivata.",
-    ui.ButtonSet.OK
-  );
+  if (ui) {
+    ui.alert(
+      'Attivatori rimossi',
+      "L'importazione automatica è stata disattivata.",
+      ui.ButtonSet.OK
+    );
+  }
   LOG.info('TRIGGER', 'Rimossi ' + toDelete.length + ' attivatori.');
 }
