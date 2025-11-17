@@ -86,6 +86,13 @@ const IMPORT_ROWS = (function () {
     }
     const maxColNeeded = Math.max(...requiredKeys.map(k => idxF[k])) + 1;
 
+    // Verifica colonne opzionali (nuove funzionalità)
+    const optionalKeys = ['RigheImportateNum', 'TotRigheNetto'];
+    const missingOptional = optionalKeys.filter(k => idxF[k] === undefined);
+    if (missingOptional.length > 0) {
+      LOG?.warn('ROWS_SETUP', `Colonne opzionali mancanti in Fatture (eseguire DEV_EnsureSheetsAndFormats): ${missingOptional.join(', ')}`);
+    }
+
     // Carica filtro dinamico
     const junkKeywordsSet = _getJunkKeywords();
 
@@ -408,7 +415,8 @@ const IMPORT_ROWS = (function () {
       if (idx[safeKey] !== undefined) {
         flagUpdates[rowNum][idx[safeKey]] = updates[key];
       } else {
-        LOG?.warn('ROWS_FLAG_UPDATE', `Indice non trovato per aggiornare flag: ${key}`, { rowNum });
+        // Ignora silenziosamente le colonne non ancora presenti (es. dopo deploy ma prima di DEV_EnsureSheetsAndFormats)
+        // LOG?.warn('ROWS_FLAG_UPDATE', `Indice non trovato per aggiornare flag: ${key}`, { rowNum });
       }
     }
   }
