@@ -134,6 +134,7 @@ const SHEETS = (function () {
       'Reparto',
       'RegimeFiscale', 'Data', 'Anno', 'Mese', 'NumeroDoc', 'TipoDoc',
       'TotImponibile', 'TotImposta', 'Valuta', 'TotDocumento',
+      'RigheImportateNum', 'TotRigheNetto',
       'RigheImportate', 'ImportaRigheSrc', 'ImportedAt'
     ],
     // NB: Reparto ereditato da Fatture, in coda alle righe
@@ -167,7 +168,9 @@ const SHEETS = (function () {
       'Costi', 'Fatture Ricevute', 'Spese Bancarie', 'Altre Spese N/F'
     ],
     // --- Filtro Righe Spazzatura ---
-    'Filtro Righe Spazzatura': ['ParolaChiaveDaIgnorare', 'Note']
+    'Filtro Righe Spazzatura': ['ParolaChiaveDaIgnorare', 'Note'],
+    // --- Righe Duplicate ---
+    'Righe_Duplicate': ['FileID', 'NumeroDoc', 'NumeroLinea', 'CodiceValore', 'Descrizione', 'RowIndex']
   };
 
   // Mappa nomi sicuri -> nomi reali (es. Dati_Mensili -> "Dati Mensili")
@@ -472,8 +475,9 @@ const SHEETS = (function () {
       [SHEET_NAMES.Fatture]: [
         {
           format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00',
-          cols: ['TotImponibile', 'TotImposta', 'TotDocumento']
+          cols: ['TotImponibile', 'TotImposta', 'TotDocumento', 'TotRigheNetto']
         },
+        { format: '#,##0', cols: ['RigheImportateNum'] },
         { format: 'dd/mm/yyyy', cols: ['Data'] },
         { format: 'dd/mm/yyyy hh:mm:ss', cols: ['ImportedAt'] },
         {
@@ -555,6 +559,10 @@ const SHEETS = (function () {
       ],
       [SHEET_NAMES.Filtro_Righe_Spazzatura]: [
         { format: '@', cols: ['ParolaChiaveDaIgnorare', 'Note'] }
+      ],
+      [SHEET_NAMES.Righe_Duplicate]: [
+        { format: '@', cols: ['FileID', 'NumeroDoc', 'NumeroLinea', 'CodiceValore', 'Descrizione'] },
+        { format: '#,##0', cols: ['RowIndex'] }
       ]
     };
 

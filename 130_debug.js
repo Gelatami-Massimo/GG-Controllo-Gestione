@@ -761,6 +761,173 @@ const DEBUG = (function () {
     }
   }
 
+  /**
+   * Trova righe duplicate nel foglio "Righe" (stesso FileID + NumeroLinea)
+   * e le scrive in un foglio dedicato "Righe_Duplicate".
+   */
+  function DEV_FindRigheDuplicate() {
+    LOG.info('DEV_DUP_RIGHE', 'Avvio ricerca righe duplicate...');
+    UTIL.showToast('Ricerca righe duplicate in corso...', 'Debug', -1);
+
+    const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
+    if (!shRighe) {
+      UTIL.showToast('Foglio "Righe" non trovato.', 'Errore');
+      LOG.error('DEV_DUP_RIGHE', 'Foglio "Righe" non trovato.');
+      return;
+    }
+
+    const headerRow = SHEETS._findHeaderRow(shRighe, SHEETS.SHEET_NAMES.Righe);
+    const lastRow = shRighe.getLastRow();
+
+    if (lastRow <= headerRow) {
+      UTIL.showToast('Foglio "Righe" vuoto. Nessun duplicato.', 'Info');
+      LOG.info('DEV_DUP_RIGHE', 'Foglio "Righe" vuoto.');
+      return;
+    }
+
+    // Ottieni indici colonne
+    const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
+    if (idx.FileID === undefined || idx.NumeroLinea === undefined) {
+      UTIL.showToast('Colonne FileID o NumeroLinea mancanti in "Righe".', 'Errore');
+      LOG.error('DEV_DUP_RIGHE', 'Colonne FileID o NumeroLinea mancanti.');
+      return;
+    }
+
+    const maxColNeeded = Math.max(
+      idx.FileID || 0,
+      idx.NumeroDoc || 0,
+      idx.NumeroLinea || 0,
+      idx.CodiceValore || 0,
+      idx.Descrizione || 0
+    ) + 1;
+
+    // Leggi tutti i dati
+    let data;
+    try {
+      data = shRighe.getRange(headerRow + 1, 1, lastRow - headerRow, maxColNeeded).getValues();
+    } catch (e) {
+      LOG.error('DEV_DUP_RIGHE', 'Errore lettura dati da foglio "Righe".', { error: e.message });
+      UTIL.showToast('Errore lettura dati. Vedi Log.', 'Errore');
+      return;
+    }
+
+    // Mappa per tracciare duplicati: key = FileID|NumeroLinea -> array di row info
+    const seen = new Map();
+    const duplicates = [];
+
+    data.forEach((row, i) => {
+      const rowIndex = headerRow + 1 + i; // Indice riga reale nel foglio
+      const fileId = String(row[idx.FileID] || '').trim();
+      const numeroLinea = String(row[idx.NumeroLinea] || '').trim();
+
+      if (!fileId || !numeroLinea) return; // Salta righe incomplete
+
+      const key = `${fileId}|${numeroLinea}`;
+
+      if (seen.has(key)) {
+        // Duplicato trovato!
+        // Aggiungi sia la riga precedente (se non già aggiunta) che quella corrente
+        const previous = seen.get(key);
+        if (!previous.isDuplicate) {
+          // Prima occorrenza duplicata - aggiungi la riga originale
+          duplicates.push({
+            FileID: previous.fileId,
+            NumeroDoc: previous.numeroDoc,
+            NumeroLinea: previous.numeroLinea,
+            CodiceValore: previous.codiceValore,
+            Descrizione: previous.descrizione,
+            RowIndex: previous.rowIndex
+          });
+          previous.isDuplicate = true;
+        }
+        
+        // Aggiungi riga corrente
+        duplicates.push({
+          FileID: fileId,
+          NumeroDoc: String(row[idx.NumeroDoc || 0] || '').trim(),
+          NumeroLinea: numeroLinea,
+          CodiceValore: String(row[idx.CodiceValore || 0] || '').trim(),
+          Descrizione: String(row[idx.Descrizione || 0] || '').trim(),
+          RowIndex: rowIndex
+        });
+      } else {
+        // Prima occorrenza di questa chiave
+        seen.set(key, {
+          fileId: fileId,
+          numeroDoc: String(row[idx.NumeroDoc || 0] || '').trim(),
+          numeroLinea: numeroLinea,
+          codiceValore: String(row[idx.CodiceValore || 0] || '').trim(),
+          descrizione: String(row[idx.Descrizione || 0] || '').trim(),
+          rowIndex: rowIndex,
+          isDuplicate: false
+        });
+      }
+    });
+
+    const dupCount = duplicates.length;
+    LOG.info('DEV_DUP_RIGHE', `Trovati ${dupCount} duplicati di righe.`, { count: dupCount });
+
+    if (dupCount === 0) {
+      UTIL.showToast('Nessuna riga duplicata trovata!', 'Completato', 5);
+      return;
+    }
+
+    // Scrivi risultati nel foglio "Righe_Duplicate"
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheetName = 'Righe_Duplicate';
+    let shDup = ss.getSheetByName(sheetName);
+    
+    if (!shDup) {
+      shDup = ss.insertSheet(sheetName);
+      LOG.info('DEV_DUP_RIGHE', `Foglio "${sheetName}" creato.`);
+    } else {
+      // Pulisci il foglio esistente
+      shDup.clear();
+    }
+
+    // Scrivi header
+    const schema = SHEETS.SCHEMAS['Righe_Duplicate'] || ['FileID', 'NumeroDoc', 'NumeroLinea', 'CodiceValore', 'Descrizione', 'RowIndex'];
+    shDup.getRange(1, 1, 1, schema.length).setValues([schema]).setFontWeight('bold');
+    shDup.setFrozenRows(1);
+
+    // Prepara dati da scrivere
+    const rowsToWrite = duplicates.map(dup => [
+      dup.FileID,
+      dup.NumeroDoc,
+      dup.NumeroLinea,
+      dup.CodiceValore,
+      dup.Descrizione,
+      dup.RowIndex
+    ]);
+
+    // Scrivi dati
+    try {
+      if (rowsToWrite.length > 0) {
+        shDup.getRange(2, 1, rowsToWrite.length, schema.length).setValues(rowsToWrite);
+        
+        // Applica formattazione
+        shDup.getRange(2, 1, rowsToWrite.length, 5).setNumberFormat('@'); // Testo per prime 5 colonne
+        shDup.getRange(2, 6, rowsToWrite.length, 1).setNumberFormat('#,##0'); // Numero per RowIndex
+        
+        // Auto-resize colonne
+        try {
+          shDup.autoResizeColumns(1, schema.length);
+        } catch (e) {
+          LOG.warn('DEV_DUP_RIGHE', 'Impossibile auto-resize colonne.', { error: e.message });
+        }
+      }
+
+      UTIL.showToast(`Trovati ${dupCount} duplicati. Vedi foglio "${sheetName}".`, 'Completato', 8);
+      LOG.info('DEV_DUP_RIGHE', `Scritti ${dupCount} duplicati nel foglio "${sheetName}".`);
+      
+      // Attiva il foglio duplicati per mostrarlo all'utente
+      shDup.activate();
+    } catch (e) {
+      LOG.error('DEV_DUP_RIGHE', 'Errore scrittura dati duplicati.', { error: e.message });
+      UTIL.showToast('Errore scrittura risultati. Vedi Log.', 'Errore');
+    }
+  }
+
   // --- Utility Interne ---
 
   /**
@@ -787,6 +954,7 @@ const DEBUG = (function () {
     syncSuppliersFromInvoices: syncSuppliersFromInvoices,
     syncCategoriesRetroactive: syncCategoriesRetroactive,
     createDuplicateSnapshot: createDuplicateSnapshot,
+    DEV_FindRigheDuplicate: DEV_FindRigheDuplicate
   };
 })();
 

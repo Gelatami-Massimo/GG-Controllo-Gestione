@@ -180,7 +180,9 @@ const IMPORT_ROWS = (function () {
           // Processa la fattura; la funzione restituisce:
           //  - statusSrc: 'imported','total_mismatch','xml_error','processing_error','no_rows'
           //  - hasImportedRows: TRUE solo se sono state scritte righe in 'Righe'
-          const { statusSrc, hasImportedRows } = _processInvoice(
+          //  - importedRowsCount: numero righe scritte
+          //  - sommaRigheNetto: somma PrezzoTotale righe
+          const { statusSrc, hasImportedRows, importedRowsCount, sommaRigheNetto } = _processInvoice(
             invData,
             invRowNum,
             idxF,
@@ -192,7 +194,9 @@ const IMPORT_ROWS = (function () {
 
           _addFlagUpdate(flagUpdates, invRowNum, idxF, {
             RigheImportate: !!hasImportedRows,
-            ImportaRigheSrc: statusSrc
+            ImportaRigheSrc: statusSrc,
+            RigheImportateNum: importedRowsCount || 0,
+            TotRigheNetto: sommaRigheNetto || 0
           });
 
           processedInvoices++;
@@ -239,6 +243,8 @@ const IMPORT_ROWS = (function () {
    * Ritorna:
    *  - statusSrc: stato finale (imported, total_mismatch, xml_error, processing_error, no_rows)
    *  - hasImportedRows: TRUE se sono state scritte righe nel foglio Righe
+   *  - importedRowsCount: numero di righe scritte nel buffer per quella fattura
+   *  - sommaRigheNetto: somma PrezzoTotale delle righe importate
    */
   function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsSet) {
     const fileId = invData[idxF.FileID];
@@ -367,7 +373,7 @@ const IMPORT_ROWS = (function () {
     }
 
     const hasImportedRows = importedRowsCount > 0;
-    return { statusSrc, hasImportedRows };
+    return { statusSrc, hasImportedRows, importedRowsCount, sommaRigheNetto };
   }
 
   // Scrive buffer righe + aggiorna flag + flush prodotti
