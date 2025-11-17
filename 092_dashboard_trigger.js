@@ -5,7 +5,7 @@
 // DESCRIZIONE: Dashboard real-time per monitoraggio trigger e metriche esecuzioni
 // =============================================================
 
-var DASHBOARD = (function() {
+var TRIGGER_DASHBOARD = (function() {
   'use strict';
 
   // Configurazione
@@ -584,12 +584,12 @@ var DASHBOARD = (function() {
   
 })();
 
-// Registra DASHBOARD nel ModuleRegistry
+// Registra TRIGGER_DASHBOARD nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('DASHBOARD', ['SHEETS', 'LOG', 'STATE']);
+  ModuleRegistry.register('TRIGGER_DASHBOARD', ['SHEETS', 'LOG', 'STATE']);
 }
 
-// Registra DASHBOARD nel namespace GG
+// Registra TRIGGER_DASHBOARD nel namespace GG
 if (typeof GG !== 'undefined') {
-  GG.register('DASHBOARD', DASHBOARD);
+  GG.register('TRIGGER_DASHBOARD', TRIGGER_DASHBOARD);
 }

@@ -63,9 +63,9 @@ const SETUP = (function () {
     SHEETS.applyFormats();
     
     // 6.1) Inizializza Dashboard Trigger
-    if (typeof DASHBOARD !== 'undefined' && DASHBOARD.initSheet) {
+    if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.initSheet) {
       UTIL.showToast('Inizializzazione Dashboard Trigger...', 'Setup');
-      DASHBOARD.initSheet();
+      TRIGGER_DASHBOARD.initSheet();
     }
 
     // 7) Scrittura configurazione
@@ -157,7 +157,7 @@ const SETUP = (function () {
 
 // Registra SETUP nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('SETUP', ['SHEETS', 'UTIL', 'CONFIG', 'LOG', 'DEBUG', 'DASHBOARD']);
+  ModuleRegistry.register('SETUP', ['SHEETS', 'UTIL', 'CONFIG', 'LOG', 'DEBUG', 'TRIGGER_DASHBOARD']);
 }
 
 // Registra SETUP nel namespace GG

@@ -252,8 +252,8 @@ function runAutomatedImport() {
     });
     
     // Registra esecuzione in dashboard
-    if (typeof DASHBOARD !== 'undefined' && DASHBOARD.recordExecution) {
-      DASHBOARD.recordExecution(executionLog);
+    if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.recordExecution) {
+      TRIGGER_DASHBOARD.recordExecution(executionLog);
     }
   } catch (e) {
     hadError = true;
@@ -272,8 +272,8 @@ function runAutomatedImport() {
     );
     
     // Registra esecuzione fallita in dashboard
-    if (typeof DASHBOARD !== 'undefined' && DASHBOARD.recordExecution) {
-      DASHBOARD.recordExecution(executionLog);
+    if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.recordExecution) {
+      TRIGGER_DASHBOARD.recordExecution(executionLog);
     }
     
     // Notifica admin dell'errore critico
@@ -404,8 +404,8 @@ function _disableAutoTriggerSilently() {
     );
     
     // Aggiorna dashboard: trigger inattivo
-    if (typeof DASHBOARD !== 'undefined' && DASHBOARD.updateTriggerStatus) {
-      DASHBOARD.updateTriggerStatus(false);
+    if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
+      TRIGGER_DASHBOARD.updateTriggerStatus(false);
     }
     
     // Notifica admin che il trigger è stato disattivato (import completata)
@@ -495,8 +495,8 @@ function createTimeBasedTrigger() {
     ScriptApp.newTrigger(handler).timeBased().everyMinutes(everyMin).create();
 
     // Aggiorna dashboard: trigger attivo
-    if (typeof DASHBOARD !== 'undefined' && DASHBOARD.updateTriggerStatus) {
-      DASHBOARD.updateTriggerStatus(true);
+    if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
+      TRIGGER_DASHBOARD.updateTriggerStatus(true);
     }
 
     ui.alert(
@@ -573,8 +573,8 @@ function deleteTriggers() {
   });
 
   // Aggiorna dashboard: trigger inattivo
-  if (typeof DASHBOARD !== 'undefined' && DASHBOARD.updateTriggerStatus) {
-    DASHBOARD.updateTriggerStatus(false);
+  if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
+    TRIGGER_DASHBOARD.updateTriggerStatus(false);
   }
 
   ui.alert(
