@@ -222,6 +222,22 @@ function runForceTextFormatOnCodes() { _runSafely(() => DEBUG.forceTextFormatOnC
 function runSyncSuppliers() { _runSafely(() => DEBUG.syncSuppliersFromInvoices(), 'Debug', 'Sincronizzazione fornitori (nuovi)...', 'Anagrafica fornitori sincronizzata!'); }
 function runSyncCategoriesRetroactive() { _runSafely(() => DEBUG.syncCategoriesRetroactive(), 'Debug', 'Riallineamento categorie storiche...', 'Categorie storiche riallineate!'); }
 function runConfigDialog() { _runSafely(() => CONFIG_UI.openDialog(), 'Config', 'Apertura dialog configurazione...', 'Dialog chiuso.'); }
+function openTriggerStatusSheet() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Trigger Status');
+    if (sheet) {
+      sheet.activate();
+      LOG?.info('UI', 'Foglio Trigger Status aperto dalla sidebar.');
+    } else {
+      SpreadsheetApp.getUi().alert('Foglio "Trigger Status" non trovato. Esegui prima il Setup.');
+      LOG?.warn('UI', 'Foglio Trigger Status non trovato.');
+    }
+  } catch (e) {
+    LOG?.error('UI', 'Errore apertura Trigger Status', { error: e.message });
+    throw e;
+  }
+}
 
 // =============================================================
 // FUNZIONI DEFINITE IN ALTRI FILE (NON INCLUDERE QUI)

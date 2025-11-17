@@ -109,6 +109,8 @@
     <div class="block">
       <h5>Sistema</h5>
       <button onclick="runServerFunction('<?!= App.ui.fn.runInitialSetup ?>')">⚙️ Esegui Setup Guidato</button>
+      <button onclick="openConfigDialog()" style="background-color: #1a73e8; color: white;">⚙️ Configurazione Sistema</button>
+      <button onclick="openTriggerDashboard()" style="background-color: #34a853; color: white;">📊 Dashboard Trigger</button>
       <div class="row">
         <button onclick="runServerFunction('<?!= App.ui.fn.runSheetCheckAndSetup ?>')">🔍 Verifica Fogli</button>
         <button onclick="runServerFunction('<?!= App.ui.fn.runSanityCheck ?>')">⚠️ Controllo Integrità</button>
@@ -256,6 +258,34 @@
             setTimeout(() => updateStaticStatus(), 500); // Aggiorna stato statico anche dopo errore
           })
           [fnName](); // Esegue la funzione backend dinamicamente
+      }
+
+      // Funzioni per aprire dialogs e fogli
+      function openConfigDialog() {
+        setStatus('busy', 'Apertura configurazione...');
+        google.script.run
+          .withSuccessHandler(() => {
+            setStatus('ok', 'Dialog aperto');
+            setTimeout(() => setStatus('', 'Pronto'), 2000);
+          })
+          .withFailureHandler(err => {
+            setStatus('err', 'Errore: ' + (err.message || 'Impossibile aprire dialog'));
+          })
+          .runConfigDialog();
+      }
+
+      function openTriggerDashboard() {
+        setStatus('busy', 'Apertura dashboard trigger...');
+        // Apri direttamente il foglio "Trigger Status"
+        google.script.run
+          .withSuccessHandler(() => {
+            setStatus('ok', 'Dashboard aperta');
+            setTimeout(() => setStatus('', 'Pronto'), 2000);
+          })
+          .withFailureHandler(err => {
+            setStatus('err', 'Errore: ' + (err.message || 'Foglio non trovato'));
+          })
+          .openTriggerStatusSheet();
       }
     </script>
   </body>
