@@ -9,9 +9,71 @@
 
 const IMPORT_ROWS = (function () {
 
+  // Cache per righe esistenti (prevenzione duplicati)
+  let existingRowsCache = null;
+
   function run(isSilent = false) {
     if (!isSilent) STATE.clear(App.config.keys.progress);
+    
+    // Reset cache ad ogni import completo
+    existingRowsCache = null;
+    
     _mainLoop(isSilent);
+  }
+
+  /**
+   * Carica tutte le chiavi FileID|NumeroLinea esistenti nel foglio Righe.
+   * Usato per prevenire duplicati durante l'import.
+   * @returns {Set<string>} Set di chiavi "FileID|NumeroLinea"
+   */
+  function _loadExistingRowsCache() {
+    if (existingRowsCache !== null) {
+      return existingRowsCache; // Cache già caricata
+    }
+
+    existingRowsCache = new Set();
+    const shR = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
+    
+    if (!shR) {
+      LOG.warn('ROWS_DUP_CHECK', 'Foglio Righe non trovato. Cache duplicati vuota.');
+      return existingRowsCache;
+    }
+
+    const lastRow = shR.getLastRow();
+    const headerRow = SHEETS._findHeaderRow(shR, SHEETS.SHEET_NAMES.Righe);
+    
+    if (lastRow <= headerRow) {
+      LOG.info('ROWS_DUP_CHECK', 'Foglio Righe vuoto. Cache duplicati vuota.');
+      return existingRowsCache;
+    }
+
+    try {
+      const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
+      
+      if (idx.FileID === undefined || idx.NumeroLinea === undefined) {
+        LOG.warn('ROWS_DUP_CHECK', 'Colonne FileID/NumeroLinea non trovate. Prevenzione duplicati disattivata.');
+        return existingRowsCache;
+      }
+
+      const maxCol = Math.max(idx.FileID, idx.NumeroLinea) + 1;
+      const data = shR.getRange(headerRow + 1, 1, lastRow - headerRow, maxCol).getValues();
+      
+      data.forEach(row => {
+        const fileId = String(row[idx.FileID] || '').trim();
+        const numeroLinea = String(row[idx.NumeroLinea] || '').trim();
+        
+        if (fileId && numeroLinea) {
+          const key = `${fileId}|${numeroLinea}`;
+          existingRowsCache.add(key);
+        }
+      });
+
+      LOG.info('ROWS_DUP_CHECK', `Cache duplicati caricata: ${existingRowsCache.size} righe esistenti.`);
+    } catch (e) {
+      LOG.error('ROWS_DUP_CHECK', 'Errore caricamento cache duplicati.', { error: e.message });
+    }
+
+    return existingRowsCache;
   }
 
   /**
@@ -95,6 +157,10 @@ const IMPORT_ROWS = (function () {
 
     // Carica filtro dinamico
     const junkKeywordsSet = _getJunkKeywords();
+
+    // Carica cache righe esistenti (prevenzione duplicati)
+    const existingRows = _loadExistingRowsCache();
+    LOG?.info('ROWS_SETUP', `Prevenzione duplicati attiva. Righe esistenti in cache: ${existingRows.size}`);
 
     // Fornitori abilitati
     const suppliersData = _getSuppliersData();
@@ -196,7 +262,8 @@ const IMPORT_ROWS = (function () {
             productCache,
             rowsBuffer,
             righeHeaders,
-            junkKeywordsSet
+            junkKeywordsSet,
+            existingRows  // ✅ Aggiungo cache duplicati
           );
 
           _addFlagUpdate(flagUpdates, invRowNum, idxF, {
@@ -248,12 +315,12 @@ const IMPORT_ROWS = (function () {
   /**
    * Processa le righe di una singola fattura.
    * Ritorna:
-   *  - statusSrc: stato finale (imported, total_mismatch, xml_error, processing_error, no_rows)
-   *  - hasImportedRows: TRUE se sono state scritte righe nel foglio Righe
+   *  - statusSrc: 'imported','total_mismatch','xml_error','processing_error','no_rows'
+   *  - hasImportedRows: TRUE solo se sono state scritte righe in rowsBuffer
    *  - importedRowsCount: numero di righe scritte nel buffer per quella fattura
    *  - sommaRigheNetto: somma PrezzoTotale delle righe importate
    */
-  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsSet) {
+  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsSet, existingRows) {
     const fileId = invData[idxF.FileID];
     let statusSrc = 'imported'; // Default a successo
 
@@ -262,6 +329,7 @@ const IMPORT_ROWS = (function () {
 
     let sommaRigheNetto = 0;
     let importedRowsCount = 0;
+    let skippedDuplicates = 0;  // ✅ Conta duplicati skippati
     const imponibileFattura = UTIL.parseNumSmart(invData[idxF.TotImponibile]);
     const TOLLERANZA_EURO = Number(CONFIG.get('ROWS_TOLLERANZA_EURO', 1.00)) || 1.00;
 
@@ -314,6 +382,15 @@ const IMPORT_ROWS = (function () {
 
           sommaRigheNetto += prezzoTotaleRiga;
 
+          // ✅ CONTROLLO DUPLICATI: Skip se riga già esiste
+          const numeroLinea = UTIL.firstText(linea, 'NumeroLinea');
+          const duplicateKey = `${fileId}|${numeroLinea}`;
+          
+          if (existingRows && existingRows.has(duplicateKey)) {
+            skippedDuplicates++;
+            continue; // ✅ Salta questa riga (già importata in precedenza)
+          }
+
           // Gestione Prodotti (SOLO se non è spazzatura)
           if (!isJunk) {
             PRODUCTS.ensureProduct(
@@ -334,7 +411,7 @@ const IMPORT_ROWS = (function () {
             'DenominazioneFornitore': invData[idxF.DenominazioneFornitore],
             'Famiglia': famigliaFornitore,
             'Categoria': categoriaFornitore,
-            'NumeroLinea': UTIL.firstText(linea, 'NumeroLinea'),
+            'NumeroLinea': numeroLinea,  // ✅ Usa la variabile già dichiarata
             'Codice Articolo Fornitore': codiceValoreForzato,
             'CodiceTipo': codiceTipo,
             'CodiceValore': codiceValoreForzato,
@@ -353,6 +430,11 @@ const IMPORT_ROWS = (function () {
           });
           rowsBuffer.push(row);
           importedRowsCount++;
+          
+          // ✅ Aggiungi riga alla cache (prevenzione duplicati futuri nello stesso import)
+          if (existingRows) {
+            existingRows.add(duplicateKey);
+          }
         } // fine loop for
 
         // Controllo totali
@@ -377,6 +459,11 @@ const IMPORT_ROWS = (function () {
           LOG?.info('ROWS_TOTAL_CHECK_IGNORE', `Discrepanza totali ignorata per ${docType}.`, { fileId });
         }
       }
+    }
+
+    // ✅ Log duplicati skippati
+    if (skippedDuplicates > 0) {
+      LOG?.info('ROWS_DUP_SKIP', `Skippate ${skippedDuplicates} righe duplicate per fattura ${fileId}`);
     }
 
     const hasImportedRows = importedRowsCount > 0;

@@ -1039,6 +1039,188 @@ const DEBUG = (function () {
     }
   }
 
+  /**
+   * DEV_CountDuplicates()
+   * Conta quante righe duplicate esistono nel foglio "Righe" senza creare output.
+   * Mostra statistiche in un alert dialog.
+   */
+  function DEV_CountDuplicates() {
+    LOG.info('DEV_COUNT_DUP', 'Avvio conteggio righe duplicate...');
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const shR = ss.getSheetByName('Righe');
+    
+    if (!shR) {
+      UTIL.showToast('Foglio "Righe" non trovato!', 'Errore');
+      LOG.error('DEV_COUNT_DUP', 'Foglio "Righe" non esistente.');
+      return;
+    }
+
+    const lastRow = shR.getLastRow();
+    if (lastRow < 2) {
+      UTIL.showToast('Foglio "Righe" vuoto.', 'Info', 5);
+      LOG.info('DEV_COUNT_DUP', 'Foglio "Righe" vuoto, nessuna riga da analizzare.');
+      return;
+    }
+
+    // Trova header e indici
+    const headerRow = SHEETS._findHeaderRow(shR, SHEETS.SHEET_NAMES.Righe);
+    const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
+
+    if (idx.FileID === undefined || idx.NumeroLinea === undefined) {
+      UTIL.showToast('Colonne FileID o NumeroLinea mancanti.', 'Errore');
+      LOG.error('DEV_COUNT_DUP', 'Colonne FileID o NumeroLinea non trovate.');
+      return;
+    }
+
+    const maxCol = Math.max(idx.FileID, idx.NumeroLinea) + 1;
+
+    try {
+      UTIL.showToast('Lettura dati in corso...', 'Analisi', -1);
+      const data = shR.getRange(headerRow + 1, 1, lastRow - headerRow, maxCol).getValues();
+      
+      const seen = new Map();
+      let duplicateCount = 0;
+      let totalRows = 0;
+
+      data.forEach((row, i) => {
+        const fileId = String(row[idx.FileID] || '').trim();
+        const numeroLinea = String(row[idx.NumeroLinea] || '').trim();
+        
+        if (!fileId || !numeroLinea) return; // Salta righe incomplete
+        
+        totalRows++;
+        const key = `${fileId}|${numeroLinea}`;
+        
+        if (seen.has(key)) {
+          duplicateCount++;
+        } else {
+          seen.set(key, true);
+        }
+      });
+
+      const uniqueRows = seen.size;
+      const dupPercent = totalRows > 0 ? ((duplicateCount / totalRows) * 100).toFixed(1) : 0;
+      
+      LOG.info('DEV_COUNT_DUP', `Analisi completata. Righe totali: ${totalRows}, Uniche: ${uniqueRows}, Duplicate: ${duplicateCount}`);
+
+      const ui = SpreadsheetApp.getUi();
+      const recommendation = duplicateCount > 500 
+        ? '⚠️ CONSIGLIATO: Reimport totale (troppe duplicazioni)'
+        : duplicateCount > 0 
+        ? '✅ OK: Usa "Elimina Righe Duplicate" dal menu'
+        : '✅ Nessun duplicato trovato!';
+
+      ui.alert(
+        '📊 Statistiche Righe Duplicate',
+        `Righe totali analizzate: ${totalRows}\n` +
+        `Righe uniche: ${uniqueRows}\n` +
+        `Righe duplicate: ${duplicateCount} (${dupPercent}%)\n\n` +
+        recommendation,
+        ui.ButtonSet.OK
+      );
+
+    } catch (e) {
+      LOG.error('DEV_COUNT_DUP', 'Errore durante il conteggio duplicati', { error: e.message });
+      UTIL.showToast('Errore durante l\'analisi. Vedi Log.', 'Errore');
+    }
+  }
+
+  /**
+   * DEV_ResetAllImportFlags()
+   * Resetta i flag di import righe su TUTTE le fatture.
+   * ATTENZIONE: Usa solo DOPO aver eliminato tutte le righe dal foglio "Righe".
+   */
+  function DEV_ResetAllImportFlags() {
+    LOG.info('DEV_RESET_FLAGS', 'Richiesta reset flag import...');
+
+    const ui = SpreadsheetApp.getUi();
+    const response = ui.alert(
+      '⚠️ ATTENZIONE: Reset Flag Import',
+      'Questa operazione resetterà i flag di import su TUTTE le fatture:\n\n' +
+      '• RigheImportate → FALSE\n' +
+      '• ImportaRigheSrc → (vuoto)\n' +
+      '• RigheImportateNum → 0\n' +
+      '• TotRigheNetto → 0\n\n' +
+      'IMPORTANTE:\n' +
+      '1. Assicurati di aver eliminato TUTTE le righe dal foglio "Righe"\n' +
+      '2. Questa operazione serve per preparare un reimport completo\n' +
+      '3. Dopo il reset, dovrai eseguire "Importa Righe Prodotti"\n\n' +
+      'Vuoi procedere?',
+      ui.ButtonSet.YES_NO
+    );
+
+    if (response !== ui.Button.YES) {
+      UTIL.showToast('Operazione annullata.', 'Annullato', 5);
+      LOG.info('DEV_RESET_FLAGS', 'Reset flag annullato dall\'utente.');
+      return;
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const shF = ss.getSheetByName('Fatture');
+    
+    if (!shF) {
+      UTIL.showToast('Foglio "Fatture" non trovato!', 'Errore');
+      LOG.error('DEV_RESET_FLAGS', 'Foglio "Fatture" non esistente.');
+      return;
+    }
+
+    const lastRow = shF.getLastRow();
+    if (lastRow < 2) {
+      UTIL.showToast('Foglio "Fatture" vuoto.', 'Info', 5);
+      LOG.info('DEV_RESET_FLAGS', 'Foglio "Fatture" vuoto.');
+      return;
+    }
+
+    try {
+      // Trova indici colonne
+      const headers = shF.getRange(1, 1, 1, shF.getLastColumn()).getValues()[0];
+      const idxRigheImportate = headers.indexOf('RigheImportate');
+      const idxImportaRigheSrc = headers.indexOf('ImportaRigheSrc');
+      const idxRigheImportateNum = headers.indexOf('RigheImportateNum');
+      const idxTotRigheNetto = headers.indexOf('TotRigheNetto');
+      
+      if (idxRigheImportate === -1 || idxImportaRigheSrc === -1) {
+        UTIL.showToast('Colonne RigheImportate/ImportaRigheSrc non trovate!', 'Errore');
+        LOG.error('DEV_RESET_FLAGS', 'Colonne necessarie non trovate nel foglio Fatture.');
+        return;
+      }
+      
+      UTIL.showToast('Reset flag in corso...', 'Attendere', -1);
+      
+      const rowCount = lastRow - 1;
+      
+      // Reset RigheImportate e ImportaRigheSrc (obbligatori)
+      shF.getRange(2, idxRigheImportate + 1, rowCount, 1).setValue(false);
+      shF.getRange(2, idxImportaRigheSrc + 1, rowCount, 1).setValue('');
+      
+      // Reset RigheImportateNum e TotRigheNetto (opzionali)
+      if (idxRigheImportateNum !== -1) {
+        shF.getRange(2, idxRigheImportateNum + 1, rowCount, 1).setValue(0);
+      }
+      
+      if (idxTotRigheNetto !== -1) {
+        shF.getRange(2, idxTotRigheNetto + 1, rowCount, 1).setValue(0);
+      }
+      
+      UTIL.showToast(`✅ Reset completato su ${rowCount} fatture!`, 'Completato', 8);
+      LOG.info('DEV_RESET_FLAGS', `Reset flag completato su ${rowCount} fatture.`);
+      
+      ui.alert(
+        '✅ Reset Completato',
+        `Flag resettati su ${rowCount} fatture.\n\n` +
+        'PROSSIMO STEP:\n' +
+        'Menu > Importazione Dati > 2. Importa Righe Prodotti\n\n' +
+        'L\'import partirà da zero e creerà un dataset pulito senza duplicati.',
+        ui.ButtonSet.OK
+      );
+
+    } catch (e) {
+      LOG.error('DEV_RESET_FLAGS', 'Errore durante il reset flag', { error: e.message });
+      UTIL.showToast('Errore durante il reset. Vedi Log.', 'Errore');
+    }
+  }
+
   // --- Utility Interne ---
 
   /**
@@ -1066,7 +1248,9 @@ const DEBUG = (function () {
     syncCategoriesRetroactive: syncCategoriesRetroactive,
     createDuplicateSnapshot: createDuplicateSnapshot,
     DEV_FindRigheDuplicate: DEV_FindRigheDuplicate,
-    DEV_DeleteRigheDuplicate: DEV_DeleteRigheDuplicate
+    DEV_DeleteRigheDuplicate: DEV_DeleteRigheDuplicate,
+    DEV_CountDuplicates: DEV_CountDuplicates,
+    DEV_ResetAllImportFlags: DEV_ResetAllImportFlags
   };
 })();
 

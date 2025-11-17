@@ -81,6 +81,8 @@ const App = {
       runClearDuplicateMarkings: 'runClearDuplicateMarkings',
       runFindRigheDuplicate: 'runFindRigheDuplicate',
       runDeleteRigheDuplicate: 'runDeleteRigheDuplicate',
+      runCountDuplicates: 'runCountDuplicates',
+      runResetAllImportFlags: 'runResetAllImportFlags',
       // Le funzioni runCountFiles... sono state rimosse perché ora integrate in "Importa Intestazioni"
       runForceTextFormatOnCodes: 'runForceTextFormatOnCodes',
       runSyncSuppliers: 'runSyncSuppliers',

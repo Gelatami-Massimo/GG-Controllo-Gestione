@@ -59,8 +59,10 @@ function onOpen() {
     .addItem('📸 Crea Snapshot Duplicati', App.ui.fn.createDuplicateSnapshot)
     .addItem('⚪ Pulisci Marcatura Duplicati', App.ui.fn.runClearDuplicateMarkings)
     .addSeparator()
-    .addItem('🔍 Trova Righe Duplicate', App.ui.fn.runFindRigheDuplicate)
+    .addItem('� Conta Righe Duplicate', App.ui.fn.runCountDuplicates)
+    .addItem('�🔍 Trova Righe Duplicate', App.ui.fn.runFindRigheDuplicate)
     .addItem('🗑️ Elimina Righe Duplicate', App.ui.fn.runDeleteRigheDuplicate)
+    .addItem('🔄 Reset Flag Import (Tutte)', App.ui.fn.runResetAllImportFlags)
     .addSeparator()
     .addItem('🔡 Forza Formato Testo Codici', App.ui.fn.runForceTextFormatOnCodes)
     .addSeparator()
@@ -190,6 +192,8 @@ function runSyncSuppliers() { _runSafely(() => DEBUG.syncSuppliersFromInvoices()
 function runSyncCategoriesRetroactive() { _runSafely(() => DEBUG.syncCategoriesRetroactive(), 'Debug', 'Riallineamento categorie storiche...', 'Categorie storiche riallineate!'); }
 function runFindRigheDuplicate() { _runSafely(() => DEBUG.DEV_FindRigheDuplicate(), 'Debug', 'Ricerca righe duplicate...', 'Ricerca completata!'); }
 function runDeleteRigheDuplicate() { _runSafely(() => DEBUG.DEV_DeleteRigheDuplicate(), 'Debug', 'Eliminazione righe duplicate...', 'Eliminazione completata!'); }
+function runCountDuplicates() { _runSafely(() => DEBUG.DEV_CountDuplicates(), 'Debug', 'Conteggio duplicati...', 'Conteggio completato!'); }
+function runResetAllImportFlags() { _runSafely(() => DEBUG.DEV_ResetAllImportFlags(), 'Debug', 'Reset flag import...', 'Reset completato!'); }
 function runConfigDialog() { _runSafely(() => CONFIG_UI.openDialog(), 'Config', 'Apertura dialog configurazione...', 'Dialog chiuso.'); }
 function openTriggerStatusSheet() {
   try {
