@@ -107,6 +107,22 @@
     </div>
 
     <div class="block">
+      <h5>🔍 Gestione Righe Duplicate</h5>
+      <p class="hint">⚠️ Usa questi strumenti se hai righe duplicate nel foglio "Righe"</p>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runCountDuplicates ?>')" style="background-color: #1a73e8; color: white;">📊 Conta Righe Duplicate</button>
+      <p class="hint" style="margin-top: 4px; margin-bottom: 8px;">↑ Diagnostica veloce: mostra quante righe duplicate hai</p>
+      
+      <div class="row">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runFindRigheDuplicate ?>')">🔍 Trova Duplicati</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runDeleteRigheDuplicate ?>')" style="background-color: #d93025; color: white;">🗑️ Elimina Duplicati</button>
+      </div>
+      <p class="hint" style="margin-top: 4px;">↑ Trova crea lista dettagliata | Elimina rimuove fisicamente</p>
+      
+      <button onclick="runServerFunction('<?!= App.ui.fn.runResetAllImportFlags ?>')" style="background-color: #f9ab00; color: white;">🔄 Reset Flag Import (Tutte)</button>
+      <p class="hint" style="margin-top: 4px;">↑ Prepara reimport completo (dopo aver eliminato righe)</p>
+    </div>
+
+    <div class="block">
       <h5>Sistema</h5>
       <button onclick="runServerFunction('<?!= App.ui.fn.runInitialSetup ?>')">⚙️ Esegui Setup Guidato</button>
       <button onclick="openConfigDialog()" style="background-color: #1a73e8; color: white;">⚙️ Configurazione Sistema</button>
