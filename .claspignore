@@ -1,0 +1,31 @@
+# =============================================================
+# CLASP IGNORE RULES
+# Files/folders to exclude from Google Apps Script deployment
+# =============================================================
+
+# Development tools
+tools/**
+
+# Backup files
+smoke_test_*.js.bak
+**/*.bak
+
+# Documentation (keep in repo, don't deploy)
+**/*.md
+**/*.txt
+
+# Version control
+.git/
+.gitignore
+
+# IDE
+.vscode/
+
+# Node modules (if any)
+node_modules/
+
+# TypeScript sources (deploy only compiled JS)
+**/*.ts
+
+# Test files
+smoke_test_*.js

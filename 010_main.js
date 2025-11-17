@@ -1,58 +1,27 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 10_main.js
-// VERSIONE: 25.0 (Main Menu & Dispatcher)
+// VERSIONE: 25.1 (Main Menu & Dispatcher - Housekeeping)
 // DESCRIZIONE: Gestione dei menu, sidebar, trigger e dispatcher funzioni.
 // =============================================================
-
-// --- AGGIUNTA FLAG DEBUG ---
-/**
- * Flag per debug onOpen.
- * Se true, stampa log dettagliati durante la creazione del menu.
- * DA USARE SOLO SE IL MENU NON SI CARICA CORRETTAMENTE.
- */
-const ON_OPEN_DEBUG = false;
-// --- FINE AGGIUNTA ---
-
 
 /**
  * onOpen()
  * Crea il menu principale "FATTURE XML" nella UI del foglio.
  */
 function onOpen() {
-  // --- LOG DIAGNOSTICO CONDIZIONALE ---
-  if (ON_OPEN_DEBUG) {
-      try {
-        Logger.log(`--- DEBUG onOpen Start ---`);
-        Logger.log(`typeof App = ${typeof App}`);
-        if (typeof App === 'object' && App !== null) {
-            Logger.log(`typeof App.ui = ${typeof App.ui}`);
-            if (typeof App.ui === 'object' && App.ui !== null) {
-                Logger.log(`typeof App.ui.fn = ${typeof App.ui.fn}`);
-                if (typeof App.ui.fn === 'object' && App.ui.fn !== null) {
-                    Logger.log(`Contenuto App.ui.fn = ${JSON.stringify(App.ui.fn)}`);
-                } else { Logger.log(`App.ui.fn NON è un oggetto o è null.`); }
-            } else { Logger.log(`App.ui NON è un oggetto o è null.`); }
-        } else { Logger.log(`App NON è un oggetto o è null.`); }
-         Logger.log(`--- DEBUG onOpen End ---`);
-      } catch (e) {
-        Logger.log(`DEBUG onOpen: Errore durante il logging di App.ui.fn: ${e.message}`);
-      }
-  }
-  // --- FINE LOG ---
-
   // --- VALIDAZIONE DIPENDENZE MODULI ---
   if (typeof ModuleRegistry !== 'undefined') {
     const allDepsOk = ModuleRegistry.validateAll();
     if (!allDepsOk) {
-      Logger.log('[onOpen] ⚠️ ATTENZIONE: Alcuni moduli hanno dipendenze non soddisfatte!');
+      LOG?.warn('MAIN', 'Alcuni moduli hanno dipendenze non soddisfatte');
     }
   }
   // --- FINE VALIDAZIONE ---
 
   // --- DIAGNOSTICA NAMESPACE GG ---
   if (typeof GG !== 'undefined') {
-    Logger.log('[onOpen] 📦 Namespace GG disponibile con ' + GG.count() + ' moduli registrati');
+    LOG?.info('MAIN', `Namespace GG disponibile con ${GG.count()} moduli registrati`);
   }
   // --- FINE DIAGNOSTICA ---
 
@@ -204,18 +173,12 @@ function runCreateTrigger() { _runSafely(() => createTimeBasedTrigger(), 'Trigge
 function runDeleteTriggers() { _runSafely(() => deleteTriggers(), 'Trigger', 'Rimozione import automatico...', 'Operazione trigger completata.'); }
 function runCreatePnlSheet() { _runSafely(() => createPnlSheet(), 'PNL', 'Creazione/Aggiornamento P&L...', 'P&L aggiornato.'); }
 
-// --- CORREZIONE BUG ---
-// La funzione wrapper deve corrispondere alla chiave in App.ui.fn
+// --- WRAPPER FUNCTIONS FOR DEBUG MODULE ---
 function createDuplicateSnapshot() {
-    Logger.log('createDuplicateSnapshot: Avvio DEBUG.createDuplicateSnapshot...');
-    console.log('createDuplicateSnapshot: Avvio DEBUG.createDuplicateSnapshot...');
    _runSafely(() => DEBUG.createDuplicateSnapshot(), 'Debug', 'Creazione Snapshot Duplicati...', 'Snapshot creato!');
 }
-// --- FINE CORREZIONE ---
 
 function runMarkDuplicateInvoices() {
-    Logger.log('runMarkDuplicateInvoices: Avvio DEBUG.markDuplicateInvoices...');
-    console.log('runMarkDuplicateInvoices: Avvio DEBUG.markDuplicateInvoices...');
     _runSafely(() => DEBUG.markDuplicateInvoices(), 'Debug', 'Marcatura Duplicati in corso...', 'Marcatura completata!');
 }
 function runClearDuplicateMarkings() { _runSafely(() => DEBUG.clearDuplicateMarkings(), 'Debug', 'Pulizia Marcatura Duplicati...', 'Marcatura rimossa!'); }

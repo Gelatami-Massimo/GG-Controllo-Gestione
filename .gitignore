@@ -3,6 +3,55 @@
 #.clasp.json
 
 # Cartelle di cache e moduli di Node.js (opzionale ma consigliato)
+# =============================================================
+# GIT IGNORE RULES
+# Files to exclude from version control
+# =============================================================
+
+# Node modules
 node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Credentials (CRITICAL - never commit)
+.clasprc.json
+.creds.json
+*.credentials.json
+.env
+
+# OS files
 .DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
+# IDE and editor
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.iml
+
+# Backup files
 *.bak
+*.backup
+*.tmp
+
+# Test output
+coverage/
+.nyc_output/
+test-results/
+
+# Logs
+*.log
+logs/
+
+# Build artifacts (if any)
+dist/
+build/
+*.min.js
+
+# Keep .clasp.json for team collaboration
+# (contains scriptId needed for deployment)
