@@ -123,7 +123,9 @@ const SETUP = (function () {
       ['ROWS_FLUSH_EVERY', 2000, 'Ogni quante righe salvare sul foglio (Import Righe).'],
       ['PDF_CHUNK_SIZE', 80, 'Numero fatture da leggere in blocco (Crea PDF).'],
       ['PDF_FLUSH_EVERY', 200, 'Ogni quanti link PDF aggiornare sul foglio (Crea PDF).'],
-      ['ROWS_TOLLERANZA_EURO', 1.00, 'Tolleranza (in €) per mismatch Totale Fattura vs Somma Righe (Import Righe).']
+      ['ROWS_TOLLERANZA_EURO', 1.00, 'Tolleranza (in €) per mismatch Totale Fattura vs Somma Righe (Import Righe).'],
+      ['ADMIN_EMAIL', Session.getActiveUser().getEmail(), 'Email destinatario notifiche trigger (errori, import completata).'],
+      ['TRIGGER_NOTIFY_ON_ACTIVE', 'FALSE', 'Inviare email anche quando trigger rimane attivo? (true/false). Default: FALSE.']
     ];
 
     cfgSheet.getRange(headerRow + 1, 1, configData.length, 3).setValues(configData);
