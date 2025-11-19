@@ -360,6 +360,9 @@ const IMPORT_HEADERS = (function () {
             clienteInfo = _extractClienteInfo(rootElement);
             const clienteIdNorm = UTIL.normalizeSupplierId(clienteInfo.pIva);
             sede = companyMap.get(clienteIdNorm) || 'Non Assegnata';
+            
+            // Salva indirizzo per logica reparto
+            clienteInfo.indirizzoCliente = clienteInfo.indirizzo;
           }
         }
       } catch (e) {
@@ -404,7 +407,8 @@ const IMPORT_HEADERS = (function () {
           fornitore: fornitoreInfo,
           cliente: clienteInfo,
           doc: docInfo,
-          sede: sede
+          sede: sede,
+          indirizzoCliente: clienteInfo.indirizzoCliente || ''
         });
 
         // Flush batch se raggiunge MAX_BATCH_SIZE per prevenire memory leak
@@ -482,10 +486,19 @@ const IMPORT_HEADERS = (function () {
   // ============================================================
   // Reparto di default per le fatture
   // ============================================================
-  function _resolveRepartoForFattura(sede) {
-    // Per ora sempre "Gelateria".
-    // In futuro: logica in base a sede (es. "Hotel", "Zaffiro", ecc.)
-    void sede;
+  function _resolveRepartoForFattura(sede, indirizzo = '') {
+    // Normalizza l'indirizzo per confronto case-insensitive
+    const indirizzoNorm = String(indirizzo || '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Logica specifica: se indirizzo contiene 'via nazionale 202', reparto = Hotel
+    if (indirizzoNorm.includes('via nazionale 202')) {
+      return 'Hotel';
+    }
+    
+    // Default per tutti gli altri casi
     return 'Gelateria';
   }
 
@@ -582,7 +595,8 @@ const IMPORT_HEADERS = (function () {
 
         const isCreditNote = (data.doc.tipo || '').toLowerCase().includes('nota di credito');
         const sede = data.sede || 'Non Assegnata';
-        const reparto = _resolveRepartoForFattura(sede);
+        const indirizzoCliente = data.indirizzoCliente || '';
+        const reparto = _resolveRepartoForFattura(sede, indirizzoCliente);
         const numeroDocFormatted = UTIL.forceText(data.doc.numero);
 
         const finalImponibile = isCreditNote
@@ -849,7 +863,12 @@ const IMPORT_HEADERS = (function () {
           .filter(Boolean)
           .join(' ')
       : '';
-    return { pIva, denom };
+    
+    // Estrai indirizzo della sede per logica reparto
+    const sedeNode = UTIL.firstChild(cessionario, 'Sede');
+    const indirizzo = sedeNode ? UTIL.firstText(sedeNode, 'Indirizzo') || '' : '';
+    
+    return { pIva, denom, indirizzo };
   }
 
   function _extractInvoiceDate(doc) {
