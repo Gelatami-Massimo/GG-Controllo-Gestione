@@ -1,13 +1,14 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 60_import_headers.js
-// VERSIONE: 25.1 (Header Import + Reparto)
+// VERSIONE: 25.3 (Header Import + Reparto + Mese Format)
 // DESCRIZIONE: Motore di importazione testate OTTIMIZZATO (CacheService)
 //               • GoldenTotal calcolato SEMPRE (anche su file già importati)
 //               • Salvataggio/ripresa GoldenTotal durante SCAN_EXTRACT
 //               • Logica Percorso Cartella con rootFolderId e fallback sicuri
 //               • Aggiornamento barra di avanzamento (STATE.progress)
-//               • Aggiunta colonna Reparto (default: "Gelateria")
+//               • Aggiunta colonna Reparto (logica condizionale per indirizzo)
+//               • Formattazione automatica colonna Mese come 'MMMM' (nome mese)
 // =============================================================
 
 const IMPORT_HEADERS = (function () {
@@ -643,6 +644,28 @@ const IMPORT_HEADERS = (function () {
 
       _flushBatch(shFornitori, fornitoriBatch, 'Fornitori', headerRowFor);
       _flushBatch(shFatture, fattureBatch, 'Fatture', headerRowFat);
+
+      // ✅ Applica formattazione 'MMMM' alla colonna Mese per visualizzare nome mese
+      if (fattureBatch.length > 0) {
+        try {
+          const idxFatture = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
+          if (idxFatture.Mese !== undefined) {
+            const meseCol = idxFatture.Mese + 1; // Converti da 0-based a 1-based
+            const firstDataRow = headerRowFat + 1;
+            const lastDataRow = shFatture.getLastRow();
+            
+            if (lastDataRow >= firstDataRow) {
+              const meseRange = shFatture.getRange(firstDataRow, meseCol, lastDataRow - firstDataRow + 1, 1);
+              meseRange.setNumberFormat('MMMM');
+              LOG?.debug('HEADERS_FORMAT', `Formattazione 'MMMM' applicata alla colonna Mese (${lastDataRow - firstDataRow + 1} celle).`);
+            }
+          }
+        } catch (eFormat) {
+          LOG?.warn('HEADERS_FORMAT', 'Impossibile applicare formattazione MMMM alla colonna Mese.', {
+            error: eFormat.message
+          });
+        }
+      }
 
       try {
         SpreadsheetApp.flush();
