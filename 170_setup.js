@@ -63,7 +63,7 @@ const SETUP = (function () {
     SHEETS.applyFormats();
     
     // 6.1) Inizializza Dashboard Trigger
-    if (typeof DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.initSheet) {
+    if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.initSheet) {
       UTIL.showToast('Inizializzazione Dashboard Trigger...', 'Setup');
       TRIGGER_DASHBOARD.initSheet();
     }
