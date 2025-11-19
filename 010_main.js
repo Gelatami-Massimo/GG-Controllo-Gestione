@@ -168,7 +168,7 @@ function runImportRows() { _runSafely(() => IMPORT_ROWS.run(), 'Import', 'Avvio 
 function runCreatePdfs() { _runSafely(() => PDF.run(), 'PDF', 'Creazione PDF in corso...', 'Creazione PDF completata.'); }
 function runReconciliationReport() { _runSafely(() => REPORTING.run(), 'Reporting', 'Generazione Report di Audit...', 'Report generato.'); }
 
-// ✅ FUNZIONE MASTER: Manutenzione Completa (Filtri + Formati + Integrità)
+// ✅ FUNZIONE MASTER: Manutenzione Completa (Filtri + Formati + Integrità + Duplicati)
 function runCompleteMaintenance() {
   _runSafely(() => {
     // 1. Verifica struttura fogli e applica filtri su TUTTI i fogli
@@ -178,9 +178,13 @@ function runCompleteMaintenance() {
     // 2. Forza formato testo su colonne codici (evita '001' → 1)
     DEBUG.forceTextFormatOnCodes();
     
-    // 3. Controlla integrità dati (sanity check)
+    // 3. Gestione duplicati (silenzioso, solo log) - PROTEZIONE AUTOMATICA
+    DEBUG.manageDuplicateInvoices(); // Marca fatture duplicate (giallo)
+    DEBUG.manageDuplicateRows();     // Marca righe duplicate (rosa)
+    
+    // 4. Controlla integrità dati (sanity check)
     DEBUG.sanityCheck();
-  }, 'Maintenance', 'Manutenzione completa in corso...', 'Manutenzione completata! Fogli verificati, codici formattati, integrità controllata.');
+  }, 'Maintenance', 'Manutenzione completa in corso...', 'Manutenzione completata! Fogli verificati, codici formattati, duplicati marcati, integrità controllata.');
 }
 
 // Funzione legacy mantenuta per compatibilità (ora richiama runCompleteMaintenance)

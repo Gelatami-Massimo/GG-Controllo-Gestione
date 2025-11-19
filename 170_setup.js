@@ -75,10 +75,12 @@ const SETUP = (function () {
     CONFIG.invalidateCache();
     SHEETS.invalidateHeaderIndexCache();
 
-    // ✅ 8) Manutenzione completa finale (filtri, formati codici, integrità)
+    // ✅ 8) Manutenzione completa finale (filtri, formati codici, duplicati, integrità)
     UTIL.showToast('Applicazione formati e verifica integrità...', 'Setup');
-    DEBUG.forceTextFormatOnCodes(); // Forza testo su codici
-    DEBUG.sanityCheck();            // Verifica integrità dati
+    DEBUG.forceTextFormatOnCodes();   // Forza testo su codici
+    DEBUG.manageDuplicateInvoices();  // Marca duplicati fatture (silenzioso)
+    DEBUG.manageDuplicateRows();      // Marca duplicati righe (silenzioso)
+    DEBUG.sanityCheck();              // Verifica integrità dati
 
     // 9) Messaggio di successo
     const successMessage =
@@ -89,6 +91,7 @@ const SETUP = (function () {
       `✅ Trigger: ogni ~${triggerEveryMin} minuti\n` +
       `✅ Filtri applicati su tutti i fogli\n` +
       `✅ Formati codici verificati\n` +
+      `✅ Duplicati verificati e marcati\n` +
       `✅ Integrità dati controllata\n\n` +
       `NOTA: Se necessario, usa "Pulisci Cache" dal menu prima della prima importazione.`;
     ui.alert('🎉 Setup Completato!', successMessage, ui.ButtonSet.OK);

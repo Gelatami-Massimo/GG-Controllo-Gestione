@@ -443,6 +443,198 @@ const DEBUG = (function () {
   /**
    * Identifica righe duplicate e le marca. Resumibile. Salva conteggio in STATE.
    */
+  /**
+   * Gestione Duplicati Fatture (silenzioso, per manutenzione automatica).
+   * Marca le fatture duplicate senza popup, solo log.
+   * Chiave univoca: FornitoreID + NumeroDoc + Data
+   */
+  function manageDuplicateInvoices() {
+    try {
+      LOG?.info('DUPLICATE_MGMT', 'Avvio gestione duplicati fatture (silenzioso)...');
+      
+      const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+      if (!shF) {
+        LOG?.warn('DUPLICATE_MGMT', 'Foglio Fatture non trovato. Skip gestione duplicati.');
+        return;
+      }
+
+      const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
+      const lastRowF = shF.getLastRow();
+      
+      if (lastRowF < headerRowF + 1) {
+        LOG?.info('DUPLICATE_MGMT', 'Foglio Fatture vuoto. Nessun duplicato da verificare.');
+        return;
+      }
+
+      const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
+      const required = ['FornitoreID', 'NumeroDoc', 'Data', 'ImportedAt'];
+      const missing = required.filter(c => idxF[c] === undefined);
+      
+      if (missing.length > 0) {
+        LOG?.warn('DUPLICATE_MGMT', `Colonne mancanti in Fatture: ${missing.join(', ')}. Skip gestione duplicati.`);
+        return;
+      }
+
+      const lastColNeeded = Math.max(...required.map(c => idxF[c])) + 1;
+      const data = shF.getRange(headerRowF + 1, 1, lastRowF - headerRowF, lastColNeeded).getValues();
+
+      const invoiceMap = new Map(); // key → { rowNum, importedAt }
+      const dupSet = new Set();
+
+      data.forEach((row, i) => {
+        const rowNum = headerRowF + 1 + i;
+        const fornId = UTIL.normKey(row[idxF.FornitoreID]).replace(/^0+/, '');
+        const numDoc = UTIL.normKey(row[idxF.NumeroDoc]);
+        let dataDoc = row[idxF.Data];
+        const importedAt = row[idxF.ImportedAt] instanceof Date ? row[idxF.ImportedAt].getTime() : 0;
+
+        if (!fornId || !numDoc) return;
+
+        if (dataDoc instanceof Date && !isNaN(dataDoc.getTime())) {
+          dataDoc = Utilities.formatDate(dataDoc, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        } else {
+          return; // Skip righe con data non valida
+        }
+
+        const key = `${fornId}|${numDoc}|${dataDoc}`;
+
+        if (invoiceMap.has(key)) {
+          const existing = invoiceMap.get(key);
+          // Mantieni la più recente, marca la vecchia
+          if (importedAt > existing.importedAt) {
+            dupSet.add(existing.rowNum);
+            invoiceMap.set(key, { rowNum, importedAt });
+          } else {
+            dupSet.add(rowNum);
+          }
+        } else {
+          invoiceMap.set(key, { rowNum, importedAt });
+        }
+      });
+
+      const duplicateCount = dupSet.size;
+      
+      if (duplicateCount === 0) {
+        LOG?.info('DUPLICATE_MGMT', '✅ Nessuna fattura duplicata trovata.');
+        return;
+      }
+
+      // Marca visivamente i duplicati (silenzioso)
+      const lastCol = shF.getLastColumn();
+      const lastColLetter = UTIL.getColumnLetter(lastCol - 1);
+      const duplicateRows = Array.from(dupSet);
+      
+      const rangesToMark = duplicateRows.map(r => `A${r}:${lastColLetter}${r}`);
+      try {
+        shF.getRangeList(rangesToMark).setBackground('#FFFF00');
+        LOG?.info('DUPLICATE_MGMT', `⚠️ ${duplicateCount} fatture duplicate marcate in giallo.`);
+      } catch (e) {
+        LOG?.warn('DUPLICATE_MGMT', `Errore marcatura batch. Fallback riga-per-riga.`, { error: e.message });
+        duplicateRows.forEach(r => {
+          try {
+            shF.getRange(r, 1, 1, lastCol).setBackground('#FFFF00');
+          } catch (e2) {
+            LOG?.error('DUPLICATE_MGMT', `Errore marcatura riga ${r}`, { error: e2.message });
+          }
+        });
+        LOG?.info('DUPLICATE_MGMT', `⚠️ ${duplicateCount} fatture duplicate marcate (fallback).`);
+      }
+
+    } catch (e) {
+      LOG?.error('DUPLICATE_MGMT', 'Errore gestione duplicati fatture.', { error: e.message, stack: e.stack });
+    }
+  }
+
+  /**
+   * Gestione Duplicati Righe (silenzioso, per manutenzione automatica).
+   * Marca le righe duplicate senza popup, solo log.
+   * Chiave univoca: FileID + NumeroLinea
+   */
+  function manageDuplicateRows() {
+    try {
+      LOG?.info('DUPLICATE_MGMT_ROWS', 'Avvio gestione duplicati righe (silenzioso)...');
+      
+      const shR = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
+      if (!shR) {
+        LOG?.warn('DUPLICATE_MGMT_ROWS', 'Foglio Righe non trovato. Skip gestione duplicati.');
+        return;
+      }
+
+      const headerRowR = SHEETS._findHeaderRow(shR, SHEETS.SHEET_NAMES.Righe);
+      const lastRowR = shR.getLastRow();
+      
+      if (lastRowR < headerRowR + 1) {
+        LOG?.info('DUPLICATE_MGMT_ROWS', 'Foglio Righe vuoto. Nessun duplicato da verificare.');
+        return;
+      }
+
+      const idxR = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
+      const required = ['FileID', 'NumeroLinea'];
+      const missing = required.filter(c => idxR[c] === undefined);
+      
+      if (missing.length > 0) {
+        LOG?.warn('DUPLICATE_MGMT_ROWS', `Colonne mancanti in Righe: ${missing.join(', ')}. Skip gestione duplicati.`);
+        return;
+      }
+
+      const lastColNeeded = Math.max(idxR.FileID, idxR.NumeroLinea) + 1;
+      const data = shR.getRange(headerRowR + 1, 1, lastRowR - headerRowR, lastColNeeded).getValues();
+
+      const rowMap = new Map(); // key → prima occorrenza rowNum
+      const dupRows = [];
+
+      data.forEach((row, i) => {
+        const rowNum = headerRowR + 1 + i;
+        const fileId = String(row[idxR.FileID] || '').trim();
+        const numLinea = String(row[idxR.NumeroLinea] || '').trim();
+
+        if (!fileId || !numLinea) return;
+
+        const key = `${fileId}|${numLinea}`;
+
+        if (rowMap.has(key)) {
+          dupRows.push(rowNum); // Questa è una riga duplicata
+        } else {
+          rowMap.set(key, rowNum); // Prima occorrenza
+        }
+      });
+
+      const duplicateCount = dupRows.length;
+      
+      if (duplicateCount === 0) {
+        LOG?.info('DUPLICATE_MGMT_ROWS', '✅ Nessuna riga duplicata trovata.');
+        return;
+      }
+
+      // Marca visivamente i duplicati (silenzioso)
+      const lastCol = shR.getLastColumn();
+      const lastColLetter = UTIL.getColumnLetter(lastCol - 1);
+      
+      const rangesToMark = dupRows.map(r => `A${r}:${lastColLetter}${r}`);
+      try {
+        shR.getRangeList(rangesToMark).setBackground('#FFE6E6'); // Rosa chiaro per righe
+        LOG?.info('DUPLICATE_MGMT_ROWS', `⚠️ ${duplicateCount} righe duplicate marcate in rosa.`);
+      } catch (e) {
+        LOG?.warn('DUPLICATE_MGMT_ROWS', `Errore marcatura batch. Fallback riga-per-riga.`, { error: e.message });
+        dupRows.forEach(r => {
+          try {
+            shR.getRange(r, 1, 1, lastCol).setBackground('#FFE6E6');
+          } catch (e2) {
+            LOG?.error('DUPLICATE_MGMT_ROWS', `Errore marcatura riga ${r}`, { error: e2.message });
+          }
+        });
+        LOG?.info('DUPLICATE_MGMT_ROWS', `⚠️ ${duplicateCount} righe duplicate marcate (fallback).`);
+      }
+
+    } catch (e) {
+      LOG?.error('DUPLICATE_MGMT_ROWS', 'Errore gestione duplicati righe.', { error: e.message, stack: e.stack });
+    }
+  }
+
+  /**
+   * Marca fatture duplicate (MANUALE - con UI interattiva).
+   * Versione originale mantenuta per uso diretto da menu.
+   */
   function markDuplicateInvoices() {
     Logger.log('DEBUG.markDuplicateInvoices: Funzione avviata.');
     console.log('DEBUG.markDuplicateInvoices: Funzione avviata.');
@@ -1241,6 +1433,8 @@ const DEBUG = (function () {
   return {
     clearCache: clearCache,
     sanityCheck: sanityCheck,
+    manageDuplicateInvoices: manageDuplicateInvoices, // NUOVA: silenziosa per manutenzione
+    manageDuplicateRows: manageDuplicateRows, // NUOVA: silenziosa per manutenzione
     markDuplicateInvoices: markDuplicateInvoices,
     clearDuplicateMarkings: clearDuplicateMarkings,
     forceTextFormatOnCodes: forceTextFormatOnCodes,
