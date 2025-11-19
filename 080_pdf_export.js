@@ -171,6 +171,40 @@ const PDF = (function () {
             _clearObject(linkUpdates); pendingUpdates = 0;
           }
         } catch (e) {
+          // ✅ CIRCUIT BREAKER: Quota giornaliera PDF raggiunta
+          const errorMsg = String(e.message || '').toLowerCase();
+          if (errorMsg.includes('servizio richiamato troppe volte') || 
+              errorMsg.includes('quota') || 
+              errorMsg.includes('conversion')) {
+            
+            // Flush aggiornamenti prima di uscire
+            if (pendingUpdates > 0) {
+              UTIL.updateSheetInPlace(sh, linkUpdates, headerRow);
+              _clearObject(linkUpdates); pendingUpdates = 0;
+            }
+            
+            // Salva stato per ripresa futura
+            STATE.setJSON(CURSOR_KEY, { nextRow: rowNum });
+            
+            LOG?.warn('PDF_QUOTA_EXCEEDED', `⚠️ QUOTA GIORNALIERA RAGGIUNTA. Stop esecuzione alla riga ${rowNum}. Creati finora: ${createdCount} PDF.`);
+            
+            if (!isSilent) {
+              UTIL.showToast(
+                '⚠️ Quota giornaliera PDF raggiunta. Riprova domani o contatta l\'amministratore.', 
+                'Quota Esaurita', 
+                15
+              );
+              STATE.setJSON(App.config.keys.progress, {
+                current: rowNum, 
+                total: lastRow, 
+                message: 'Quota PDF esaurita. Processo sospeso.'
+              });
+            }
+            
+            return; // ✅ STOP IMMEDIATO - Non continua a processare altre fatture
+          }
+          
+          // Errori normali (diversi da quota): log e continua
           LOG?.error('PDF', `Impossibile creare PDF per '${fileName}' (riga ${rowNum})`, {
             fileId, error: e.message, stack: e.stack
           });
