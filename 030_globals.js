@@ -345,6 +345,343 @@ const UTIL = (function () {
     return letter;
   }
 
+  // ============================================================================
+  // DATE_UTILS - Utility centralizzate per gestione date
+  // ============================================================================
+  
+  /**
+   * DATE_UTILS
+   * 
+   * Centralizza tutte le operazioni date sparse nel progetto.
+   * 
+   * ELIMINA DUPLICAZIONI IN:
+   * - 060_import_headers.js (parsing XML date)
+   * - 070_import_rows.js (formatting date)
+   * - 050_filters.js (regex date parsing)
+   * - 090_dashboard.js, 100_reporting.js, 120_pnl.js (formatting)
+   * - 080_pdf_export.js (Italian date display)
+   * - 092_dashboard_trigger.js (timestamp formatting)
+   * 
+   * PERFORMANCE: Usa Intl.DateTimeFormat per locale italiano.
+   * 
+   * @namespace DATE_UTILS
+   * @memberof UTIL
+   */
+  const DATE_UTILS = {
+    
+    /**
+     * Parsa data da stringa XML (formato ISO 8601).
+     * Supporta: YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, YYYY-MM-DDTHH:MM:SS.sssZ
+     * 
+     * @param {string|Date} dateInput - Data formato ISO o Date object
+     * @returns {Date|null} Date object o null se invalida
+     * 
+     * @example
+     * UTIL.date.parseXmlDate('2025-11-19') // => Date(2025, 10, 19)
+     * UTIL.date.parseXmlDate('2025-11-19T15:30:00') // => Date(2025, 10, 19, 15, 30)
+     */
+    parseXmlDate(dateInput) {
+      if (!dateInput) return null;
+      
+      // Se già Date object, valida e ritorna
+      if (dateInput instanceof Date) {
+        return isNaN(dateInput.getTime()) ? null : dateInput;
+      }
+      
+      if (typeof dateInput !== 'string') return null;
+      
+      const trimmed = dateInput.trim();
+      const isoMatch = trimmed.match(CONSTANTS.DATE_PATTERNS.ISO_DATE);
+      
+      if (!isoMatch) return null;
+      
+      const groups = CONSTANTS.DATE_REGEX_GROUPS.ISO;
+      const year = +isoMatch[groups.YEAR];
+      const month = +isoMatch[groups.MONTH] - 1; // JS months are 0-based
+      const day = +isoMatch[groups.DAY];
+      
+      const date = new Date(year, month, day);
+      
+      return isNaN(date.getTime()) ? null : date;
+    },
+
+    /**
+     * Formatta Date come stringa YYYY-MM-DD (ISO).
+     * 
+     * @param {Date} date - Date object
+     * @returns {string} Data formattata o stringa vuota se invalida
+     * 
+     * @example
+     * UTIL.date.formatIsoDate(new Date(2025, 10, 19)) // => '2025-11-19'
+     */
+    formatIsoDate(date) {
+      if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+      
+      try {
+        return Utilities.formatDate(
+          date, 
+          Session.getScriptTimeZone(), 
+          CONSTANTS.DATE_FORMATS.ISO
+        );
+      } catch (e) {
+        LOG?.warn('DATE_UTILS', 'Error formatting ISO date', { error: e.message });
+        return '';
+      }
+    },
+
+    /**
+     * Formatta Date come stringa DD/MM/YYYY (locale IT).
+     * 
+     * @param {Date} date - Date object
+     * @returns {string} Data formattata italiana
+     * 
+     * @example
+     * UTIL.date.formatItalianDate(new Date(2025, 10, 19)) // => '19/11/2025'
+     */
+    formatItalianDate(date) {
+      if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+      
+      try {
+        // Performance: usa Intl.DateTimeFormat (più veloce di formatDate)
+        const formatter = new Intl.DateTimeFormat('it-IT', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        });
+        return formatter.format(date);
+      } catch (e) {
+        // Fallback a Utilities.formatDate
+        try {
+          return Utilities.formatDate(
+            date, 
+            Session.getScriptTimeZone(), 
+            CONSTANTS.DATE_FORMATS.ITALIAN
+          );
+        } catch (e2) {
+          LOG?.warn('DATE_UTILS', 'Error formatting Italian date', { error: e2.message });
+          return '';
+        }
+      }
+    },
+
+    /**
+     * Formatta Date come timestamp completo (YYYY-MM-DD HH:MM:SS).
+     * 
+     * @param {Date} date - Date object (default: now)
+     * @returns {string} Timestamp formattato
+     * 
+     * @example
+     * UTIL.date.formatTimestamp(new Date(2025, 10, 19, 15, 30)) // => '2025-11-19 15:30:00'
+     * UTIL.date.formatTimestamp() // => timestamp corrente
+     */
+    formatTimestamp(date) {
+      const d = date || new Date();
+      if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+      
+      try {
+        return Utilities.formatDate(
+          d, 
+          Session.getScriptTimeZone(), 
+          CONSTANTS.DATE_FORMATS.TIMESTAMP
+        );
+      } catch (e) {
+        LOG?.warn('DATE_UTILS', 'Error formatting timestamp', { error: e.message });
+        return '';
+      }
+    },
+
+    /**
+     * Estrae anno e mese da Date.
+     * 
+     * @param {Date} date - Date object
+     * @returns {{anno: string, mese: number}} Anno (YYYY) e mese (1-12)
+     * 
+     * @example
+     * UTIL.date.extractYearMonth(new Date(2025, 10, 19)) // => { anno: '2025', mese: 11 }
+     */
+    extractYearMonth(date) {
+      if (!(date instanceof Date) || isNaN(date.getTime())) {
+        return { anno: '', mese: 0 };
+      }
+      
+      return {
+        anno: String(date.getFullYear()),
+        mese: date.getMonth() + 1 // JS months are 0-based, business logic is 1-based
+      };
+    },
+
+    /**
+     * Ottiene nome mese italiano completo da numero (1-12).
+     * 
+     * @param {number} monthNumber - Numero mese (1-12)
+     * @param {string} [yearSuffix] - Suffisso anno opzionale (es: "'24")
+     * @returns {string} Nome mese italiano
+     * 
+     * @example
+     * UTIL.date.getItalianMonthName(1) // => 'Gennaio'
+     * UTIL.date.getItalianMonthName(11, "'25") // => "Novembre '25"
+     */
+    getItalianMonthName(monthNumber, yearSuffix = '') {
+      const monthNames = [
+        'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+        'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+      ];
+      
+      const month = Number(monthNumber);
+      if (month < 1 || month > 12 || isNaN(month)) {
+        LOG?.warn('DATE_UTILS', `Invalid month number: ${monthNumber}`);
+        return 'N/A';
+      }
+      
+      const name = monthNames[month - 1];
+      return yearSuffix ? `${name} ${yearSuffix}` : name;
+    },
+
+    /**
+     * Ottiene nome mese italiano abbreviato da numero (1-12).
+     * 
+     * @param {number} monthNumber - Numero mese (1-12)
+     * @param {string} [yearSuffix] - Suffisso anno opzionale
+     * @returns {string} Nome mese abbreviato (3 lettere)
+     * 
+     * @example
+     * UTIL.date.getShortMonthName(1) // => 'Gen'
+     * UTIL.date.getShortMonthName(11, "'25") // => "Nov '25"
+     */
+    getShortMonthName(monthNumber, yearSuffix = '') {
+      const shortNames = [
+        'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
+        'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
+      ];
+      
+      const month = Number(monthNumber);
+      if (month < 1 || month > 12 || isNaN(month)) {
+        return 'N/A';
+      }
+      
+      const name = shortNames[month - 1];
+      return yearSuffix ? `${name} ${yearSuffix}` : name;
+    },
+
+    /**
+     * Verifica se valore è una Date valida.
+     * 
+     * @param {*} value - Valore da verificare
+     * @returns {boolean} True se è una Date valida
+     * 
+     * @example
+     * UTIL.date.isValidDate(new Date()) // => true
+     * UTIL.date.isValidDate('invalid') // => false
+     */
+    isValidDate(value) {
+      return value instanceof Date && !isNaN(value.getTime());
+    },
+
+    /**
+     * Parsa data italiana DD/MM/YYYY in Date object.
+     * 
+     * @param {string} italianDateStr - Data formato DD/MM/YYYY
+     * @returns {Date|null} Date object o null se invalida
+     * 
+     * @example
+     * UTIL.date.parseItalianDate('19/11/2025') // => Date(2025, 10, 19)
+     */
+    parseItalianDate(italianDateStr) {
+      if (!italianDateStr || typeof italianDateStr !== 'string') return null;
+      
+      const trimmed = italianDateStr.trim();
+      const match = trimmed.match(CONSTANTS.DATE_PATTERNS.ITALIAN_DATE);
+      
+      if (!match) return null;
+      
+      const groups = CONSTANTS.DATE_REGEX_GROUPS.ITALIAN;
+      const day = +match[groups.DAY];
+      const month = +match[groups.MONTH] - 1; // JS 0-based
+      const year = +match[groups.YEAR];
+      
+      const date = new Date(year, month, day);
+      
+      return isNaN(date.getTime()) ? null : date;
+    },
+
+    /**
+     * Formatta Date in formato lungo italiano.
+     * 
+     * @param {Date} date - Date object
+     * @returns {string} Formato: "19 novembre 2025"
+     * 
+     * @example
+     * UTIL.date.formatLongItalian(new Date(2025, 10, 19)) // => '19 novembre 2025'
+     */
+    formatLongItalian(date) {
+      if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+      
+      try {
+        const formatter = new Intl.DateTimeFormat('it-IT', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        return formatter.format(date);
+      } catch (e) {
+        LOG?.warn('DATE_UTILS', 'Error formatting long Italian date', { error: e.message });
+        return '';
+      }
+    },
+
+    /**
+     * Calcola differenza in giorni tra due date.
+     * 
+     * @param {Date} date1 - Prima data
+     * @param {Date} date2 - Seconda data
+     * @returns {number} Giorni di differenza (può essere negativo)
+     * 
+     * @example
+     * UTIL.date.daysBetween(new Date(2025, 0, 1), new Date(2025, 0, 10)) // => 9
+     */
+    daysBetween(date1, date2) {
+      if (!this.isValidDate(date1) || !this.isValidDate(date2)) return 0;
+      
+      const MS_PER_DAY = 1000 * 60 * 60 * 24;
+      const utc1 = Date.UTC(date1.getFullYear(), date1.getMonth(), date1.getDate());
+      const utc2 = Date.UTC(date2.getFullYear(), date2.getMonth(), date2.getDate());
+      
+      return Math.floor((utc2 - utc1) / MS_PER_DAY);
+    },
+
+    /**
+     * Ottiene primo giorno del mese per una data.
+     * 
+     * @param {Date} date - Date object
+     * @returns {Date|null} Primo giorno del mese
+     * 
+     * @example
+     * UTIL.date.getFirstDayOfMonth(new Date(2025, 10, 19)) // => Date(2025, 10, 1)
+     */
+    getFirstDayOfMonth(date) {
+      if (!this.isValidDate(date)) return null;
+      return new Date(date.getFullYear(), date.getMonth(), 1);
+    },
+
+    /**
+     * Ottiene ultimo giorno del mese per una data.
+     * 
+     * @param {Date} date - Date object
+     * @returns {Date|null} Ultimo giorno del mese
+     * 
+     * @example
+     * UTIL.date.getLastDayOfMonth(new Date(2025, 10, 19)) // => Date(2025, 10, 30)
+     */
+    getLastDayOfMonth(date) {
+      if (!this.isValidDate(date)) return null;
+      // Trick: giorno 0 del mese successivo = ultimo giorno del mese corrente
+      return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    }
+  };
+
+  // ============================================================================
+  // RETURN PUBLIC API
+  // ============================================================================
   return {
     showToast: (message, title = 'Info', timeout = 5) => SpreadsheetApp.getActiveSpreadsheet().toast(message, title, timeout),
     parseNumSmart,
@@ -367,7 +704,9 @@ const UTIL = (function () {
     forceText,
     acquireLock,
     releaseLock,
-    getColumnLetter
+    getColumnLetter,
+    // DATE_UTILS namespace
+    date: DATE_UTILS
   };
 })();
 

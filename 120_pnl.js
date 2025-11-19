@@ -1,8 +1,9 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 120_pnl.js
-// VERSIONE: 25.0 (P&L Engine)
+// VERSIONE: 26.0 (P&L Engine - FASE 2 Refactoring)
 // DESCRIZIONE: Crea un P&L dinamico Multi-Anno per GLOBALE e per SEDE.
+//              Uses UTIL.date.getShortMonthName() for month name generation.
 // Novità v23:
 // - Ordinamento famiglie (prefisso numerico -> alfa) con "Non Categorizzato" in coda
 // - Normalizzazione robusta FornitoreID (IT + zeri) con UTIL.normKey
@@ -532,10 +533,7 @@ function _getAggregatedCostsBySede(famiglieFornitori) {
  * @private
  */
 function _meseIntToNome(meseInt, annoShort) {
-  const m = parseInt(String(meseInt), 10);
-  const nomi = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-  if (m >= 1 && m <= 12) return `${nomi[m - 1]} '${annoShort}`;
-  return `${meseInt} '${annoShort}`;
+  return UTIL.date.getShortMonthName(parseInt(String(meseInt), 10), annoShort);
 }
 
 /**

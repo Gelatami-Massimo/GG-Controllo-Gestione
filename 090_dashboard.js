@@ -324,7 +324,8 @@ const DASHBOARD = (function () {
               const costoNetto  = UTIL.parseNumSmart(row[idx.TotImponibile]);
               const costoTotale = UTIL.parseNumSmart(row[idx.TotDocumento]);
               if (data instanceof Date && !isNaN(data.getTime())) {
-                const annoMese = `${data.getFullYear()}-${('0' + (data.getMonth() + 1)).slice(-2)}`;
+                const ymObj = UTIL.date.extractYearMonth(data);
+                const annoMese = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
                 if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
                 let cur = dataAggregata.get(sedeKey).get(annoMese)
                   || { fatturato: 0, personale: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0 };

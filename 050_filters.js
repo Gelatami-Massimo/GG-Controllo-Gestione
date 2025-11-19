@@ -237,29 +237,22 @@ const FILTERS = (function () {
     return Number.isFinite(num) ? num : null;
   }
 
-  // Date: YYYY-MM-DD o DD/MM/YYYY
+  // Date: YYYY-MM-DD o DD/MM/YYYY (usa DATE_UTILS centralizzato)
   function _parseDateAny(x) {
     const t = String(x ?? '').trim();
-    // ISO
-    const mIso = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (mIso) {
-      const y = +mIso[1], m = +mIso[2] - 1, d = +mIso[3];
-      const dt = new Date(y, m, d);
-      return _isValidDate(dt, y, m, d) ? dt : null;
-    }
-    // IT
-    const mIt = t.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
-    if (mIt) {
-      const d = +mIt[1], m = +mIt[2] - 1, y = +mIt[3];
-      const dt = new Date(y, m, d);
-      return _isValidDate(dt, y, m, d) ? dt : null;
-    }
-    return null;
+    // Prova ISO format
+    let date = UTIL.date.parseXmlDate(t);
+    if (date) return date;
+    
+    // Prova Italian format
+    date = UTIL.date.parseItalianDate(t);
+    return date;
   }
 
   function _isValidDate(dt, y, m, d) {
-    return dt instanceof Date && !isNaN(dt.getTime()) &&
-           dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d;
+    // Usa validazione centralizzata
+    if (!UTIL.date.isValidDate(dt)) return false;
+    return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d;
   }
   function _startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
   function _endOfDay(d)   { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59); }

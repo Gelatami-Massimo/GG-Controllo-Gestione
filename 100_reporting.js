@@ -1,9 +1,10 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 100_reporting.js
-// VERSIONE: 25.0 (Reporting Engine)
+// VERSIONE: 26.0 (Reporting Engine - FASE 2 Refactoring)
 // DESCRIZIONE: Motore di audit e riconciliazione dati.
 //               Legge i conteggi file pre-calcolati da IMPORT_HEADERS.
+//               Uses UTIL.date.formatTimestamp() for date formatting.
 // =============================================================
 
 const REPORTING = (function () {
@@ -47,9 +48,10 @@ const REPORTING = (function () {
   function _writeReport(sh, reports) {
     let row = 1;
     const now = new Date();
+    const formattedTimestamp = UTIL.date.formatTimestamp(now);
     sh.getRange(row++, 1, 1, 3) // Usa 3 colonne per coerenza
       .merge()
-      .setValue(`Report di Audit Completo - ${now.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'medium' })}`)
+      .setValue(`Report di Audit Completo - ${formattedTimestamp}`)
       .setFontWeight('bold').setFontSize(14).setHorizontalAlignment('center');
     row++; // spazio
 

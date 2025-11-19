@@ -324,11 +324,9 @@ const IMPORT_HEADERS = (function () {
             `Impossibile parsare XML: ${file.getName()}. Uso data modifica per conteggio mese.`,
             { fileId }
           );
-          yearMonth = Utilities.formatDate(
-            file.getLastUpdated(),
-            Session.getScriptTimeZone(),
-            'yyyy-MM'
-          );
+          const lastUpdated = file.getLastUpdated();
+          const ymObj = UTIL.date.extractYearMonth(lastUpdated);
+          yearMonth = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
         } else {
           const rootElement = doc.getRootElement();
           const dataStr = _extractInvoiceDate(doc);
@@ -344,11 +342,9 @@ const IMPORT_HEADERS = (function () {
               `Data non trovata/valida in ${file.getName()}. Uso data modifica per conteggio mese.`,
               { fileId, dataStr }
             );
-            yearMonth = Utilities.formatDate(
-              file.getLastUpdated(),
-              Session.getScriptTimeZone(),
-              'yyyy-MM'
-            );
+            const lastUpdated = file.getLastUpdated();
+            const ymObj = UTIL.date.extractYearMonth(lastUpdated);
+            yearMonth = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
           }
 
           // Calcola GoldenTotal SEMPRE
@@ -375,11 +371,9 @@ const IMPORT_HEADERS = (function () {
         );
         if (!yearMonth) {
           try {
-            yearMonth = Utilities.formatDate(
-              file.getLastUpdated(),
-              Session.getScriptTimeZone(),
-              'yyyy-MM'
-            );
+            const lastUpdated = file.getLastUpdated();
+            const ymObj = UTIL.date.extractYearMonth(lastUpdated);
+            yearMonth = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
           } catch (_) {}
         }
         if (!folderPath) {

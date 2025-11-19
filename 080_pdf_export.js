@@ -283,7 +283,7 @@ const PDF = (function () {
     if (!datiGeneraliDoc) throw new Error('Elemento DatiGeneraliDocumento non trovato.');
 
     const dataDocStr = UTIL.firstText(datiGeneraliDoc, 'Data');
-    const dataDoc = dataDocStr ? new Date(dataDocStr) : new Date(0);
+    const dataDoc = UTIL.date.parseXmlDate(dataDocStr) || new Date(0);
 
     const datiBeniServizi = UTIL.firstChild(body, 'DatiBeniServizi');
 
@@ -326,7 +326,7 @@ const PDF = (function () {
       cliente:   _extractAnagrafica(UTIL.firstChild(header, 'CessionarioCommittente')),
       doc: {
         numero: UTIL.forceText(UTIL.firstText(datiGeneraliDoc, 'Numero')),
-        data:   dataDoc.toLocaleDateString('it-IT', { year: 'numeric', month: '2-digit', day: '2-digit' })
+        data:   UTIL.date.formatItalianDate(dataDoc)
       },
       righe: righe,
       riepilogo: {
