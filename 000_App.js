@@ -73,6 +73,7 @@ const App = {
       // --- Manutenzione e Debug UI ---
       runInitialSetup: 'runInitialSetup',
       runSheetCheckAndSetup: 'runSheetCheckAndSetup',
+      runCompleteMaintenance: 'runCompleteMaintenance',
       runSanityCheck: 'runSanityCheck',
       runCreateTrigger: 'runCreateTrigger',
       runDeleteTriggers: 'runDeleteTriggers',

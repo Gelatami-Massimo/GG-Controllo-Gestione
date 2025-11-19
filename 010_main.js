@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 10_main.js
-// VERSIONE: 25.1 (Main Menu & Dispatcher - Housekeeping)
-// DESCRIZIONE: Gestione dei menu, sidebar, trigger e dispatcher funzioni.
+// VERSIONE: 26.0 (Main Menu + Complete Maintenance Orchestration)
+// DESCRIZIONE: Menu, sidebar, trigger dispatcher + manutenzione completa automatizzata.
 // =============================================================
 
 /**
@@ -64,13 +64,11 @@ function onOpen() {
     .addItem('🗑️ Elimina Righe Duplicate', App.ui.fn.runDeleteRigheDuplicate)
     .addItem('🔄 Reset Flag Import (Tutte)', App.ui.fn.runResetAllImportFlags)
     .addSeparator()
-    .addItem('🔡 Forza Formato Testo Codici', App.ui.fn.runForceTextFormatOnCodes)
     .addSeparator()
     .addItem('🕜 Installa Import Automatico', App.ui.fn.runCreateTrigger)
     .addItem('🛑 Rimuovi Import Automatico', App.ui.fn.runDeleteTriggers)
     .addSeparator()
-    .addItem('🔍 Verifica Struttura Fogli', App.ui.fn.runSheetCheckAndSetup)
-    .addItem('⚠️ Avvia Controllo Integrità', App.ui.fn.runSanityCheck)
+    .addItem('✨ Manutenzione Completa', App.ui.fn.runCompleteMaintenance)
     .addItem('🧹 Pulisci Cache e Cursori', App.ui.fn.runClearCache)
   );
 
@@ -169,7 +167,24 @@ function runImportHeaders() { _runSafely(() => IMPORT_HEADERS.run(), 'Import', '
 function runImportRows() { _runSafely(() => IMPORT_ROWS.run(), 'Import', 'Avvio importazione righe...', 'Importazione righe completata.'); }
 function runCreatePdfs() { _runSafely(() => PDF.run(), 'PDF', 'Creazione PDF in corso...', 'Creazione PDF completata.'); }
 function runReconciliationReport() { _runSafely(() => REPORTING.run(), 'Reporting', 'Generazione Report di Audit...', 'Report generato.'); }
-function runSheetCheckAndSetup() { _runSafely(() => { SHEETS.ensureAll(); SHEETS.applyFormats(); }, 'Sheets', 'Verifica struttura e formati...', 'Verifica completata.'); }
+
+// ✅ FUNZIONE MASTER: Manutenzione Completa (Filtri + Formati + Integrità)
+function runCompleteMaintenance() {
+  _runSafely(() => {
+    // 1. Verifica struttura fogli e applica filtri su TUTTI i fogli
+    SHEETS.ensureAll();
+    SHEETS.applyFormats();
+    
+    // 2. Forza formato testo su colonne codici (evita '001' → 1)
+    DEBUG.forceTextFormatOnCodes();
+    
+    // 3. Controlla integrità dati (sanity check)
+    DEBUG.sanityCheck();
+  }, 'Maintenance', 'Manutenzione completa in corso...', 'Manutenzione completata! Fogli verificati, codici formattati, integrità controllata.');
+}
+
+// Funzione legacy mantenuta per compatibilità (ora richiama runCompleteMaintenance)
+function runSheetCheckAndSetup() { runCompleteMaintenance(); }
 function runClearCache() { _runSafely(() => DEBUG.clearCache(), 'Debug', 'Pulizia cache e cursori...', 'Cache e cursori azzerati.'); }
 function runSanityCheck() { _runSafely(() => DEBUG.sanityCheck(), 'Debug', 'Controllo integrità sistema...', 'Controllo completato.'); }
 function runCreateDashboard() { _runSafely(() => DASHBOARD.create(), 'Dashboard', 'Aggiornamento dashboard...', 'Dashboard aggiornata.'); }

@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 170_setup.js
-// VERSIONE: 25.0 (Setup Assistant)
-// DESCRIZIONE: Setup guidato (cartelle, fogli, configurazione).
+// VERSIONE: 26.0 (Setup Assistant + Auto Maintenance)
+// DESCRIZIONE: Setup guidato con manutenzione completa automatica al termine.
 // =============================================================
 
 const SETUP = (function () {
@@ -72,26 +72,28 @@ const SETUP = (function () {
     UTIL.showToast('Scrittura configurazione...', 'Setup');
     _writeConfiguration(inputId, outputId, triggerEveryMin);
     
-    // --- CORREZIONE ---
-    // Rimuoviamo la chiamata a DEBUG.clearCache() da qui perché
-    // DEBUG.clearCache() usa ui.alert, che va in conflitto con i prompt.
-    // L'utente deve premere "Pulisci Cache" manualmente DOPO il setup.
     CONFIG.invalidateCache();
     SHEETS.invalidateHeaderIndexCache();
-    // --- FINE CORREZIONE ---
 
+    // ✅ 8) Manutenzione completa finale (filtri, formati codici, integrità)
+    UTIL.showToast('Applicazione formati e verifica integrità...', 'Setup');
+    DEBUG.forceTextFormatOnCodes(); // Forza testo su codici
+    DEBUG.sanityCheck();            // Verifica integrità dati
 
-    // 8) Messaggio di successo + sanity check
+    // 9) Messaggio di successo
     const successMessage =
-      `Setup completato!\n\n` +
+      `Setup completato con successo!\n\n` +
+      `✅ Cartelle configurate:\n` +
       `• Input: "${inputFolder.getName()}"\n` +
-      `• Output: "${outputFolder.getName()}"\n` +
-      `• Trigger: ogni ~${triggerEveryMin} minuti (verrà normalizzato da Apps Script al valore consentito più vicino)\n\n` +
-      `IMPORTANTE: Esegui "Pulisci Cache e Cursori" manualmente prima di avviare la prima importazione.`;
-    ui.alert('Setup Completato!', successMessage, ui.ButtonSet.OK);
+      `• Output: "${outputFolder.getName()}"\n\n` +
+      `✅ Trigger: ogni ~${triggerEveryMin} minuti\n` +
+      `✅ Filtri applicati su tutti i fogli\n` +
+      `✅ Formati codici verificati\n` +
+      `✅ Integrità dati controllata\n\n` +
+      `NOTA: Se necessario, usa "Pulisci Cache" dal menu prima della prima importazione.`;
+    ui.alert('🎉 Setup Completato!', successMessage, ui.ButtonSet.OK);
 
-    LOG.info('SETUP', 'Setup eseguito con successo.');
-    DEBUG.sanityCheck();
+    LOG.info('SETUP', 'Setup completato con manutenzione automatica.');
   }
 
   function _extractIdFromInput(input) {
