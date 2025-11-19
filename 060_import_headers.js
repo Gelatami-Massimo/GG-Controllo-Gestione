@@ -580,12 +580,13 @@ const IMPORT_HEADERS = (function () {
             data.fornitore.denom,
             '',
             '',
+            '',
             defaultImportRows
           ]);
-          supplierInfo = { famiglia: '', categoria: '' };
+          supplierInfo = { famiglia: '', categoria: '', reparto: '' };
           supplierDataMap.set(supplierIdNorm, supplierInfo);
         } else if (!supplierInfo) {
-          supplierInfo = { famiglia: '', categoria: '' };
+          supplierInfo = { famiglia: '', categoria: '', reparto: '' };
         }
 
         const isCreditNote = (data.doc.tipo || '').toLowerCase().includes('nota di credito');
@@ -809,8 +810,10 @@ const IMPORT_HEADERS = (function () {
         );
         return map;
       }
-      const lastCol =
-        Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria) + 1;
+      // Reparto è opzionale, quindi includiamo solo se esiste
+      const lastCol = idx.Reparto !== undefined
+        ? Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria, idx.Reparto) + 1
+        : Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria) + 1;
       const data = sheet
         .getRange(headerRow + 1, 1, sheet.getLastRow() - headerRow, lastCol)
         .getValues();
@@ -826,7 +829,8 @@ const IMPORT_HEADERS = (function () {
         if (normalizedId) {
           map.set(normalizedId, {
             famiglia: String(row[idx.Famiglia] ?? '').trim(),
-            categoria: String(row[idx.Categoria] ?? '').trim()
+            categoria: String(row[idx.Categoria] ?? '').trim(),
+            reparto: idx.Reparto !== undefined ? String(row[idx.Reparto] ?? '').trim() : ''
           });
         }
       });

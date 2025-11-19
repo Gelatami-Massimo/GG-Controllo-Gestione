@@ -147,7 +147,7 @@ const SHEETS = (function () {
       'PrezzoUnitario', 'PrezzoTotale', 'AliquotaIVA',
       'Reparto'
     ],
-    'Fornitori': ['FornitoreID', 'Denominazione', 'Famiglia', 'Categoria', 'ImportaRighe'],
+    'Fornitori': ['FornitoreID', 'Denominazione', 'Famiglia', 'Categoria', 'Reparto', 'ImportaRighe'],
     'Aziende': ['P_IVA_Azienda', 'Nome_Sede', 'Note'],
     'Prodotti': [
       'CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM',
@@ -529,6 +529,12 @@ const SHEETS = (function () {
           ]
         },
         { format: 'dd/mm/yyyy hh:mm:ss', cols: ['CreatoIl', 'UltimoAgg'] }
+      ],
+      [SHEET_NAMES.Fornitori]: [
+        {
+          format: '@',
+          cols: ['FornitoreID', 'Denominazione', 'Famiglia', 'Categoria', 'Reparto']
+        }
       ],
       [SHEET_NAMES.Log]: [
         { format: 'dd/mm/yyyy hh:mm:ss', cols: ['Timestamp'] },

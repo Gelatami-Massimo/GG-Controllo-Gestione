@@ -230,7 +230,9 @@ const DEBUG = (function () {
         return map;
       }
 
-      const lastCol = Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria) + 1;
+      const lastCol = idx.Reparto !== undefined
+        ? Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria, idx.Reparto) + 1
+        : Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria) + 1;
       const rows = sh.getRange(headerRow + 1, 1, sh.getLastRow() - headerRow, lastCol).getValues();
 
       rows.forEach(r => {
