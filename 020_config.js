@@ -1,8 +1,9 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 020_config.js
-// VERSIONE: 25.2 (Configuration Manager + Reparto Fatture/Righe)
+// VERSIONE: 25.3 (Configuration Manager + Universal Filters)
 // DESCRIZIONE: Gestore centrale schemi, indici e formati.
+//              Applicazione automatica filtri su tutti i fogli gestiti.
 // =============================================================
 
 const CONFIG = (function () {
@@ -395,16 +396,27 @@ const SHEETS = (function () {
       }
     }
 
-    if (sheetName === SHEET_NAMES.Fatture || sheetName === SHEET_NAMES.Righe) {
+    // ✅ Applica filtri sistematicamente a TUTTI i fogli (eccetto fogli di servizio)
+    const excludeFromFilters = ['Config', 'Log']; // Escludi fogli di configurazione/servizio
+    
+    if (!excludeFromFilters.includes(sheetName)) {
       try {
+        // 1. Rimuovi filtro esistente (reset situazioni "sporche")
         const existingFilter = sh.getFilter();
-        if (existingFilter) existingFilter.remove();
+        if (existingFilter) {
+          existingFilter.remove();
+          LOG?.debug('SHEETS_FILTER', `Filtro esistente rimosso da ${sheetName}`);
+        }
 
+        // 2. Applica nuovo filtro su tutta l'area dati
         const filterHeaderRow = _findHeaderRow(sh, sheetName, true);
-        const lastCol2 = sh.getLastColumn();
-        const lastRow2 = sh.getLastRow();
-        if (lastRow2 >= filterHeaderRow && lastCol2 > 0) {
-          sh.getRange(filterHeaderRow, 1, lastRow2 - filterHeaderRow + 1, lastCol2).createFilter();
+        const lastCol = sh.getLastColumn();
+        const lastRow = sh.getLastRow();
+        
+        if (lastRow >= filterHeaderRow && lastCol > 0) {
+          const filterRange = sh.getRange(filterHeaderRow, 1, lastRow - filterHeaderRow + 1, lastCol);
+          filterRange.createFilter();
+          LOG?.debug('SHEETS_FILTER', `Filtro applicato a ${sheetName} (${lastRow - filterHeaderRow + 1} righe, ${lastCol} colonne)`);
         }
       } catch (e) {
         LOG?.warn('SHEETS_FILTER', `Impossibile gestire filtro per ${sheetName}`, { error: e.message });
