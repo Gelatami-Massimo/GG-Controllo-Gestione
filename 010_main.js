@@ -61,14 +61,12 @@ function onOpen() {
   );
 
   // --- Configurazione ---
-  menu.addSubMenu(ui.createMenu('⚙️ Configurazione')
+  menu.addSubMenu(ui.createMenu('⚙️ Config')
     .addItem('🚀 Setup Iniziale', App.ui.fn.runInitialSetup)
-    .addItem('⚙️ Impostazioni Sistema', runConfigDialog)
+    .addItem('⚙️ Impostazioni', runConfigDialog)
     .addSeparator()
-    .addItem('📋 Verifica Struttura Fogli', 'DEV_EnsureSheetsAndFormats')
-    .addSeparator()
-    .addItem('🕐 Attiva Import Automatico', App.ui.fn.runCreateTrigger)
-    .addItem('🛑 Disattiva Import Automatico', App.ui.fn.runDeleteTriggers)
+    .addItem('🕐 Attiva Import Auto', App.ui.fn.runCreateTrigger)
+    .addItem('🛑 Disattiva Import Auto', App.ui.fn.runDeleteTriggers)
   );
 
   menu.addToUi();
