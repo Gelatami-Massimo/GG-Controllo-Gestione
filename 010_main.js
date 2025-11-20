@@ -44,7 +44,7 @@ function onOpen() {
   menu.addSubMenu(ui.createMenu('📊 Report e Analisi')
     .addItem('📈 Dashboard', App.ui.fn.runCreateDashboard)
     .addItem('📑 Conto Economico (P&L)', App.ui.fn.runCreatePnlSheet)
-    .addItem('📦 Magazzino', App.ui.fn.runCreateWarehouse)
+    .addItem('📦 Magazzino (per Prodotto)', 'buildMagazzinoByYear')
     .addItem('🧪 Magazzino Ingredienti (per Anno)', 'buildMagazzinoIngredientiByYear')
     .addSeparator()
     .addItem('🔍 Report di Audit', App.ui.fn.runReconciliationReport)
