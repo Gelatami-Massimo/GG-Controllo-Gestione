@@ -10,14 +10,19 @@
  * - App.config contiene chiavi, cursori e identificatori globali.
  * - App.ui.fn contiene i nomi delle funzioni esposte alla UI.
  * - Mantieni i nomi esposti (compatibilità con menu/trigger/UI).
+ * 
+ * @typedef {Object} App
+ * @property {string} version - Versione corrente del progetto
+ * @property {Object} meta - Metadati progetto
+ * @property {Object} config - Configurazioni centrali
+ * @property {Object} ui - Mappatura funzioni UI
  */
-
 const App = {
-  version: '25.0', // Versione aggiornata
+  version: '25.0',
   meta: {
-    project: 'GG GESTIONE GELATAMI V1', // Nome progetto aggiornato
-    updated: '2025-11-04', // Data odierna
-    notes: 'Versione 25 - Avvio pulito del progetto.' // Note aggiornate
+    project: 'GG GESTIONE GELATAMI V1',
+    updated: '2025-11-04',
+    notes: 'Versione 25 - Avvio pulito del progetto.'
   },
 
   config: {
@@ -30,15 +35,12 @@ const App = {
       progress: 'IMPORT_PROGRESS',
       goldenTotal: 'FINANCIAL_GOLDEN_TOTAL',
       lastRun: 'LAST_AUTOMATED_RUN_TIMESTAMP',
-
-      // Conteggio duplicati (esposto in UI/Report)
       duplicateCount: 'DUPLICATE_INVOICE_COUNT_V1',
 
-      // --- NUOVE CHIAVI PER I CONTEGGI SALVATI ---
-      auditCountsMonth: 'AUDIT_COUNTS_MONTH_V1',   // Risultato finale { 'YYYY-MM': count }
-      auditCountsFolder: 'AUDIT_COUNTS_FOLDER_V1', // Risultato finale { 'Path': count }
-      auditTotalCount: 'AUDIT_TOTAL_COUNT_V1',     // Risultato finale (numero totale file XML)
-      // --- FINE NUOVE CHIAVI ---
+      // Conteggi audit file XML
+      auditCountsMonth: 'AUDIT_COUNTS_MONTH_V1',
+      auditCountsFolder: 'AUDIT_COUNTS_FOLDER_V1',
+      auditTotalCount: 'AUDIT_TOTAL_COUNT_V1',
 
       // Cursori di processo (ripartenza sicura)
       cursors: {
@@ -50,7 +52,7 @@ const App = {
         syncCategories: 'SYNC_CATEGORIES_CURSOR_V1',
         syncSuppliers: 'SYNC_SUPPLIERS_CURSOR_V1',
         forceText: 'FORCE_TEXT_CURSOR_V1',
-        fileAuditMonth: 'FILE_AUDIT_MONTH_CURSOR_V1' // Cursore (ora obsoleto, ma non dannoso)
+        fileAuditMonth: 'FILE_AUDIT_MONTH_CURSOR_V1'
       }
     }
   },
@@ -72,20 +74,10 @@ const App = {
 
       // --- Manutenzione e Debug UI ---
       runInitialSetup: 'runInitialSetup',
-      runSheetCheckAndSetup: 'runSheetCheckAndSetup',
       runCompleteMaintenance: 'runCompleteMaintenance',
-      runSanityCheck: 'runSanityCheck',
       runCreateTrigger: 'runCreateTrigger',
       runDeleteTriggers: 'runDeleteTriggers',
-      createDuplicateSnapshot: 'createDuplicateSnapshot',
       runMarkDuplicateInvoices: 'runMarkDuplicateInvoices',
-      runClearDuplicateMarkings: 'runClearDuplicateMarkings',
-      runFindRigheDuplicate: 'runFindRigheDuplicate',
-      runDeleteRigheDuplicate: 'runDeleteRigheDuplicate',
-      runCountDuplicates: 'runCountDuplicates',
-      runResetAllImportFlags: 'runResetAllImportFlags',
-      // Le funzioni runCountFiles... sono state rimosse perché ora integrate in "Importa Intestazioni"
-      runForceTextFormatOnCodes: 'runForceTextFormatOnCodes',
       runSyncSuppliers: 'runSyncSuppliers',
       runSyncCategoriesRetroactive: 'runSyncCategoriesRetroactive',
       runClearCache: 'runClearCache',
