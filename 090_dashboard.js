@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
-// FILE: 90_dashboard.js
-// VERSIONE: 25.0 (Dashboard & Analytics)
-// DESCRIZIONE: Dashboard finanziaria con Totali Annuali e MOL Netto Annuale/Mensile.
+// FILE: 090_dashboard.js
+// RUOLO: Dashboard finanziaria con KPI, MOL, totali annuali/mensili.
+// NOTE: Genera foglio Dashboard con grafici e sezioni formattate.
 // =============================================================
 
 const DASHBOARD = (function () {

@@ -1,22 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 120_pnl.js
-// VERSIONE: 28.0 (P&L Engine - Column Validation Refactoring)
-// DESCRIZIONE: Crea un P&L dinamico Multi-Anno per GLOBALE e per SEDE.
-//              Uses UTIL.date.getShortMonthName() for month name generation.
-//              REFACTORED: 3 try/catch blocks replaced with ERROR_HANDLER.safely()
-//              REFACTORED: Column validation loop replaced with UTIL.checkColumns()
-// Novità v28:
-// - Validazione colonne con UTIL.checkColumns() (più conciso e chiaro)
-// Novità v27:
-// - Integrazione ERROR_HANDLER.safely() per operazioni formatting non-critiche
-// - Eliminati 3 blocchi try/catch duplicati (-18 righe boilerplate)
-// Novità v23:
-// - Ordinamento famiglie (prefisso numerico -> alfa) con "Non Categorizzato" in coda
-// - Normalizzazione robusta FornitoreID (IT + zeri) con UTIL.normKey
-// - Riga (B) - COSTI FORNITORI (NETTI) e riga "MOL % (MOL/Ricavi)"
-// - Formati: valuta per valori monetari, percentuale per MOL %
-// - Letture ottimizzate e maggiore resilienza
+// RUOLO: Conto Economico (P&L) dinamico Multi-Anno per GLOBALE e per SEDE.
+// NOTE: Usa UTIL.date, ERROR_HANDLER.safely(), ordinamento famiglie fornitori.
 // =============================================================
 
 /**

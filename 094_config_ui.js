@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 094_config_ui.js
-// VERSIONE: 1.0 (Configuration UI - HTML Dialog)
-// DESCRIZIONE: Dialog HTML per gestione configurazione user-friendly
+// RUOLO: Dialog HTML per configurazione user-friendly.
+// NOTE: Usa ConfigDialog.html, interfaccia grafica per CONFIG.get/set.
 // =============================================================
 
 var CONFIG_UI = (function() {

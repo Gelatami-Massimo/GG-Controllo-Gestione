@@ -1,10 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 031_sheet_iterator.js
-// VERSIONE: 26.0 (Sheet Iterator Utility)
-// DESCRIZIONE: Utility per iterazione batch su fogli Google Sheets.
-//              Elimina pattern duplicato "itera + processa righe".
-//              Gestione automatica: header, validazione, chunking, errori.
+// RUOLO: Iterator chunked per fogli con timeout e ripresa automatica.
+// NOTE: Pattern centralizzato forEachChunk() - elimina duplicazione loop manuali.
 // =============================================================
 
 /**

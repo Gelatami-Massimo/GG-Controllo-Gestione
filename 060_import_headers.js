@@ -1,14 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
-// FILE: 60_import_headers.js
-// VERSIONE: 25.3 (Header Import + Reparto + Mese Format)
-// DESCRIZIONE: Motore di importazione testate OTTIMIZZATO (CacheService)
-//               • GoldenTotal calcolato SEMPRE (anche su file già importati)
-//               • Salvataggio/ripresa GoldenTotal durante SCAN_EXTRACT
-//               • Logica Percorso Cartella con rootFolderId e fallback sicuri
-//               • Aggiornamento barra di avanzamento (STATE.progress)
-//               • Aggiunta colonna Reparto (logica condizionale per indirizzo)
-//               • Formattazione automatica colonna Mese come 'MMMM' (nome mese)
+// FILE: 060_import_headers.js
+// RUOLO: Import intestazioni fatture XML in foglio Fatture (ricorsivo).
+// NOTE: Usa SHEET_ITERATOR, CacheService, GoldenTotal, logica Reparto.
 // =============================================================
 
 const IMPORT_HEADERS = (function () {

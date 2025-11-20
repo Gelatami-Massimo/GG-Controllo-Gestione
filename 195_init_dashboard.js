@@ -1,8 +1,8 @@
 // =============================================================
-// SCRIPT MANUALE: Inizializzazione Trigger Dashboard
-// VERSIONE: 1.0
-// USO: Esegui questa funzione da Apps Script Editor per creare
-//      il foglio "Trigger Status" senza rieseguire Setup completo
+// PROGETTO: GG GESTIONE GELATAMI V1
+// FILE: 195_init_dashboard.js
+// RUOLO: Script manuale per inizializzazione Trigger Dashboard.
+// NOTE: DEPRECATO - usa TRIGGER_DASHBOARD.initSheet() da 092.
 // =============================================================
 
 /**

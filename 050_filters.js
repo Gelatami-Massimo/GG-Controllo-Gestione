@@ -1,9 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
-// FILE: 50_filters.js
-// VERSIONE: 25.0 (Filter Engine)
-// DESCRIZIONE: Gestore robusto per i filtri manuali dell'interfaccia utente.
-// NOTA: Richiede FilterDialog.html
+// FILE: 050_filters.js
+// RUOLO: Filtri parole chiave "spazzatura" e filtri UI manuali.
+// NOTE: Usa FilterDialog.html, cache filtri in memoria.
 // =============================================================
 
 const FILTERS = (function () {

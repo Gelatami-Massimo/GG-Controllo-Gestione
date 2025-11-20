@@ -1,18 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 092_dashboard_trigger.js
-// VERSIONE: 2.0 (Trigger Dashboard & Health Monitoring - REFACTORED)
-// DESCRIZIONE: Dashboard real-time per monitoraggio trigger - PERFORMANCE OPTIMIZED
-// =============================================================
-//
-// CHANGELOG v2.0:
-// - ✅ RIDUZIONE API CALLS: 51 setValue() → 2 setValues() (-96%)
-// - ✅ ELIMINAZIONE MAGIC NUMBERS: Usa CONSTANTS.TRIGGER_STATUS_COLUMNS
-// - ✅ CENTRALIZZAZIONE DATE: Usa UTIL.date per tutti i timestamp
-// - ✅ BATCH OPERATIONS: initSheet() e updateStatus() completamente batchizzati
-// - ✅ PERFORMANCE: Da 15-20s → <1s (-95%)
-// - ✅ JSDOC: Documentazione completa per tutte le funzioni pubbliche
-//
+// RUOLO: Dashboard real-time monitoraggio trigger con health status.
+// NOTE: v2.0 performance optimized - 2 setValues() batch vs 51 setValue() singoli.
 // =============================================================
 
 var TRIGGER_DASHBOARD = (function() {

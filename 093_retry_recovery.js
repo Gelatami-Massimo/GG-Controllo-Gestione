@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 093_retry_recovery.js
-// VERSIONE: 1.0 (Smart Retry & Recovery System)
-// DESCRIZIONE: Sistema di retry intelligente e recovery automatico
+// RUOLO: DEPRECATO - Retry intelligente con backoff exponential.
+// NOTE: DUPLICATO di ERROR_HANDLER (016) - da eliminare.
 // =============================================================
 
 var RETRY = (function() {

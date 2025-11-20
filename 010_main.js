@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
-// FILE: 10_main.js
-// VERSIONE: 28.0 (UI Cleanup - Simplified Menu & Sidebar)
-// DESCRIZIONE: Menu principale pulito e sidebar riorganizzata.
+// FILE: 010_main.js
+// RUOLO: Menu principale GELATAMI e sidebar UI.
+// NOTE: Entry point UI con onOpen(), wrapper funzioni pubbliche.
 // =============================================================
 
 /**

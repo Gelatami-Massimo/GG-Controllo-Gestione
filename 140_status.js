@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 140_status.js
-// VERSIONE: 25.0 (System Status)
-// DESCRIZIONE: Moduli Status per Sidebar UI.
+// RUOLO: Telemetria sistema per Sidebar UI (stato cursori, trigger, quota).
+// NOTE: Chiamato da Sidebar.html, legge STATE/CONFIG senza ricalcoli.
 // =============================================================
 
 /**

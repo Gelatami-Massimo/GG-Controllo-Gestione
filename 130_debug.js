@@ -1,13 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 130_debug.js
-// VERSIONE: 29.0 (Debug & Maintenance - Column Validation Refactoring)
-// DESCRIZIONE: Suite di strumenti di manutenzione e diagnostica.
-//              REFACTORED: 4 duplicate management functions now use 032_duplicate_manager.js
-//              REFACTORED: 4 manual loops replaced with SHEET_ITERATOR.forEachChunk()
-//              REFACTORED: 6 try/catch blocks replaced with ERROR_HANDLER.safely()
-//              REFACTORED: Column validation loop replaced with UTIL.checkColumns()
-//              Eliminated 333+180+65+3 = 581 duplicate lines total (-33.5% reduction).
+// RUOLO: Suite strumenti manutenzione e diagnostica.
+// NOTE: Usa DUPLICATE_MANAGER, SHEET_ITERATOR, ERROR_HANDLER.safely().
 // =============================================================
 
 const DEBUG = (function () {

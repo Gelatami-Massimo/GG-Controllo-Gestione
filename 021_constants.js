@@ -1,9 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 021_constants.js
-// VERSIONE: 26.0 (Constants Configuration)
-// DESCRIZIONE: Configurazione globale centralizzata.
-//              Elimina tutti i "numeri magici" dal codebase.
+// RUOLO: Costanti globali centralizzate (timeout, date format, ecc.).
+// NOTE: Elimina numeri magici, valori hardcoded accessibili via CONSTANTS.*
 // =============================================================
 
 /**

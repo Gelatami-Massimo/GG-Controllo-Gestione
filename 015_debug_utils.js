@@ -1,11 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 015_debug_utils.js
-// VERSIONE: 25.0 (Performance & Profiling Utilities)
-// LAST_UPDATED: 2025-11-13
-// DESCRIZIONE: Suite di utilities per profiling, tracing e analisi performance.
-//              Fornisce strumenti diagnostici avanzati per monitoraggio runtime
-//              e analisi di bottleneck in esecuzione. Integrato con GG namespace.
+// RUOLO: Profiling, tracing e analisi performance.
+// NOTE: Tools diagnostici avanzati - PROFILER, TRACER, METRICS.
 // =============================================================
 
 /**

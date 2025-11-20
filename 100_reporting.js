@@ -1,10 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 100_reporting.js
-// VERSIONE: 26.0 (Reporting Engine - FASE 2 Refactoring)
-// DESCRIZIONE: Motore di audit e riconciliazione dati.
-//               Legge i conteggi file pre-calcolati da IMPORT_HEADERS.
-//               Uses UTIL.date.formatTimestamp() for date formatting.
+// RUOLO: Report audit e riconciliazione dati (folder vs sheets).
+// NOTE: Legge conteggi pre-calcolati da IMPORT_HEADERS, usa UTIL.date.
 // =============================================================
 
 const REPORTING = (function () {

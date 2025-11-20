@@ -1,10 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 020_config.js
-// VERSIONE: 31.0 (Unit Cost Calculation + UM Conversions)
-// DESCRIZIONE: Gestore centrale schemi, indici e formati.
-//              Applicazione automatica filtri su tutti i fogli gestiti.
-//              Supporto calcolo €/KG e €/PZ con conversioni UM.
+// RUOLO: Schemi fogli, indici colonne, formati e validazione.
+// NOTE: Contiene CONFIG (get/set valori) e SHEETS (accesso fogli/header).
 // =============================================================
 
 const CONFIG = (function () {

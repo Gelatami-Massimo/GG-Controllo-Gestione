@@ -1,15 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 005_namespace.js
-// VERSIONE: 25.0
-// LAST_UPDATED: 2025-11-13
-// DESCRIZIONE: Namespace centralizzato GG per accesso a tutti i moduli.
-//              Consolidamento dell'architettura per migliorare manutenibilità
-//              e ridurre global scope pollution.
-//              
-//              Pattern: GG.register(name, module)
-//                       GG.get(name)
-//                       GG.modules (accesso diretto)
+// RUOLO: Namespace GG per accesso centralizzato a tutti i moduli.
+// NOTE: Pattern GG.register()/get()/count() - riduce global scope pollution.
 // =============================================================
 
 /**

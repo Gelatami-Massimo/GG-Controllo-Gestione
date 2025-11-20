@@ -1,9 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
-// FILE: 40_products.js
-// VERSIONE: 31.0 (Product Manager + Unit Cost Calculation)
-// DESCRIZIONE: Gestore del catalogo prodotti (cache, creazione univoca).
-//              Supporto conversioni UM e calcolo €/KG, €/PZ.
+// FILE: 040_products.js
+// RUOLO: Gestore catalogo prodotti con cache e creazione univoca.
+// NOTE: Genera CodiceInterno, supporta conversioni UM e calcolo costi unitari.
 // =============================================================
 
 const PRODUCTS = (() => {

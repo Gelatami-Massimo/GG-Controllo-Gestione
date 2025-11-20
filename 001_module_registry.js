@@ -1,11 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 001_module_registry.js
-// VERSIONE: 25.0
-// LAST_UPDATED: 2025-11-13
-// DESCRIZIONE: Registry esplicito di dipendenze tra moduli.
-//              Caricato per primo (dopo App) per validare ordine.
-//              Permette validazione automatica delle dipendenze.
+// RUOLO: Registry dipendenze moduli con validazione caricamento.
+// NOTE: Caricato per primo dopo App, valida ordine filePushOrder.
 // =============================================================
 
 /**

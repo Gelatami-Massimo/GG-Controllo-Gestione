@@ -1,13 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
-// FILE: 70_import_rows.js
-// VERSIONE: 31.0 (Row Import + TipoRiga + Unit Cost Calculation)
-// DESCRIZIONE: Importa le righe. Filtro righe "spazzatura" dinamico
-//              • Logica di skip corretta (non blocca import futuri)
-//              • RigheImportate = TRUE solo se le righe sono state scritte
-//              • TipoRiga robusto: ARTICOLO, SCONTO, OMAGGIO, TESTO
-//              • Calcolo costi unitari (€/KG, €/PZ) con conversioni UM
-//              REFACTORED: Manual loop replaced with SHEET_ITERATOR.forEachChunk()
+// FILE: 070_import_rows.js
+// RUOLO: Import righe fatture in foglio Righe con creazione prodotti.
+// NOTE: Usa SHEET_ITERATOR, filtro spazzatura, TipoRiga, costi unitari UM.
 // =============================================================
 
 const IMPORT_ROWS = (function () {

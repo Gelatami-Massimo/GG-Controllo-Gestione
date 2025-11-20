@@ -1,19 +1,9 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 032_duplicate_manager.js
-// VERSIONE: 27.0 (Duplicate Manager - Consolidation)
-// DESCRIZIONE: Gestione centralizzata duplicati per qualsiasi foglio.
-//              Elimina 720+ righe duplicate da 130_debug.js.
-// 
-// ELIMINA DUPLICAZIONI IN:
-// - 130_debug.js: manageDuplicateInvoices() (280 righe)
-// - 130_debug.js: markDuplicateInvoices() (160 righe)
-// - 130_debug.js: manageDuplicateRows() (190 righe)
-// - 130_debug.js: DEV_FindRigheDuplicate() (140 righe)
-// 
-// PATTERN CONSOLIDATO:
-// 1. Build Map (chiave → [rowNumbers])
-// 2. Filter (solo chiavi con >1 occorrenze)
+// RUOLO: Gestione duplicati fatture/righe con mark/clear.
+// NOTE: Pattern centralizzato - elimina 720+ righe duplicate da 130_debug.js.
+// =============================================================
 // 3. Mark visually (background color batch)
 // 4. Snapshot (foglio dedicato)
 // 

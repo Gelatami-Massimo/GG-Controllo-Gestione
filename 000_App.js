@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
-// FILE: 00_App.js
-// VERSIONE: 25.0 (Core Application Configuration)
-// DESCRIZIONE: Hub di configurazione centrale e mappa funzioni UI.
+// FILE: 000_App.js
+// RUOLO: Hub configurazione centrale e mappa funzioni UI.
+// NOTE: Contiene App.config (chiavi/cursori) e App.ui.fn (mapping funzioni).
 // =============================================================
 
 /**

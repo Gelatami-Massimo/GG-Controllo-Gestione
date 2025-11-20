@@ -1,9 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 084_magazzino_core.js
-// VERSIONE: 1.0 (Core Magazzino Unificato)
-// DESCRIZIONE: Logica centralizzata per magazzino per PRODOTTO e INGREDIENTE.
-//              Legge RIGHE + PRODOTTI e genera due viste aggregate.
+// RUOLO: Core magazzino unificato - genera vista per PRODOTTO e INGREDIENTE.
+// NOTE: Legge RIGHE+PRODOTTI con JOIN, logica conversioni UM (PZxCT, KGxPZ).
 // =============================================================
 
 const MAGAZZINO_CORE = (() => {

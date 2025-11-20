@@ -1,23 +1,9 @@
-/**
- * ==============================================================================
- * MODULE: ERROR_HANDLER (016)
- * ==============================================================================
- * 
- * Robust error handling framework with retry logic, fallback patterns,
- * and structured error reporting.
- * 
- * DEPENDENCIES: LOG, METRICS
- * VERSION: 26.0 (Added safely() method for non-critical operations)
- * 
- * EXPORTED MODULES:
- *   - GG.ERROR_HANDLER: Main error handling interface
- * 
- * NEW in v26.0:
- *   - safely(): Execute non-critical operations with logging (no retry)
- *   - Used by 120_pnl.js, 130_debug.js, 030_globals.js for UI/formatting ops
- * 
- * ==============================================================================
- */
+// =============================================================
+// PROGETTO: GG GESTIONE GELATAMI V1
+// FILE: 016_error_handler.js
+// RUOLO: Framework error handling con retry, fallback, timeout.
+// NOTE: Dipende da LOG e METRICS. Pattern safely() per operazioni non critiche.
+// =============================================================
 
 /**
  * ERROR_HANDLER Module

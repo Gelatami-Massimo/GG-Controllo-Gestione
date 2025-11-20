@@ -1,12 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
-// FILE: 80_pdf_export.js
-// VERSIONE: 27.0 (PDF Export Engine - ROBUST with DenominazioneFornitore - NumeroDoc naming)
-// DESCRIZIONE: Motore di creazione PDF (resumibile, chunked, robusto).
-//              ROBUST: Schema rinomina "DenominazioneFornitore - NumeroDoc.pdf"
-//              ENHANCED: Logging progresso, colonna PDFStato opzionale, sanificazione nomi file
-// NOTA: Richiede un file Html "PdfTemplate" nel progetto.
-//       REFACTORED: Manual loop replaced with SHEET_ITERATOR.forEachChunk()
+// FILE: 080_pdf_export.js
+// RUOLO: Generazione PDF fatture con naming DenominazioneFornitore - NumeroDoc.pdf.
+// NOTE: Usa SHEET_ITERATOR, PdfTemplate.html, sanificazione nomi, PDFStato opzionale.
 // =============================================================
 
 const PDF = (function () {

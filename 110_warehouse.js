@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 110_warehouse.js
-// VERSIONE: 26.0 (Warehouse Wrapper)
-// DESCRIZIONE: Wrapper per compatibilità - delega a MAGAZZINO_CORE.
+// RUOLO: Wrapper backward compatibility - delega a MAGAZZINO_CORE.
+// NOTE: Solo 39 righe, funzione legacy create() per compatibilità.
 // =============================================================
 
 const WAREHOUSE = (function () {

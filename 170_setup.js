@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 170_setup.js
-// VERSIONE: 26.0 (Setup Assistant + Auto Maintenance)
-// DESCRIZIONE: Setup guidato con manutenzione completa automatica al termine.
+// RUOLO: Setup guidato iniziale con manutenzione completa automatica.
+// NOTE: Crea fogli, applica formati, inizializza trigger dashboard.
 // =============================================================
 
 const SETUP = (function () {

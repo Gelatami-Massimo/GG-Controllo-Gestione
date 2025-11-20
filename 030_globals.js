@@ -1,11 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
-// FILE: 30_globals.js
-// VERSIONE: 27.0 (Global Utilities - Column Validation Helper)
-// DESCRIZIONE: Utility globali (LOG, UTIL, XMLSAFE, STATE) — fix critico
-//               su XmlService: niente getTextTrim(), gestione namespace FPA.
-//               REFACTORED: Lock release uses ERROR_HANDLER.safely()
-//               NEW: UTIL.checkColumns() micro-helper for optional validation
+// FILE: 030_globals.js
+// RUOLO: Utility globali - LOG, UTIL, XMLSAFE, STATE.
+// NOTE: Modulo monolite (969 righe) con helper date, string, XML, PropertiesService.
 // =============================================================
 
 /** Namespace FatturaPA (default v1.2 con fallback v1.0) */

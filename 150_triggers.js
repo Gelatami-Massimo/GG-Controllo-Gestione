@@ -1,8 +1,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 150_triggers.js
-// VERSIONE: 25.1 (Trigger Manager + Advanced Notifications)
-// DESCRIZIONE: Modulo Triggers (esecuzione automatica + gestione attivatori)
+// RUOLO: Gestione trigger time-based automatici con notifiche email.
+// NOTE: runAutomatedImport() orchestrazione import, crea/cancella trigger.
 // =============================================================
 
 /**
