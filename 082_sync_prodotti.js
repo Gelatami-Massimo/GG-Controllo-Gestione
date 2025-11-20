@@ -1,0 +1,462 @@
+// =============================================================
+// PROGETTO: GG GESTIONE GELATAMI V1
+// FILE: 082_sync_prodotti.js
+// RUOLO: Sincronizzazione automatica foglio Prodotti da Righe + suggerimento UM da descrizione
+// NOTE: Due funzionalità distinte - sync da Righe e parsing peso da Descrizione
+// =============================================================
+
+const SYNC_PRODOTTI = (() => {
+  /**
+   * Sincronizza il foglio Prodotti a partire dalle righe fatture.
+   * Crea nuovi prodotti per codici mai visti, aggiorna soft i campi vuoti degli esistenti.
+   * NON modifica MAI: Ingrediente, UMBase, PZxCT, KGxPZ, PZxFila, FilePerCT, Note, NonInUso.
+   * 
+   * @returns {{nuovi: number, aggiornati: number}} Statistiche sincronizzazione
+   */
+  function syncProdottiFromRighe() {
+    const stats = { nuovi: 0, aggiornati: 0 };
+
+    // 1. Carica foglio Prodotti e crea mappa keyProd -> {rowIndex, data}
+    const shProdotti = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+    if (!shProdotti) {
+      LOG.error('SYNC_PRODOTTI', 'Foglio Prodotti non trovato.');
+      return stats;
+    }
+
+    const headerRowProd = SHEETS._findHeaderRow(shProdotti, SHEETS.SHEET_NAMES.Prodotti);
+    const idxProd = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+
+    // Verifica colonne essenziali Prodotti
+    const requiredProd = ['FornitoreID', 'CodiceFornitore', 'Descrizione', 'UM', 'CodiceInterno'];
+    const missingProd = requiredProd.filter(k => idxProd[k] === undefined);
+    if (missingProd.length) {
+      LOG.error('SYNC_PRODOTTI', 'Intestazioni mancanti in Prodotti.', { missing: missingProd });
+      return stats;
+    }
+
+    // Forza formato TEXT su colonna CodiceFornitore
+    try {
+      const codFornCol = idxProd.CodiceFornitore + 1;
+      const lastRowProd = shProdotti.getLastRow();
+      if (lastRowProd > headerRowProd) {
+        const rangeCodForn = shProdotti.getRange(headerRowProd + 1, codFornCol, lastRowProd - headerRowProd, 1);
+        rangeCodForn.setNumberFormat('@');
+      }
+    } catch (e) {
+      LOG.warn('SYNC_PRODOTTI', 'Errore applicando formato TEXT a CodiceFornitore.', { error: e.message });
+    }
+
+    // Leggi Prodotti esistenti
+    const prodottiMap = new Map(); // key -> {rowIndex, data}
+    const lastRowProd = shProdotti.getLastRow();
+    if (lastRowProd > headerRowProd) {
+      const valuesProd = shProdotti.getRange(headerRowProd + 1, 1, lastRowProd - headerRowProd, shProdotti.getLastColumn()).getValues();
+      valuesProd.forEach((row, i) => {
+        const fornId = String(row[idxProd.FornitoreID] || '').trim();
+        const codForn = String(row[idxProd.CodiceFornitore] || '').trim();
+        if (!fornId || !codForn) return;
+        
+        const key = `${fornId}||${codForn}`;
+        prodottiMap.set(key, {
+          rowIndex: headerRowProd + 1 + i,
+          data: row
+        });
+      });
+    }
+
+    LOG.info('SYNC_PRODOTTI', `Caricati ${prodottiMap.size} prodotti esistenti.`);
+
+    // 2. Leggi foglio Righe
+    const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
+    if (!shRighe) {
+      LOG.error('SYNC_PRODOTTI', 'Foglio Righe non trovato.');
+      return stats;
+    }
+
+    const headerRowRighe = SHEETS._findHeaderRow(shRighe, SHEETS.SHEET_NAMES.Righe);
+    const idxRighe = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
+
+    // Verifica colonne essenziali Righe
+    const requiredRighe = ['FornitoreID', 'Codice Articolo Fornitore', 'Descrizione', 'Quantita'];
+    const missingRighe = requiredRighe.filter(k => idxRighe[k] === undefined);
+    if (missingRighe.length) {
+      LOG.error('SYNC_PRODOTTI', 'Intestazioni mancanti in Righe.', { missing: missingRighe });
+      return stats;
+    }
+
+    const lastRowRighe = shRighe.getLastRow();
+    if (lastRowRighe <= headerRowRighe) {
+      LOG.info('SYNC_PRODOTTI', 'Foglio Righe vuoto. Nessun sync necessario.');
+      return stats;
+    }
+
+    // Carica mappa Fornitori per CategoriaProdotto
+    const fornitoriMap = _loadFornitoriMap();
+
+    // 3. Processa righe e identifica nuovi/esistenti
+    const valuesRighe = shRighe.getRange(headerRowRighe + 1, 1, lastRowRighe - headerRowRighe, shRighe.getLastColumn()).getValues();
+    const newProducts = [];
+    const updates = {}; // rowIndex -> {colIndex: newValue}
+
+    valuesRighe.forEach(row => {
+      const quantita = Number(row[idxRighe.Quantita]) || 0;
+      const codArticolo = String(row[idxRighe['Codice Articolo Fornitore']] || '').trim();
+      
+      if (quantita <= 0 || !codArticolo) return;
+
+      const fornId = String(row[idxRighe.FornitoreID] || '').trim();
+      const descrizione = String(row[idxRighe.Descrizione] || '').trim();
+      const um = String(row[idxRighe.UM] || '').trim();
+      const fornName = String(row[idxRighe.DenominazioneFornitore] || '').trim();
+
+      if (!fornId) return;
+
+      const keyRiga = `${fornId}||${codArticolo}`;
+      const existing = prodottiMap.get(keyRiga);
+
+      if (!existing) {
+        // NUOVO PRODOTTO
+        const codiceInterno = `${fornId}-${codArticolo}`;
+        const categoria = fornitoriMap.get(fornId) || '';
+        const now = new Date();
+
+        const newRow = _buildProductRow(idxProd, {
+          CodiceInterno: codiceInterno,
+          CodiceFornitore: codArticolo,
+          Descrizione: descrizione,
+          UM: um,
+          FornitoreID: fornId,
+          DenominazioneFornitore: fornName,
+          CategoriaProdotto: categoria,
+          Note: '',
+          CreatoIl: now,
+          UltimoAgg: now,
+          Ingrediente: '',
+          NonInUso: false,
+          UMBase: '',
+          PZxCT: '',
+          KGxPZ: '',
+          PZxFila: '',
+          FilePerCT: '',
+          RichiedeSetup: true,
+          CostoUnitario: '',
+          UMCosto: ''
+        });
+
+        newProducts.push(newRow);
+        stats.nuovi++;
+
+      } else {
+        // PRODOTTO ESISTENTE - aggiorna solo campi vuoti
+        const existingData = existing.data;
+        const rowIdx = existing.rowIndex;
+        let needsUpdate = false;
+
+        if (!updates[rowIdx]) updates[rowIdx] = {};
+
+        // Aggiorna solo se vuoto
+        if (!existingData[idxProd.Descrizione] && descrizione) {
+          updates[rowIdx][idxProd.Descrizione] = descrizione;
+          needsUpdate = true;
+        }
+        if (!existingData[idxProd.UM] && um) {
+          updates[rowIdx][idxProd.UM] = um;
+          needsUpdate = true;
+        }
+        if (!existingData[idxProd.DenominazioneFornitore] && fornName) {
+          updates[rowIdx][idxProd.DenominazioneFornitore] = fornName;
+          needsUpdate = true;
+        }
+        if (!existingData[idxProd.CategoriaProdotto]) {
+          const categoria = fornitoriMap.get(fornId) || '';
+          if (categoria) {
+            updates[rowIdx][idxProd.CategoriaProdotto] = categoria;
+            needsUpdate = true;
+          }
+        }
+
+        if (needsUpdate) {
+          updates[rowIdx][idxProd.UltimoAgg] = new Date();
+          stats.aggiornati++;
+        }
+      }
+    });
+
+    // 4. Scrivi nuovi prodotti
+    if (newProducts.length > 0) {
+      try {
+        const startRow = Math.max(headerRowProd + 1, shProdotti.getLastRow() + 1);
+        UTIL.writeBatched(shProdotti, startRow, newProducts);
+        LOG.info('SYNC_PRODOTTI', `Aggiunti ${newProducts.length} nuovi prodotti.`);
+      } catch (e) {
+        LOG.error('SYNC_PRODOTTI', 'Errore scrittura nuovi prodotti.', { error: e.message });
+      }
+    }
+
+    // 5. Applica aggiornamenti soft
+    if (Object.keys(updates).length > 0) {
+      try {
+        UTIL.batchUpdateCells(shProdotti, updates, 1);
+        LOG.info('SYNC_PRODOTTI', `Aggiornati ${stats.aggiornati} prodotti esistenti (campi vuoti).`);
+      } catch (e) {
+        LOG.error('SYNC_PRODOTTI', 'Errore aggiornamento prodotti esistenti.', { error: e.message });
+      }
+    }
+
+    return stats;
+  }
+
+  /**
+   * Suggerisce UMBase e KGxPZ leggendo la Descrizione dei prodotti con RichiedeSetup=TRUE.
+   * SOLO per pattern PESO affidabili (kg, gr).
+   * NON gestisce volumi (litri, ml, bottiglie) per evitare ambiguità.
+   * NON sovrascrive valori già compilati manualmente.
+   * 
+   * @returns {{aggiornati: number}} Statistiche suggerimenti applicati
+   */
+  function suggestUnitsFromDescription() {
+    const stats = { aggiornati: 0 };
+
+    const shProdotti = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+    if (!shProdotti) {
+      LOG.error('SUGGERISCI_UM', 'Foglio Prodotti non trovato.');
+      return stats;
+    }
+
+    const headerRow = SHEETS._findHeaderRow(shProdotti, SHEETS.SHEET_NAMES.Prodotti);
+    const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+
+    // Verifica colonne necessarie
+    const required = ['Descrizione', 'RichiedeSetup', 'UMBase', 'KGxPZ', 'NonInUso', 'Note'];
+    const missing = required.filter(k => idx[k] === undefined);
+    if (missing.length) {
+      LOG.error('SUGGERISCI_UM', 'Intestazioni mancanti in Prodotti.', { missing });
+      return stats;
+    }
+
+    const lastRow = shProdotti.getLastRow();
+    if (lastRow <= headerRow) {
+      LOG.info('SUGGERISCI_UM', 'Foglio Prodotti vuoto.');
+      return stats;
+    }
+
+    const values = shProdotti.getRange(headerRow + 1, 1, lastRow - headerRow, shProdotti.getLastColumn()).getValues();
+    const updates = {}; // rowIndex -> {colIndex: value}
+
+    values.forEach((row, i) => {
+      const rowIdx = headerRow + 1 + i;
+
+      // Filtro: solo prodotti che richiedono setup, non disabilitati, con descrizione
+      const richiedeSetup = row[idx.RichiedeSetup] === true || String(row[idx.RichiedeSetup]).toLowerCase() === 'true';
+      const nonInUso = row[idx.NonInUso] === true || String(row[idx.NonInUso]).toLowerCase() === 'true';
+      const descrizione = String(row[idx.Descrizione] || '').trim();
+      const umBase = String(row[idx.UMBase] || '').trim();
+      const kgxpz = row[idx.KGxPZ];
+
+      if (!richiedeSetup || nonInUso || !descrizione) return;
+      if (umBase && kgxpz) return; // Già configurato
+
+      // Parsing descrizione
+      const parsed = _parseWeightFromDescription(descrizione);
+      if (!parsed) return; // Nessun pattern riconosciuto
+
+      if (!updates[rowIdx]) updates[rowIdx] = {};
+
+      // Applica suggerimenti solo se campi vuoti
+      if (!umBase && parsed.tipo === 'KG') {
+        updates[rowIdx][idx.UMBase] = 'KG';
+      }
+      if (!kgxpz && parsed.kgPerPezzo) {
+        updates[rowIdx][idx.KGxPZ] = parsed.kgPerPezzo;
+      }
+
+      // Aggiungi nota solo se Note vuoto
+      const note = String(row[idx.Note] || '').trim();
+      if (!note) {
+        updates[rowIdx][idx.Note] = 'UM/KG suggeriti automaticamente da descrizione';
+      }
+
+      if (Object.keys(updates[rowIdx]).length > 0) {
+        stats.aggiornati++;
+      }
+    });
+
+    // Applica aggiornamenti
+    if (Object.keys(updates).length > 0) {
+      try {
+        UTIL.batchUpdateCells(shProdotti, updates, 1);
+        LOG.info('SUGGERISCI_UM', `Suggerimenti applicati a ${stats.aggiornati} prodotti.`);
+      } catch (e) {
+        LOG.error('SUGGERISCI_UM', 'Errore applicando suggerimenti.', { error: e.message });
+      }
+    } else {
+      LOG.info('SUGGERISCI_UM', 'Nessun suggerimento applicabile.');
+    }
+
+    return stats;
+  }
+
+  // ========== HELPERS PRIVATI ==========
+
+  /**
+   * Costruisce array riga prodotto allineato allo schema Prodotti.
+   * @private
+   */
+  function _buildProductRow(idx, data) {
+    const schema = SHEETS.SCHEMAS[SHEETS.SHEET_NAMES.Prodotti];
+    if (!schema || !Array.isArray(schema)) {
+      LOG.error('SYNC_PRODOTTI_BUILD', 'Schema Prodotti mancante.');
+      return [];
+    }
+
+    return schema.map(header => {
+      const key = String(header).replace(/ /g, '');
+      return key in data ? data[key] : '';
+    });
+  }
+
+  /**
+   * Carica mappa FornitoreID -> Categoria dal foglio Fornitori.
+   * @private
+   */
+  function _loadFornitoriMap() {
+    const map = new Map();
+    const shForn = SHEETS.get(SHEETS.SHEET_NAMES.Fornitori);
+    if (!shForn) return map;
+
+    try {
+      const headerRow = SHEETS._findHeaderRow(shForn, SHEETS.SHEET_NAMES.Fornitori);
+      const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fornitori);
+      if (idx.FornitoreID === undefined || idx.Categoria === undefined) return map;
+
+      const lastRow = shForn.getLastRow();
+      if (lastRow <= headerRow) return map;
+
+      const values = shForn.getRange(headerRow + 1, 1, lastRow - headerRow, shForn.getLastColumn()).getValues();
+      values.forEach(row => {
+        const id = String(row[idx.FornitoreID] || '').trim();
+        const cat = String(row[idx.Categoria] || '').trim();
+        if (id && cat) map.set(id, cat);
+      });
+    } catch (e) {
+      LOG.warn('SYNC_PRODOTTI_FORNITORI', 'Errore caricando mappa fornitori.', { error: e.message });
+    }
+
+    return map;
+  }
+
+  /**
+   * Estrae peso da descrizione prodotto usando pattern affidabili.
+   * Gestisce SOLO pesi (kg, gr) - NON volumi.
+   * 
+   * Pattern riconosciuti:
+   * - "kg 1,3" / "kg 1.3" / "kg.1,3"
+   * - "busta gr.800" / "gr 800" / "g 800"
+   * - "vaso da kg 1,2"
+   * 
+   * @param {string} descrizione - Descrizione prodotto
+   * @returns {{tipo: string, kgPerPezzo: number}|null} Peso parsato o null se non riconosciuto
+   * @private
+   */
+  function _parseWeightFromDescription(descrizione) {
+    if (!descrizione) return null;
+
+    const desc = descrizione.toLowerCase().trim();
+
+    // Pattern 1: kg con decimali (virgola o punto)
+    // Es: "kg 1,3", "kg 1.3", "kg.1,3", "da kg 1.2"
+    const regexKg = /kg[\s.]*([0-9]+[,.]?[0-9]*)/i;
+    const matchKg = desc.match(regexKg);
+    if (matchKg) {
+      const numStr = matchKg[1].replace(',', '.');
+      const kg = parseFloat(numStr);
+      if (!isNaN(kg) && kg > 0) {
+        return { tipo: 'KG', kgPerPezzo: kg };
+      }
+    }
+
+    // Pattern 2: grammi (gr o g seguiti da numero intero)
+    // Es: "gr.800", "gr 800", "g 800", "busta gr.800"
+    const regexGr = /\b(?:gr?|grammi?)[\s.]*([0-9]+)\b/i;
+    const matchGr = desc.match(regexGr);
+    if (matchGr) {
+      const gr = parseInt(matchGr[1], 10);
+      if (!isNaN(gr) && gr > 0) {
+        return { tipo: 'KG', kgPerPezzo: gr / 1000 };
+      }
+    }
+
+    // Nessun pattern riconosciuto
+    return null;
+  }
+
+  // ========== API PUBBLICA ==========
+  return {
+    syncProdottiFromRighe,
+    suggestUnitsFromDescription
+  };
+})();
+
+// ========== WRAPPER PUBBLICI PER MENU ==========
+
+/**
+ * Sincronizza foglio Prodotti dalle righe fatture.
+ * Wrapper pubblico per menu UI.
+ * @returns {void}
+ */
+function runSyncProdotti() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  try {
+    ss.toast('Sincronizzazione Prodotti in corso...', 'Attendere...', -1);
+    
+    const stats = SYNC_PRODOTTI.syncProdottiFromRighe();
+    
+    LOG.info('SYNC_PRODOTTI', 'Sincronizzazione completata.', stats);
+    ss.toast(
+      `✅ Sincronizzazione completata!\n` +
+      `Nuovi prodotti: ${stats.nuovi}\n` +
+      `Aggiornati: ${stats.aggiornati}`,
+      'Fatto!',
+      5
+    );
+  } catch (e) {
+    LOG.error('SYNC_PRODOTTI', 'Errore durante sincronizzazione.', { error: e.message, stack: e.stack });
+    ss.toast(`❌ Errore: ${e.message}`, 'Errore', 5);
+    throw e;
+  }
+}
+
+/**
+ * Suggerisce UM e KG/PZ leggendo le descrizioni prodotti.
+ * Wrapper pubblico per menu UI.
+ * @returns {void}
+ */
+function runSuggestUnitsFromDescription() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  try {
+    ss.toast('Analisi descrizioni prodotti in corso...', 'Attendere...', -1);
+    
+    const stats = SYNC_PRODOTTI.suggestUnitsFromDescription();
+    
+    LOG.info('SUGGERISCI_UM', 'Suggerimenti completati.', stats);
+    ss.toast(
+      `✅ Analisi completata!\n` +
+      `Prodotti aggiornati: ${stats.aggiornati}`,
+      'Fatto!',
+      5
+    );
+  } catch (e) {
+    LOG.error('SUGGERISCI_UM', 'Errore durante suggerimento UM.', { error: e.message, stack: e.stack });
+    ss.toast(`❌ Errore: ${e.message}`, 'Errore', 5);
+    throw e;
+  }
+}
+
+// Registrazione moduli
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('SYNC_PRODOTTI', ['SHEETS', 'LOG', 'UTIL']);
+}
+
+if (typeof GG !== 'undefined') {
+  GG.register('SYNC_PRODOTTI', SYNC_PRODOTTI);
+}

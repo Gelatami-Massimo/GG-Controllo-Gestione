@@ -60,6 +60,9 @@ function onOpen() {
     .addItem('Fornitori', App.ui.fn.runSyncSuppliers)
     .addItem('Categorie', App.ui.fn.runSyncCategoriesRetroactive)
     .addSeparator()
+    .addItem('Sync Prodotti da Righe', 'runSyncProdotti')
+    .addItem('Suggerisci UM', 'runSuggestUnitsFromDescription')
+    .addSeparator()
     .addItem('Duplicati', App.ui.fn.runMarkDuplicateInvoices)
     .addItem('Cache', App.ui.fn.runClearCache)
   );
