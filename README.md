@@ -1,8 +1,27 @@
 # 📚 DOCUMENTATION INDEX
-## GG GESTIONE GELATAMI V1 (v25.0)
+## GG GESTIONE GELATAMI V1 (v28.0)
 
-**Last Updated**: 13 Novembre 2025  
+**Last Updated**: 20 Novembre 2025  
 **Project Status**: ✅ COMPLETE & DEPLOYED
+
+---
+
+## 📊 FOGLI GOOGLE SHEETS ATTIVI
+
+### ✅ Fogli in Uso (Versione Corrente)
+- **Righe** - Righe fatture importate (source of truth per acquisti)
+- **Prodotti** - Catalogo prodotti con codici interni/fornitori
+- **Magazzino_V2** - Report magazzino per PRODOTTO (Anno + CodiceInterno + Reparto)
+- **Magazzino_Ingredienti_V2** - Report magazzino per INGREDIENTE (Anno + Ingrediente + Reparto)
+- **Fatture** - Metadata fatture XML importate
+- **Fornitori** - Anagrafica fornitori
+- **Log** - Sistema logging applicativo
+
+### ⚠️ Fogli Deprecati (Non Più Utilizzati)
+- **Magazzino** (vecchio) - Sostituito da Magazzino_V2
+- **Regole UM** - Logica migrata in colonne Prodotti (UMBase, PZxCT, KGxPZ)
+
+**Nota**: I fogli deprecati possono essere nascosti o eliminati senza impatto sul sistema.
 
 ---
 
