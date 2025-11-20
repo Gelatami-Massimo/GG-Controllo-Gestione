@@ -1,10 +1,11 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 70_import_rows.js
-// VERSIONE: 26.0 (Row Import - REFACTORED with SHEET_ITERATOR)
+// VERSIONE: 30.0 (Row Import + TipoRiga Robust Classification)
 // DESCRIZIONE: Importa le righe. Filtro righe "spazzatura" dinamico
 //              • Logica di skip corretta (non blocca import futuri)
 //              • RigheImportate = TRUE solo se le righe sono state scritte
+//              • TipoRiga robusto: ARTICOLO, SCONTO, OMAGGIO, TESTO
 //              REFACTORED: Manual loop replaced with SHEET_ITERATOR.forEachChunk()
 // =============================================================
 
@@ -12,6 +13,133 @@ const IMPORT_ROWS = (function () {
 
   // Cache per righe esistenti (prevenzione duplicati)
   let existingRowsCache = null;
+
+  // ============================================================
+  // HELPER: Classificazione TipoRiga
+  // ============================================================
+
+  /**
+   * Costante: Codici tipo che identificano righe di sconto.
+   * Alcuni fornitori usano CodiceTipo specifici per gli sconti.
+   */
+  const DISCOUNT_CODE_TYPES = ['SC', 'S', 'DSC', 'SCONTO', 'DISCOUNT'];
+
+  /**
+   * Verifica se una descrizione contiene parole chiave di sconto.
+   * @param {string} desc - Descrizione della riga (già uppercased)
+   * @returns {boolean} TRUE se è una descrizione di sconto
+   */
+  function _isDiscountDescription(desc) {
+    const descUpper = String(desc || '').toUpperCase();
+    const discountKeywords = [
+      'SCONTO', 'SCNT', 'S.C.', 'SC.', 'APP.SCONTI', 'APPLICAZIONE SCONTI',
+      'ABBUONO', 'ABBONO', 'BONUS', 'RABATT', 'RAB.', 'RIDUZIONE',
+      'DISCOUNT', 'REBATE', 'REDUCTION', 'PROMO', 'PROMOZIONALE'
+    ];
+    return discountKeywords.some(keyword => descUpper.includes(keyword));
+  }
+
+  /**
+   * Verifica se un CodiceTipo appartiene ai codici sconto.
+   * @param {string} code - CodiceTipo della riga
+   * @returns {boolean} TRUE se è un codice sconto
+   */
+  function _isDiscountCodeType(code) {
+    const codeUpper = String(code || '').toUpperCase().trim();
+    return DISCOUNT_CODE_TYPES.includes(codeUpper);
+  }
+
+  /**
+   * Classifica il tipo di riga secondo logica robusta multi-fornitore.
+   * 
+   * Regole:
+   * 1. OMAGGIO: Quantità > 0 e PrezzoTotale = 0
+   * 2. SCONTO: 
+   *    - Quantità = 0 e PrezzoTotale ≠ 0, OPPURE
+   *    - PrezzoTotale < 0 e descrizione/codice contiene keyword sconto, OPPURE
+   *    - CodiceTipo è un codice sconto (SC, S, DSC)
+   * 3. TESTO: Quantità = 0, PrezzoTotale = 0, nessuna keyword sconto
+   * 4. ARTICOLO: default (Quantità > 0, PrezzoTotale > 0, non OMAGGIO)
+   * 
+   * @param {number} quantita - Quantità della riga
+   * @param {number} prezzoTotale - Prezzo totale della riga
+   * @param {string} descrizione - Descrizione della riga
+   * @param {string} codiceTipo - CodiceTipo (se presente)
+   * @returns {string} "ARTICOLO" | "SCONTO" | "OMAGGIO" | "TESTO"
+   * 
+   * @example
+   * // ARTICOLO: Prodotto normale
+   * _classifyRowType(10, 15.00, "Latte Intero 1L", "ART")
+   * // → "ARTICOLO"
+   * 
+   * @example
+   * // OMAGGIO: Quantità positiva ma prezzo zero
+   * _classifyRowType(5, 0, "Campione omaggio yogurt", "PROMO")
+   * // → "OMAGGIO"
+   * 
+   * @example
+   * // SCONTO: Quantità zero, prezzo negativo
+   * _classifyRowType(0, -5.00, "Sconto cliente fedele", "")
+   * // → "SCONTO"
+   * 
+   * @example
+   * // SCONTO: Prezzo negativo con keyword
+   * _classifyRowType(1, -2.50, "APPLICAZIONE SCONTI PIEDE", "")
+   * // → "SCONTO"
+   * 
+   * @example
+   * // SCONTO: CodiceTipo esplicito
+   * _classifyRowType(0, -10.00, "Riduzione per volume", "SC")
+   * // → "SCONTO"
+   * 
+   * @example
+   * // TESTO: Nota senza valore economico
+   * _classifyRowType(0, 0, "Consegna prevista: 15/11/2025", "")
+   * // → "TESTO"
+   */
+  function _classifyRowType(quantita, prezzoTotale, descrizione, codiceTipo) {
+    // Normalizza input (gestisce null/undefined)
+    const qta = Number(quantita) || 0;
+    const tot = Number(prezzoTotale) || 0;
+    const desc = String(descrizione || '');
+    const code = String(codiceTipo || '');
+
+    // 1) OMAGGIO: Quantità > 0 ma prezzo = 0
+    if (qta > 0 && tot === 0) {
+      return 'OMAGGIO';
+    }
+
+    // 2) SCONTO: Varie casistiche
+    const hasDiscountKeyword = _isDiscountDescription(desc);
+    const hasDiscountCode = _isDiscountCodeType(code);
+
+    // 2a) Quantità = 0 e prezzo ≠ 0 → sempre SCONTO
+    if (qta === 0 && tot !== 0) {
+      return 'SCONTO';
+    }
+
+    // 2b) Prezzo negativo + keyword/codice sconto → SCONTO
+    if (tot < 0 && (hasDiscountKeyword || hasDiscountCode)) {
+      return 'SCONTO';
+    }
+
+    // 2c) Codice tipo è esplicitamente sconto (indipendentemente da prezzo)
+    if (hasDiscountCode && tot <= 0) {
+      return 'SCONTO';
+    }
+
+    // 3) TESTO: Quantità = 0, prezzo = 0, nessuna keyword sconto
+    if (qta === 0 && tot === 0 && !hasDiscountKeyword) {
+      return 'TESTO';
+    }
+
+    // 4) ARTICOLO: default (prodotto normale con quantità e prezzo)
+    return 'ARTICOLO';
+  }
+
+  // ============================================================
+  // FINE HELPER TipoRiga
+  // ============================================================
 
   function run(isSilent = false) {
     if (!isSilent) STATE.clear(App.config.keys.progress);
@@ -385,21 +513,11 @@ const IMPORT_ROWS = (function () {
             continue; // ✅ Salta questa riga (già importata in precedenza)
           }
 
-          // ✅ CALCOLO TIPORIGA
-          // ARTICOLO: Quantità > 0 e PrezzoTotale ≠ 0
-          // SCONTO: Quantità = 0 e PrezzoTotale < 0
-          // TESTO: Quantità = 0 e PrezzoTotale = 0
-          let tipoRiga = 'TESTO'; // default
-          if (qta > 0 && prezzoTotaleRiga !== 0) {
-            tipoRiga = 'ARTICOLO';
-          } else if (qta === 0 && prezzoTotaleRiga < 0) {
-            tipoRiga = 'SCONTO';
-          } else if (qta === 0 && prezzoTotaleRiga === 0) {
-            tipoRiga = 'TESTO';
-          }
+          // ✅ CALCOLO TIPORIGA - LOGICA ROBUSTA MULTI-FORNITORE
+          const tipoRiga = _classifyRowType(qta, prezzoTotaleRiga, descrizione, codiceTipo);
 
-          // ✅ Gestione Prodotti (SOLO per ARTICOLO e se non è spazzatura)
-          if (!isJunk && tipoRiga === 'ARTICOLO') {
+          // ✅ Gestione Prodotti (SOLO per ARTICOLO/OMAGGIO e se non è spazzatura)
+          if (!isJunk && (tipoRiga === 'ARTICOLO' || tipoRiga === 'OMAGGIO')) {
             PRODUCTS.ensureProduct(
               invData[idxF.FornitoreID], invData[idxF.DenominazioneFornitore],
               codiceValoreRaw, descrizione, um, productCache, categoriaFornitore

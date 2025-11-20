@@ -1,4 +1,4 @@
-# Feature: TipoRiga + Prodotti Senza Codice Articolo
+# Feature: TipoRiga Robusto + Prodotti Senza Codice Articolo
 
 **Data Implementazione:** 20 Novembre 2025  
 **Versione:** 30.0  
@@ -10,12 +10,12 @@
 
 Due miglioramenti fondamentali alla logica di import:
 
-1. **Colonna TipoRiga**: Classifica automaticamente ogni riga importata come ARTICOLO, SCONTO o TESTO
+1. **Colonna TipoRiga ROBUSTA**: Classifica automaticamente ogni riga con logica multi-fornitore indipendente
 2. **Prodotti senza codice**: Gestisce prodotti anche quando il fornitore non fornisce un codice articolo
 
 ---
 
-## 🏗️ 1. Colonna TipoRiga
+## 🏗️ 1. TipoRiga - Logica Robusta Multi-Fornitore
 
 ### Schema Righe (aggiornato)
 ```javascript
@@ -29,24 +29,53 @@ Due miglioramenti fondamentali alla logica di import:
 ]
 ```
 
-### Logica di Classificazione
+### Logica di Classificazione ROBUSTA
 
+#### 1. OMAGGIO
 ```javascript
-// ARTICOLO: prodotti con quantità e prezzo
-if (Quantita > 0 && PrezzoTotale !== 0) {
-  TipoRiga = "ARTICOLO"
+if (Quantita > 0 && PrezzoTotale === 0) {
+  TipoRiga = "OMAGGIO"
 }
+```
+**Casistica:** Prodotti campione, omaggi promozionali, prove gratuite
 
-// SCONTO: righe di sconto (senza quantità, prezzo negativo)
-else if (Quantita === 0 && PrezzoTotale < 0) {
+#### 2. SCONTO (Multi-condizione)
+```javascript
+// Condizione A: Quantità zero con prezzo (tipico sconti piede)
+if (Quantita === 0 && PrezzoTotale !== 0) {
   TipoRiga = "SCONTO"
 }
 
-// TESTO: righe descrittive senza valore economico
-else if (Quantita === 0 && PrezzoTotale === 0) {
+// Condizione B: Prezzo negativo + keyword sconto in descrizione
+if (PrezzoTotale < 0 && descrizioneContieneSconto) {
+  TipoRiga = "SCONTO"
+}
+
+// Condizione C: CodiceTipo esplicito di sconto
+if (CodiceTipo in ['SC', 'S', 'DSC', 'SCONTO']) {
+  TipoRiga = "SCONTO"
+}
+```
+**Keywords riconosciute:**
+- Italiano: `SCONTO`, `SCNT`, `S.C.`, `SC.`, `APP.SCONTI`, `APPLICAZIONE SCONTI`, `ABBUONO`, `ABBONO`, `BONUS`, `RABATT`, `RAB.`, `RIDUZIONE`
+- Inglese: `DISCOUNT`, `REBATE`, `REDUCTION`, `PROMO`, `PROMOZIONALE`
+
+#### 3. TESTO
+```javascript
+if (Quantita === 0 && PrezzoTotale === 0 && !hasDiscountKeyword) {
   TipoRiga = "TESTO"
 }
 ```
+**Casistica:** Note, riferimenti ordini, informazioni consegna
+
+#### 4. ARTICOLO (Default)
+```javascript
+// Tutto ciò che non è OMAGGIO, SCONTO o TESTO
+if (Quantita > 0 && PrezzoTotale > 0) {
+  TipoRiga = "ARTICOLO"
+}
+```
+**Casistica:** Prodotti normali con quantità e prezzo
 
 ### Esempi Pratici
 
@@ -60,9 +89,19 @@ PrezzoTotale: 15.00
 → TipoRiga: "ARTICOLO"  ✅ Crea prodotto
 ```
 
-#### Esempio 2: Riga SCONTO
+#### Esempio 2: Riga OMAGGIO
 ```
 NumeroLinea: 2
+Descrizione: "CAMPIONE GELATO PISTACCHIO 100G"
+Quantita: 5
+PrezzoUnitario: 0
+PrezzoTotale: 0
+→ TipoRiga: "OMAGGIO"  ✅ Crea prodotto (NonInUso=TRUE)
+```
+
+#### Esempio 3: Riga SCONTO (Metodo A: qta=0)
+```
+NumeroLinea: 3
 Descrizione: "Sconto promozionale"
 Quantita: 0
 PrezzoUnitario: 0
@@ -70,9 +109,29 @@ PrezzoTotale: -2.50
 → TipoRiga: "SCONTO"  ❌ NON crea prodotto
 ```
 
-#### Esempio 3: Riga TESTO
+#### Esempio 4: Riga SCONTO (Metodo B: keyword + prezzo negativo)
 ```
-NumeroLinea: 3
+NumeroLinea: 4
+Descrizione: "APP. SCONTI ACCORDATI"
+Quantita: 1
+PrezzoUnitario: -5.00
+PrezzoTotale: -5.00
+→ TipoRiga: "SCONTO"  ❌ NON crea prodotto
+```
+
+#### Esempio 5: Riga SCONTO (Metodo C: CodiceTipo)
+```
+NumeroLinea: 5
+Descrizione: "Sconto quantità"
+CodiceTipo: "SC"
+Quantita: 0
+PrezzoTotale: -10.00
+→ TipoRiga: "SCONTO"  ❌ NON crea prodotto
+```
+
+#### Esempio 6: Riga TESTO
+```
+NumeroLinea: 6
 Descrizione: "Consegna prevista: 15/11/2025"
 Quantita: 0
 PrezzoUnitario: 0
