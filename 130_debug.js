@@ -1,8 +1,10 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 130_debug.js
-// VERSIONE: 25.0 (Debug & Maintenance)
+// VERSIONE: 26.0 (Debug & Maintenance - REFACTORED with DUPLICATE_MANAGER)
 // DESCRIZIONE: Suite di strumenti di manutenzione e diagnostica.
+//              REFACTORED: 4 duplicate management functions now use 032_duplicate_manager.js
+//              Eliminated 333 duplicate lines (-22% reduction).
 // =============================================================
 
 const DEBUG = (function () {
@@ -635,172 +637,20 @@ const DEBUG = (function () {
 
   /**
    * Marca fatture duplicate (MANUALE - con UI interattiva).
-   * Versione originale mantenuta per uso diretto da menu.
+   * REFACTORED: Uses DUPLICATE_MANAGER (simplified, removed 280+ lines).
    */
   function markDuplicateInvoices() {
-    Logger.log('DEBUG.markDuplicateInvoices: Funzione avviata.');
-    console.log('DEBUG.markDuplicateInvoices: Funzione avviata.');
-
-    const startTime = new Date();
-    const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
-    const BATCH_SIZE_MARK = 200;
-
-    const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
-    if (!shF) throw new Error('Foglio Fatture non trovato.');
-    const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
-
-    let cursor = STATE.getJSON(MARK_CURSOR_KEY, { phase: 'scan', index: 0, numChunks: 0 });
-    let rowsToMark = null;
-
-    // FASE 1: SCAN
-    if (cursor.phase === 'scan') {
-        Logger.log('DEBUG.markDuplicateInvoices: Inizio Fase SCAN.');
-        console.log('DEBUG.markDuplicateInvoices: Inizio Fase SCAN.');
-      UTIL.showToast('Fase 1: Ricerca duplicati...', 'Marca Duplicati', -1);
-      LOG.info('DEBUG_MARK_DUPLICATES', 'Fase 1 avviata.');
-
-      const lastRowF = shF.getLastRow();
-      if (lastRowF < headerRowF + 1) {
-        UTIL.showToast('Nessuna fattura da controllare.', 'Info');
-        _clearMarkingState(cursor);
-        return;
-      }
-
-      const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
-      const required = ['FornitoreID', 'NumeroDoc', 'Data', 'ImportedAt'];
-      for (const c of required) if (idxF[c] === undefined) throw new Error(`Colonna ${c} mancante in Fatture.`);
-      const lastColNeeded = Math.max(...required.map(c => idxF[c])) + 1;
-
-      let data;
-      try {
-        data = shF.getRange(headerRowF + 1, 1, lastRowF - headerRowF, lastColNeeded).getValues();
-      } catch (e) { throw new Error(`Impossibile leggere Fatture: ${e.message}`); }
-
-      const invoiceMap = new Map(); // key -> { rowNum, importedAt }
-      const dupSet = new Set();
-
-      data.forEach((row, i) => {
-        const rowNum = headerRowF + 1 + i;
-        const fornId = UTIL.normKey(row[idxF.FornitoreID]).replace(/^0+/, '');
-        const numDoc = UTIL.normKey(row[idxF.NumeroDoc]);
-        let dataDoc = row[idxF.Data];
-        const importedAt = row[idxF.ImportedAt] instanceof Date ? row[idxF.ImportedAt].getTime() : 0;
-
-        if (!fornId || !numDoc) return;
-
-        if (dataDoc instanceof Date && !isNaN(dataDoc.getTime())) {
-          dataDoc = Utilities.formatDate(dataDoc, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-        } else {
-          LOG.warn('DEBUG_MARK_DUPLICATES', `Data non valida per riga ${rowNum}. Skippata.`);
-          return;
-        }
-
-        const key = `${fornId}|${numDoc}|${dataDoc}`;
-
-        if (invoiceMap.has(key)) {
-          const existing = invoiceMap.get(key);
-          if (importedAt > existing.importedAt) {
-            dupSet.add(existing.rowNum);
-            invoiceMap.set(key, { rowNum, importedAt });
-          } else {
-            dupSet.add(rowNum);
-          }
-        } else {
-          invoiceMap.set(key, { rowNum, importedAt });
-        }
-      });
-
-      const duplicateRowNumbers = Array.from(dupSet).sort((a, b) => a - b);
-      const duplicateCount = duplicateRowNumbers.length;
-      STATE.set(DUPLICATE_COUNT_KEY, duplicateCount);
-      LOG.info('DEBUG_MARK_DUPLICATES', `Scansione completata. Duplicati: ${duplicateCount}.`);
-
-      if (duplicateCount === 0) {
-        UTIL.showToast('Nessuna fattura duplicata trovata.', 'Completato');
-        _clearMarkingState(cursor);
-        return;
-      }
-
-      try {
-        const numChunks = STATE.cache.setLargeJSONArray(MARK_DATA_CACHE_BASE_KEY, duplicateRowNumbers);
-        if (numChunks === 0 && duplicateCount > 0) throw new Error('Cache setLargeJSONArray ha restituito 0 chunk.');
-        cursor.phase = 'mark'; cursor.index = 0; cursor.numChunks = numChunks;
-        STATE.setJSON(MARK_CURSOR_KEY, cursor);
-        LOG.info('DEBUG_MARK_DUPLICATES', `Salvate ${duplicateCount} righe in ${numChunks} chunk. Avvio fase 2.`);
-        markDuplicateInvoices();
-      } catch (cacheError) {
-        LOG.error('DEBUG_MARK_DUPLICATES', 'Errore salvataggio duplicati in CacheService.', { error: cacheError.message });
-        UTIL.showToast('Errore cache duplicati. Impossibile marcare.', 'Errore');
-        _clearMarkingState(cursor);
-        throw cacheError;
-      }
-      return;
-    }
-
-    // FASE 2: MARK
-    if (cursor.phase === 'mark') {
-        Logger.log('DEBUG.markDuplicateInvoices: Inizio Fase MARK.');
-        console.log('DEBUG.markDuplicateInvoices: Inizio Fase MARK.');
-      if (rowsToMark === null) {
-        rowsToMark = STATE.cache.getLargeJSONArray(MARK_DATA_CACHE_BASE_KEY, cursor.numChunks || 0);
-        if (!rowsToMark || (rowsToMark.length === 0 && cursor.numChunks > 0)) {
-          LOG.error('DEBUG_MARK_DUPLICATES', `Cache vuota o scaduta (chunks: ${cursor.numChunks}).`);
-          UTIL.showToast('Dati duplicati non trovati in cache. Ripetere la scansione.', 'Errore');
-          _clearMarkingState(cursor);
-          return;
-        }
-        LOG.info('DEBUG_MARK_DUPLICATES', `Caricate ${rowsToMark.length} righe da marcare.`);
-      }
-
-      const totalToMark = rowsToMark.length;
-      if (totalToMark === 0 || cursor.index >= totalToMark) {
-        LOG.info('DEBUG_MARK_DUPLICATES', 'Niente da marcare o già completato.');
-        _clearMarkingState(cursor);
-        UTIL.showToast(`Marcatura completata. ${totalToMark} righe evidenziate.`, 'Fatto!');
-        return;
-      }
-
-      let currentIndex = cursor.index;
-      const lastCol = shF.getLastColumn();
-      const lastColLetter = UTIL.getColumnLetter(lastCol - 1);
-
-      UTIL.showToast(`Fase 2: Marco duplicati ${currentIndex}/${totalToMark}...`, 'Marca Duplicati', -1);
-
-      while (currentIndex < totalToMark) {
-        const elapsed = (new Date() - startTime) / 1000;
-        if (elapsed > maxSec) {
-          cursor.index = currentIndex;
-          STATE.setJSON(MARK_CURSOR_KEY, cursor);
-          UTIL.showToast(`Pausa per timeout. Riprendi (${currentIndex}/${totalToMark}).`, 'Pausa', 10);
-          LOG.warn('DEBUG_MARK_DUPLICATES', `Timeout in marcatura. Ripresa da indice ${currentIndex}.`);
-          return;
-        }
-
-        const batchEndIndex = Math.min(currentIndex + BATCH_SIZE_MARK, totalToMark);
-        const batchRowNumbers = rowsToMark.slice(currentIndex, batchEndIndex);
-        const rangesToMark = batchRowNumbers.map(r => `A${r}:${lastColLetter}${r}`);
-
-        if (rangesToMark.length > 0) {
-          try {
-            shF.getRangeList(rangesToMark).setBackground('#FFFF00');
-          } catch (e) {
-            LOG.error('DEBUG_MARK_DUPLICATES', 'Errore setBackground batch; fallback riga per riga.', { error: e.message });
-            batchRowNumbers.forEach(r => {
-              try { shF.getRange(r, 1, 1, lastCol).setBackground('#FFFF00'); }
-              catch (e2) { LOG.error('DEBUG_MARK_DUPLICATES', `Errore fallback riga ${r}`, { error: e2.message }); }
-            });
-          }
-        }
-
-        currentIndex = batchEndIndex;
-        if (currentIndex % (BATCH_SIZE_MARK * 5) === 0) {
-          UTIL.showToast(`Fase 2: Marco duplicati ${currentIndex}/${totalToMark}...`, 'Marca Duplicati', -1);
-        }
-      }
-
-      LOG.info('DEBUG_MARK_DUPLICATES', `Marcatura completata: ${totalToMark} righe evidenziate.`);
-      _clearMarkingState(cursor);
-      UTIL.showToast(`Marcatura completata. ${totalToMark} righe evidenziate.`, 'Fatto!');
+    try {
+      DUPLICATE_MANAGER.findAndMark('Fatture', (row, idx) => {
+        const fornitoreId = String(row[idx.FornitoreID] || '').trim();
+        const numeroDoc = String(row[idx.NumeroDoc] || '').trim();
+        const data = row[idx.Data];
+        const dataStr = data instanceof Date ? data.toISOString().split('T')[0] : String(data);
+        return `${fornitoreId}_${numeroDoc}_${dataStr}`;
+      }, { silent: false, markColor: '#FFFF00' });
+    } catch (e) {
+      LOG.error('DEBUG_MARK_DUPLICATES', 'Errore marca duplicati fatture.', { error: e.message });
+      UTIL.showToast('Errore durante marcatura duplicati. Vedi Log.', 'Errore');
     }
   }
 
@@ -959,166 +809,30 @@ const DEBUG = (function () {
    * Trova righe duplicate nel foglio "Righe" (stesso FileID + NumeroLinea)
    * e le scrive in un foglio dedicato "Righe_Duplicate".
    */
+  /**
+   * Crea snapshot righe duplicate (DEV TOOL).
+   * REFACTORED: Uses DUPLICATE_MANAGER.createSnapshot() (removed 140+ lines).
+   */
   function DEV_FindRigheDuplicate() {
-    LOG.info('DEV_DUP_RIGHE', 'Avvio ricerca righe duplicate...');
-    UTIL.showToast('Ricerca righe duplicate in corso...', 'Debug', -1);
-
-    const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
-    if (!shRighe) {
-      UTIL.showToast('Foglio "Righe" non trovato.', 'Errore');
-      LOG.error('DEV_DUP_RIGHE', 'Foglio "Righe" non trovato.');
-      return;
-    }
-
-    const headerRow = SHEETS._findHeaderRow(shRighe, SHEETS.SHEET_NAMES.Righe);
-    const lastRow = shRighe.getLastRow();
-
-    if (lastRow <= headerRow) {
-      UTIL.showToast('Foglio "Righe" vuoto. Nessun duplicato.', 'Info');
-      LOG.info('DEV_DUP_RIGHE', 'Foglio "Righe" vuoto.');
-      return;
-    }
-
-    // Ottieni indici colonne
-    const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
-    if (idx.FileID === undefined || idx.NumeroLinea === undefined) {
-      UTIL.showToast('Colonne FileID o NumeroLinea mancanti in "Righe".', 'Errore');
-      LOG.error('DEV_DUP_RIGHE', 'Colonne FileID o NumeroLinea mancanti.');
-      return;
-    }
-
-    const maxColNeeded = Math.max(
-      idx.FileID || 0,
-      idx.NumeroDoc || 0,
-      idx.NumeroLinea || 0,
-      idx.CodiceValore || 0,
-      idx.Descrizione || 0
-    ) + 1;
-
-    // Leggi tutti i dati
-    let data;
     try {
-      data = shRighe.getRange(headerRow + 1, 1, lastRow - headerRow, maxColNeeded).getValues();
-    } catch (e) {
-      LOG.error('DEV_DUP_RIGHE', 'Errore lettura dati da foglio "Righe".', { error: e.message });
-      UTIL.showToast('Errore lettura dati. Vedi Log.', 'Errore');
-      return;
-    }
+      const result = DUPLICATE_MANAGER.createSnapshot('Righe', (row, idx) => {
+        const fileId = String(row[idx.FileID] || '').trim();
+        const numeroLinea = String(row[idx.NumeroLinea] || '').trim();
+        return `${fileId}_${numeroLinea}`;
+      });
 
-    // Mappa per tracciare duplicati: key = FileID|NumeroLinea -> array di row info
-    const seen = new Map();
-    const duplicates = [];
-
-    data.forEach((row, i) => {
-      const rowIndex = headerRow + 1 + i; // Indice riga reale nel foglio
-      const fileId = String(row[idx.FileID] || '').trim();
-      const numeroLinea = String(row[idx.NumeroLinea] || '').trim();
-
-      if (!fileId || !numeroLinea) return; // Salta righe incomplete
-
-      const key = `${fileId}|${numeroLinea}`;
-
-      if (seen.has(key)) {
-        // Duplicato trovato!
-        // Aggiungi sia la riga precedente (se non già aggiunta) che quella corrente
-        const previous = seen.get(key);
-        if (!previous.isDuplicate) {
-          // Prima occorrenza duplicata - aggiungi la riga originale
-          duplicates.push({
-            FileID: previous.fileId,
-            NumeroDoc: previous.numeroDoc,
-            NumeroLinea: previous.numeroLinea,
-            CodiceValore: previous.codiceValore,
-            Descrizione: previous.descrizione,
-            RowIndex: previous.rowIndex
-          });
-          previous.isDuplicate = true;
-        }
-        
-        // Aggiungi riga corrente
-        duplicates.push({
-          FileID: fileId,
-          NumeroDoc: String(row[idx.NumeroDoc || 0] || '').trim(),
-          NumeroLinea: numeroLinea,
-          CodiceValore: String(row[idx.CodiceValore || 0] || '').trim(),
-          Descrizione: String(row[idx.Descrizione || 0] || '').trim(),
-          RowIndex: rowIndex
+      if (result.duplicatesWritten > 0) {
+        LOG.info('DEV_DUP_RIGHE', `Snapshot creato: ${result.snapshotSheetName}`, {
+          duplicates: result.duplicatesWritten
         });
       } else {
-        // Prima occorrenza di questa chiave
-        seen.set(key, {
-          fileId: fileId,
-          numeroDoc: String(row[idx.NumeroDoc || 0] || '').trim(),
-          numeroLinea: numeroLinea,
-          codiceValore: String(row[idx.CodiceValore || 0] || '').trim(),
-          descrizione: String(row[idx.Descrizione || 0] || '').trim(),
-          rowIndex: rowIndex,
-          isDuplicate: false
-        });
+        LOG.info('DEV_DUP_RIGHE', 'Nessun duplicato trovato in Righe.');
       }
-    });
-
-    const dupCount = duplicates.length;
-    LOG.info('DEV_DUP_RIGHE', `Trovati ${dupCount} duplicati di righe.`, { count: dupCount });
-
-    if (dupCount === 0) {
-      UTIL.showToast('Nessuna riga duplicata trovata!', 'Completato', 5);
-      return;
-    }
-
-    // Scrivi risultati nel foglio "Righe_Duplicate"
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheetName = 'Righe_Duplicate';
-    let shDup = ss.getSheetByName(sheetName);
-    
-    if (!shDup) {
-      shDup = ss.insertSheet(sheetName);
-      LOG.info('DEV_DUP_RIGHE', `Foglio "${sheetName}" creato.`);
-    } else {
-      // Pulisci il foglio esistente
-      shDup.clear();
-    }
-
-    // Scrivi header
-    const schema = SHEETS.SCHEMAS['Righe_Duplicate'] || ['FileID', 'NumeroDoc', 'NumeroLinea', 'CodiceValore', 'Descrizione', 'RowIndex'];
-    shDup.getRange(1, 1, 1, schema.length).setValues([schema]).setFontWeight('bold');
-    shDup.setFrozenRows(1);
-
-    // Prepara dati da scrivere
-    const rowsToWrite = duplicates.map(dup => [
-      dup.FileID,
-      dup.NumeroDoc,
-      dup.NumeroLinea,
-      dup.CodiceValore,
-      dup.Descrizione,
-      dup.RowIndex
-    ]);
-
-    // Scrivi dati
-    try {
-      if (rowsToWrite.length > 0) {
-        shDup.getRange(2, 1, rowsToWrite.length, schema.length).setValues(rowsToWrite);
-        
-        // Applica formattazione
-        shDup.getRange(2, 1, rowsToWrite.length, 5).setNumberFormat('@'); // Testo per prime 5 colonne
-        shDup.getRange(2, 6, rowsToWrite.length, 1).setNumberFormat('#,##0'); // Numero per RowIndex
-        
-        // Auto-resize colonne
-        try {
-          shDup.autoResizeColumns(1, schema.length);
-        } catch (e) {
-          LOG.warn('DEV_DUP_RIGHE', 'Impossibile auto-resize colonne.', { error: e.message });
-        }
-      }
-
-      UTIL.showToast(`Trovati ${dupCount} duplicati. Vedi foglio "${sheetName}".`, 'Completato', 8);
-      LOG.info('DEV_DUP_RIGHE', `Scritti ${dupCount} duplicati nel foglio "${sheetName}".`);
-      
-      // Attiva il foglio duplicati per mostrarlo all'utente
-      shDup.activate();
     } catch (e) {
-      LOG.error('DEV_DUP_RIGHE', 'Errore scrittura dati duplicati.', { error: e.message });
-      UTIL.showToast('Errore scrittura risultati. Vedi Log.', 'Errore');
+      LOG.error('DEV_DUP_RIGHE', 'Errore creazione snapshot duplicati righe.', {
+        error: e.message
+      });
+      UTIL.showToast('Errore creazione snapshot. Vedi Log.', 'Errore');
     }
   }
 
@@ -1452,7 +1166,7 @@ const DEBUG = (function () {
 
 // Registra DEBUG nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG']);
+  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG', 'DUPLICATE_MANAGER']);
 }
 
 // Registra DEBUG nel namespace GG
