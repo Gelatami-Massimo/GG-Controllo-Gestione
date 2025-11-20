@@ -432,33 +432,34 @@ var TRIGGER_DASHBOARD = (function() {
   function _buildDashboardData() {
     const data = [];
     
+    // ✅ FIX: Tutte le righe devono avere 5 colonne per evitare errore setValues
     // Row 1: HEADER
-    data[0] = ['🎛️  TRIGGER STATUS DASHBOARD', '', ''];
+    data[0] = ['🎛️  TRIGGER STATUS DASHBOARD', '', '', '', ''];
     
     // Rows 2: Empty
-    data[1] = ['', '', ''];
+    data[1] = ['', '', '', '', ''];
     
     // Rows 3-7: SEZIONE STATO CORRENTE
-    data[2] = ['Stato Trigger:', '🔴 INATTIVO', ''];
-    data[3] = ['Health Score:', 'N/A', ''];
-    data[4] = ['Ultima Esecuzione:', 'Mai eseguito', ''];
-    data[5] = ['Durata:', 'N/A', ''];
-    data[6] = ['Esito:', 'N/A', ''];
+    data[2] = ['Stato Trigger:', '🔴 INATTIVO', '', '', ''];
+    data[3] = ['Health Score:', 'N/A', '', '', ''];
+    data[4] = ['Ultima Esecuzione:', 'Mai eseguito', '', '', ''];
+    data[5] = ['Durata:', 'N/A', '', '', ''];
+    data[6] = ['Esito:', 'N/A', '', '', ''];
     
     // Row 8: Empty
-    data[7] = ['', '', ''];
+    data[7] = ['', '', '', '', ''];
     
     // Row 9: SEZIONE STATISTICHE HEADER
-    data[8] = ['📊 STATISTICHE (Ultime ' + CONFIG.MAX_HISTORY_ROWS + ' esecuzioni)', '', ''];
+    data[8] = ['📊 STATISTICHE (Ultime ' + CONFIG.MAX_HISTORY_ROWS + ' esecuzioni)', '', '', '', ''];
     
     // Rows 10-13: STATISTICHE
-    data[9] = ['• Success Rate:', 'N/A', ''];
-    data[10] = ['• Durata Media:', 'N/A', ''];
-    data[11] = ['• Tempo Max:', 'N/A', ''];
-    data[12] = ['• Ultimo Errore:', 'Nessuno', ''];
+    data[9] = ['• Success Rate:', 'N/A', '', '', ''];
+    data[10] = ['• Durata Media:', 'N/A', '', '', ''];
+    data[11] = ['• Tempo Max:', 'N/A', '', '', ''];
+    data[12] = ['• Ultimo Errore:', 'Nessuno', '', '', ''];
     
     // Row 14: Empty
-    data[13] = ['', '', ''];
+    data[13] = ['', '', '', '', ''];
     
     // Row 15: SEZIONE STORICO HEADER
     data[14] = ['📋 STORICO ESECUZIONI', '', '', '', ''];
