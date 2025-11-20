@@ -1,15 +1,62 @@
 # CHANGELOG - Phase 8 Optimization Initiative
 
-**Version**: 25.3  
-**Date**: 16 Novembre 2025  
+**Version**: 27.0  
+**Date**: 20 Novembre 2025  
 **Branch**: feature-xyz  
 **Status**: Ready for merge to main  
 
 ---
 
-## Summary
+## Phase 8.5: PDF Robustness & Naming Convention ✅
 
-Phase 8 delivers **three integrated optimization sub-phases** (8.1, 8.2, 8.3) focusing on **code quality**, **performance**, and **reliability**. Combined impact: **44% faster execution**, **60% less memory usage**, **80%+ auto-recovery** from transient failures, and **100% backward compatibility**.
+### New Features
+
+**Feature #1: DenominazioneFornitore - NumeroDoc Naming**
+- **Issue**: PDF naming based on XML filename (cryptic, not user-friendly)
+- **Solution**: New schema `"DenominazioneFornitore - NumeroDoc.pdf"` with character sanitization
+- **Impact**: Human-readable PDF names, better file organization in Drive
+- **File**: `080_pdf_export.js` (v26.0 → v27.0)
+
+**Feature #2: PDFStato Column**
+- **Issue**: No visibility into PDF generation success/failure per invoice
+- **Solution**: Optional column `PDFStato` in Fatture sheet with values 'OK' / 'ERRORE'
+- **Impact**: Easy monitoring of PDF generation status
+- **Files**: `020_config.js` (added to Fatture schema), `080_pdf_export.js` (auto-updates)
+
+**Feature #3: Enhanced Logging**
+- **Issue**: Insufficient progress visibility during long PDF generation runs
+- **Solution**: Added INFO logs for chunk progress, total invoices, individual PDF creation
+- **Impact**: Better observability and debugging
+- **File**: `080_pdf_export.js` (LOG.info calls)
+
+### Technical Improvements
+
+**Improvement #1: File Name Sanitization**
+- **Function**: `_sanitizeFilename()` removes Drive-forbidden characters (/ \\ ? * [ ] : | < > ")
+- **Safety**: Prevents file creation failures from special characters in supplier names
+- **Fallback**: Placeholder names if sanitization results in empty string
+
+**Improvement #2: Robust Error Handling**
+- **Enhancement**: Errors log FornitoreID, NumeroDoc, FileID for easier troubleshooting
+- **Continuity**: Single PDF failure doesn't block entire batch (already present, verified)
+- **Warning**: Missing DenominazioneFornitore/NumeroDoc logged and skipped gracefully
+
+### Backward Compatibility
+
+- ✅ Existing code using `PDF.run()` unchanged
+- ✅ PDFStato column optional (code checks presence before updating)
+- ✅ Chunked iteration with SHEET_ITERATOR preserved
+- ✅ Circuit breaker for quota exceeded intact
+
+### Commits
+- `[pending]` - Phase 8.5: PDF Robustness & Naming (080_pdf_export.js v27.0)
+
+---
+
+## Summary (Previous Phases)
+
+**Version**: 25.3  
+**Date**: 16 Novembre 2025  
 
 ---
 

@@ -1,8 +1,10 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 80_pdf_export.js
-// VERSIONE: 26.0 (PDF Export Engine - REFACTORED with SHEET_ITERATOR)
+// VERSIONE: 27.0 (PDF Export Engine - ROBUST with DenominazioneFornitore - NumeroDoc naming)
 // DESCRIZIONE: Motore di creazione PDF (resumibile, chunked, robusto).
+//              ROBUST: Schema rinomina "DenominazioneFornitore - NumeroDoc.pdf"
+//              ENHANCED: Logging progresso, colonna PDFStato opzionale, sanificazione nomi file
 // NOTA: Richiede un file Html "PdfTemplate" nel progetto.
 //       REFACTORED: Manual loop replaced with SHEET_ITERATOR.forEachChunk()
 // =============================================================
@@ -48,15 +50,19 @@ const PDF = (function () {
       return;
     }
 
-    // ---- Indici necessari (minimi): FileID, FileName, LinkPDF
+    // ---- Indici necessari (minimi): FileID, FileName, LinkPDF, DenominazioneFornitore, NumeroDoc
     const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
-    const requiredKeys = ['FileID', 'FileName', 'LinkPDF'];
+    const requiredKeys = ['FileID', 'FileName', 'LinkPDF', 'DenominazioneFornitore', 'NumeroDoc'];
     const missing = requiredKeys.filter(k => idx[k] === undefined);
     if (missing.length > 0) {
       throw new Error("Colonne mancanti nel foglio Fatture: " + missing.join(', '));
     }
-    // Lettura ottimizzata: solo fino all’ultima colonna richiesta
-    const maxColNeeded = Math.max(idx.FileID, idx.FileName, idx.LinkPDF) + 1;
+    // Opzionale: colonna PDFStato per tracciare successo/errore
+    const hasPDFStato = idx.PDFStato !== undefined;
+    // Lettura ottimizzata: solo fino all'ultima colonna richiesta
+    const colsToCheck = [idx.FileID, idx.FileName, idx.LinkPDF, idx.DenominazioneFornitore, idx.NumeroDoc];
+    if (hasPDFStato) colsToCheck.push(idx.PDFStato);
+    const maxColNeeded = Math.max(...colsToCheck) + 1;
 
     // Stato ripresa
     const cursor = STATE.getJSON(CURSOR_KEY, { nextRow: headerRow + 1 });
@@ -73,6 +79,9 @@ const PDF = (function () {
 
     const CHUNK_SIZE = Number(CONFIG.get('PDF_CHUNK_SIZE', 80)) || 80;
     const FLUSH_UPDATES_EVERY = Number(CONFIG.get('PDF_FLUSH_EVERY', 200)) || 200;
+
+    const totalInvoices = lastRow - headerRow;
+    LOG?.info('PDF', `Avvio generazione PDF: ${totalInvoices} fatture da processare (da riga ${currentRow} a ${lastRow})`);
 
     if (!isSilent) {
       STATE.setJSON(App.config.keys.progress, {
@@ -103,6 +112,9 @@ const PDF = (function () {
         }
       },
       processChunk: (chunkData, chunkStartRow) => {
+        // Log progresso chunk
+        LOG?.info('PDF', `Elaborando chunk: righe ${chunkStartRow}-${chunkStartRow + chunkData.length - 1} di ${lastRow}`);
+        
         // Elabora il blocco
         for (let i = 0; i < chunkData.length; i++) {
           const rowData = chunkData[i];
@@ -111,11 +123,17 @@ const PDF = (function () {
         const fileId = rowData[idx.FileID];
         const fileName = rowData[idx.FileName];
         const existingPdfLink = rowData[idx.LinkPDF];
+        const denominazioneFornitore = String(rowData[idx.DenominazioneFornitore] || '').trim();
+        const numeroDoc = String(rowData[idx.NumeroDoc] || '').trim();
 
         // Skip se mancano dati essenziali o link già presente (già risolto)
         if (!fileId || !fileName || existingPdfLink) continue;
+        if (!denominazioneFornitore || !numeroDoc) {
+          LOG?.warn('PDF', `Saltata fattura riga ${rowNum}: manca DenominazioneFornitore o NumeroDoc`);
+          continue;
+        }
 
-        const pdfName = _toPdfName(fileName);
+        const pdfName = _toPdfName(denominazioneFornitore, numeroDoc);
 
         // Se PDF già in cartella: aggiorna LinkPDF con URL noto dall’indice
         const knownUrl = existingPdfs.get(pdfName);
@@ -154,8 +172,10 @@ const PDF = (function () {
           // Aggiorna indice e foglio
           existingPdfs.set(pdfName, pdfUrl);
           _addUpdate(linkUpdates, rowNum, idx.LinkPDF, pdfUrl);
+          if (hasPDFStato) _addUpdate(linkUpdates, rowNum, idx.PDFStato, 'OK');
           pendingUpdates++;
           createdCount++;
+          LOG?.info('PDF', `PDF creato: "${pdfName}" (riga ${rowNum})`);
 
           // flush parziale
           if (pendingUpdates >= FLUSH_UPDATES_EVERY) {
@@ -197,10 +217,12 @@ const PDF = (function () {
           }
           
           // Errori normali (diversi da quota): log e continua
-          LOG?.error('PDF', `Impossibile creare PDF per '${fileName}' (riga ${rowNum})`, {
-            fileId, error: e.message, stack: e.stack
+          LOG?.error('PDF', `Impossibile creare PDF (riga ${rowNum})`, {
+            fileId, fornitore: denominazioneFornitore, numeroDoc, 
+            error: e.message, stack: e.stack
           });
           _addUpdate(linkUpdates, rowNum, idx.LinkPDF, 'ERRORE CREAZIONE PDF');
+          if (hasPDFStato) _addUpdate(linkUpdates, rowNum, idx.PDFStato, 'ERRORE');
           pendingUpdates++;
         }
       }
@@ -351,12 +373,35 @@ const PDF = (function () {
     return map;
   }
 
-  // Converte nome XML(.p7m) → nome PDF
-  function _toPdfName(originalName) {
-    const base = (originalName || '').trim();
-    if (!base) return 'documento.pdf';
-    const name = base.replace(/\.xml(\.p7m)?$/i, '.pdf');
-    return /\.pdf$/i.test(name) ? name : (name + '.pdf');
+  /**
+   * Costruisce nome PDF da DenominazioneFornitore e NumeroDoc.
+   * Schema: "DenominazioneFornitore - NumeroDoc.pdf"
+   */
+  function _toPdfName(denominazione, numeroDoc) {
+    const denom = _sanitizeFilename(String(denominazione || '').trim());
+    const num = _sanitizeFilename(String(numeroDoc || '').trim());
+    
+    if (!denom && !num) return 'documento_senza_nome.pdf';
+    if (!denom) return `Fornitore_sconosciuto - ${num}.pdf`;
+    if (!num) return `${denom} - documento_senza_numero.pdf`;
+    
+    return `${denom} - ${num}.pdf`;
+  }
+
+  /**
+   * Sanifica nome file rimuovendo caratteri non ammessi in Google Drive.
+   * Caratteri proibiti: / \ ? * [ ] : | < > " e caratteri di controllo.
+   */
+  function _sanitizeFilename(name) {
+    if (!name) return '';
+    // Rimuove caratteri proibiti e di controllo
+    let sanitized = name.replace(/[\/\\?\*\[\]:"<>|\x00-\x1F\x7F]/g, '');
+    // Converte spazi multipli in singoli
+    sanitized = sanitized.replace(/\s+/g, ' ');
+    // Rimuove spazi iniziali/finali
+    sanitized = sanitized.trim();
+    // Se vuoto dopo sanificazione, ritorna placeholder
+    return sanitized || 'unnamed';
   }
 
   function _addUpdate(updatesObj, rowNum, colIndex0based, value) {
