@@ -7,10 +7,14 @@
  * and structured error reporting.
  * 
  * DEPENDENCIES: LOG, METRICS
- * VERSION: 25.0
+ * VERSION: 26.0 (Added safely() method for non-critical operations)
  * 
  * EXPORTED MODULES:
  *   - GG.ERROR_HANDLER: Main error handling interface
+ * 
+ * NEW in v26.0:
+ *   - safely(): Execute non-critical operations with logging (no retry)
+ *   - Used by 120_pnl.js, 130_debug.js, 030_globals.js for UI/formatting ops
  * 
  * ==============================================================================
  */
@@ -525,6 +529,36 @@ const ERROR_HANDLER = (function() {
       error.name = name;
       error.context = context;
       return error;
+    },
+
+    /**
+     * Execute non-critical operation with error logging (no retry)
+     * Useful for UI/formatting operations where retry doesn't make sense
+     * 
+     * @param {Function} fn - Function to execute
+     * @param {Object} opts - Options { scope, message, suppressThrow }
+     * @returns {*} Result of fn(), or undefined if error and suppressThrow=true
+     * 
+     * @example
+     * GG.ERROR_HANDLER.safely(
+     *   () => sheet.autoResizeColumns(1, 10),
+     *   { scope: 'UI_FORMAT', message: 'Cannot resize columns' }
+     * );
+     */
+    safely: function(fn, opts = {}) {
+      const { scope = 'SAFELY', message = 'Operation failed', suppressThrow = true } = opts;
+      const LOG = GG.get('LOG');
+      
+      try {
+        return fn();
+      } catch (e) {
+        const context = extractErrorContext(e);
+        LOG.warn(scope, message, { error: e.message, ...context });
+        recordErrorStat(e, scope, { recovered: suppressThrow });
+        
+        if (!suppressThrow) throw e;
+        return undefined;
+      }
     }
 
   };

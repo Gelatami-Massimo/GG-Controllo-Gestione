@@ -1,9 +1,10 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 30_globals.js
-// VERSIONE: 25.0 (Global Utilities)
+// VERSIONE: 26.0 (Global Utilities - ERROR_HANDLER Integration)
 // DESCRIZIONE: Utility globali (LOG, UTIL, XMLSAFE, STATE) — fix critico
 //               su XmlService: niente getTextTrim(), gestione namespace FPA.
+//               REFACTORED: Lock release uses ERROR_HANDLER.safely()
 // =============================================================
 
 /** Namespace FatturaPA (default v1.2 con fallback v1.0) */
@@ -133,6 +134,9 @@ if (typeof GG !== 'undefined') {
 
 const UTIL = (function () {
 
+  // Lazy load ERROR_HANDLER (declared later in GG namespace)
+  const getErrorHandler = () => GG.get('ERROR_HANDLER');
+
   let activeLock = null;
   function acquireLock(timeoutMs = 10000) {
     if (activeLock?.hasLock()) return true;
@@ -151,8 +155,11 @@ const UTIL = (function () {
   }
   function releaseLock() {
     if (activeLock?.hasLock()) {
-      try { activeLock.releaseLock(); }
-      catch (e) { LOG.error('LOCK_RELEASE', 'Errore durante il rilascio del lock.', { error: e.message }); }
+      const ERROR_HANDLER = getErrorHandler();
+      ERROR_HANDLER.safely(
+        () => activeLock.releaseLock(),
+        { scope: 'LOCK_RELEASE', message: 'Errore durante il rilascio del lock.' }
+      );
     }
     activeLock = null;
   }

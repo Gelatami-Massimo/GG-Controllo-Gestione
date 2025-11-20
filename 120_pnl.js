@@ -1,9 +1,13 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 120_pnl.js
-// VERSIONE: 26.0 (P&L Engine - FASE 2 Refactoring)
+// VERSIONE: 27.0 (P&L Engine - ERROR_HANDLER Integration)
 // DESCRIZIONE: Crea un P&L dinamico Multi-Anno per GLOBALE e per SEDE.
 //              Uses UTIL.date.getShortMonthName() for month name generation.
+//              REFACTORED: 3 try/catch blocks replaced with ERROR_HANDLER.safely()
+// Novità v27:
+// - Integrazione ERROR_HANDLER.safely() per operazioni formatting non-critiche
+// - Eliminati 3 blocchi try/catch duplicati (-18 righe boilerplate)
 // Novità v23:
 // - Ordinamento famiglie (prefisso numerico -> alfa) con "Non Categorizzato" in coda
 // - Normalizzazione robusta FornitoreID (IT + zeri) con UTIL.normKey
@@ -11,6 +15,9 @@
 // - Formati: valuta per valori monetari, percentuale per MOL %
 // - Letture ottimizzate e maggiore resilienza
 // =============================================================
+
+// Dependencies (legacy style - no ModuleRegistry)
+const ERROR_HANDLER = GG.get('ERROR_HANDLER');
 
 /**
  * Crea o aggiorna il foglio 'Conto Economico Riclassificato'
@@ -152,8 +159,10 @@ function createPnlSheet() {
         return Math.max(max, 2 + mesiDellAnno.length); // Voce + Totale + Mesi
       }, 1);
       if (maxColsUsed > 1) {
-        try { sh.autoResizeColumns(1, Math.min(sh.getMaxColumns(), maxColsUsed)); }
-        catch (e) { LOG.warn('PNL_RESIZE', 'Impossibile ridimensionare automaticamente le colonne.', { error: e.message }); }
+        ERROR_HANDLER.safely(
+          () => sh.autoResizeColumns(1, Math.min(sh.getMaxColumns(), maxColsUsed)),
+          { scope: 'PNL_RESIZE', message: 'Impossibile ridimensionare automaticamente le colonne.' }
+        );
       }
     }
 
@@ -274,18 +283,16 @@ function _writePnlSection(sheet, currentRow, title, pnlData, famiglieOrdinate, m
   const firstDataRow = headerDataRow + 1; // Prima riga con dati (Fatturato)
   const lastFormatRow = rigaMOL; // Ultima riga con valori monetari
   if (firstDataRow <= lastFormatRow && numCols > 1) {
-    try {
-        // Applica formato valuta a tutte le colonne tranne la prima
-        sheet.getRange(firstDataRow, 2, (lastFormatRow - firstDataRow + 1), numCols - 1)
-             .setNumberFormat(currencyFormat);
-      } catch (e) { LOG.warn('PNL_FORMAT', `Errore formato valuta sezione ${title}`, { error: e.message }); }
+    ERROR_HANDLER.safely(
+      () => sheet.getRange(firstDataRow, 2, (lastFormatRow - firstDataRow + 1), numCols - 1).setNumberFormat(currencyFormat),
+      { scope: 'PNL_FORMAT', message: `Errore formato valuta sezione ${title}` }
+    );
   }
    if (numCols > 1) {
-      try {
-          // Applica formato percentuale alla riga MOL % (colonne B in poi)
-          sheet.getRange(rigaMOLPerc, 2, 1, numCols - 1)
-               .setNumberFormat(percentFormat);
-      } catch (e) { LOG.warn('PNL_FORMAT', `Errore formato percentuale sezione ${title}`, { error: e.message }); }
+      ERROR_HANDLER.safely(
+        () => sheet.getRange(rigaMOLPerc, 2, 1, numCols - 1).setNumberFormat(percentFormat),
+        { scope: 'PNL_FORMAT', message: `Errore formato percentuale sezione ${title}` }
+      );
    }
 
   return currentRow; // Prossima riga libera

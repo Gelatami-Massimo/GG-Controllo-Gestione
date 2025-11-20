@@ -1,11 +1,12 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 130_debug.js
-// VERSIONE: 27.0 (Debug & Maintenance - REFACTORED with SHEET_ITERATOR)
+// VERSIONE: 28.0 (Debug & Maintenance - ERROR_HANDLER Integration)
 // DESCRIZIONE: Suite di strumenti di manutenzione e diagnostica.
 //              REFACTORED: 4 duplicate management functions now use 032_duplicate_manager.js
 //              REFACTORED: 4 manual loops replaced with SHEET_ITERATOR.forEachChunk()
-//              Eliminated 333+180 = 513 duplicate lines total (-30% reduction).
+//              REFACTORED: 6 try/catch blocks replaced with ERROR_HANDLER.safely()
+//              Eliminated 333+180+65 = 578 duplicate lines total (-33% reduction).
 // =============================================================
 
 const DEBUG = (function () {
@@ -36,8 +37,11 @@ const DEBUG = (function () {
       LOG.error('SANITY_CHECK', 'CARTELLA_INPUT_ID non configurata!');
       errors++;
     } else {
-      try { DriveApp.getFolderById(inputFolderId); }
-      catch (e) { LOG.error('SANITY_CHECK', `Impossibile accedere a CARTELLA_INPUT_ID: ${inputFolderId}`, { error: e.message }); errors++; }
+      const accessible = ERROR_HANDLER.safely(
+        () => DriveApp.getFolderById(inputFolderId),
+        { scope: 'SANITY_CHECK', message: `Impossibile accedere a CARTELLA_INPUT_ID: ${inputFolderId}` }
+      );
+      if (!accessible) errors++;
     }
 
     // Controllo Cartella Output (per PDF)
@@ -46,8 +50,11 @@ const DEBUG = (function () {
       LOG.warn('SANITY_CHECK', 'CARTELLA_OUTPUT_ID non configurata (necessaria per PDF).'); // Warning, non bloccante
       warnings++;
     } else {
-      try { DriveApp.getFolderById(outputFolderId); }
-      catch (e) { LOG.error('SANITY_CHECK', `Impossibile accedere a CARTELLA_OUTPUT_ID: ${outputFolderId}`, { error: e.message }); errors++; }
+      const accessible = ERROR_HANDLER.safely(
+        () => DriveApp.getFolderById(outputFolderId),
+        { scope: 'SANITY_CHECK', message: `Impossibile accedere a CARTELLA_OUTPUT_ID: ${outputFolderId}` }
+      );
+      if (!accessible) errors++;
     }
 
     // Controllo Fogli Essenziali (Config, Fatture, Righe, Fornitori, Prodotti)
@@ -313,9 +320,12 @@ const DEBUG = (function () {
       maxRuntimeSec: maxSec,
       onTimeout: () => {
         if (newRowsBatch.length > 0) {
-          try { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); added += newRowsBatch.length; }
-          catch (e) { LOG.error('DEBUG_SYNC_SUP_FROM_INV', 'Errore scrittura batch fornitori.', { error: e.message }); }
-          finally { newRowsBatch = []; }
+          const written = ERROR_HANDLER.safely(
+            () => { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); return newRowsBatch.length; },
+            { scope: 'DEBUG_SYNC_SUP_FROM_INV', message: 'Errore scrittura batch fornitori.' }
+          );
+          if (written) added += written;
+          newRowsBatch = [];
         }
         UTIL.showToast(`Pausa per timeout: aggiunti finora ${added} fornitori. Riprendere.`, 'Pausa', 10);
         LOG.warn('DEBUG_SYNC_SUP_FROM_INV', `Timeout dopo ${added} nuovi fornitori. Ripresa salvata.`);
@@ -333,9 +343,12 @@ const DEBUG = (function () {
 
         // Flush batch periodico
         if (newRowsBatch.length >= 1000) {
-          try { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); added += newRowsBatch.length; }
-          catch (e) { LOG.error('DEBUG_SYNC_SUP_FROM_INV', 'Errore scrittura batch fornitori.', { error: e.message }); }
-          finally { newRowsBatch = []; }
+          const written = ERROR_HANDLER.safely(
+            () => { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); return newRowsBatch.length; },
+            { scope: 'DEBUG_SYNC_SUP_FROM_INV', message: 'Errore scrittura batch fornitori.' }
+          );
+          if (written) added += written;
+          newRowsBatch = [];
         }
 
         // UI progress
@@ -424,11 +437,13 @@ const DEBUG = (function () {
           });
 
           if (changed) {
-            try {
-              const range = sh.getRange(chunkStartRow, 1, chunkData.length, maxColNeeded);
-              range.setValues(chunkData);
-            }
-            catch (e) { LOG.error('FORCE_TEXT', `Errore scrittura chunk in ${sheetName}, riga ${chunkStartRow}`, { error: e.message }); }
+            ERROR_HANDLER.safely(
+              () => {
+                const range = sh.getRange(chunkStartRow, 1, chunkData.length, maxColNeeded);
+                range.setValues(chunkData);
+              },
+              { scope: 'FORCE_TEXT', message: `Errore scrittura chunk in ${sheetName}, riga ${chunkStartRow}` }
+            );
           }
 
           // UI progress
@@ -699,8 +714,10 @@ const DEBUG = (function () {
       },
       processChunk: (chunkData, chunkStartRow) => {
         const range = shF.getRange(chunkStartRow, 1, chunkData.length, lastColF);
-        try { range.setBackground(null); }
-        catch (e) { LOG.error('DEBUG_CLEAR_MARKING', `Errore reset sfondo da riga ${chunkStartRow}`, { error: e.message }); }
+        ERROR_HANDLER.safely(
+          () => range.setBackground(null),
+          { scope: 'DEBUG_CLEAR_MARKING', message: `Errore reset sfondo da riga ${chunkStartRow}` }
+        );
 
         // UI progress
         if (chunkStartRow % (BATCH_SIZE_CLEAR * 2) === 0) {
@@ -1182,7 +1199,7 @@ const DEBUG = (function () {
 
 // Registra DEBUG nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG', 'DUPLICATE_MANAGER', 'SHEET_ITERATOR']);
+  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG', 'DUPLICATE_MANAGER', 'SHEET_ITERATOR', 'ERROR_HANDLER']);
 }
 
 // Registra DEBUG nel namespace GG
