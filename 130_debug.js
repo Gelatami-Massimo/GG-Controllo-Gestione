@@ -1,10 +1,11 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 130_debug.js
-// VERSIONE: 26.0 (Debug & Maintenance - REFACTORED with DUPLICATE_MANAGER)
+// VERSIONE: 27.0 (Debug & Maintenance - REFACTORED with SHEET_ITERATOR)
 // DESCRIZIONE: Suite di strumenti di manutenzione e diagnostica.
 //              REFACTORED: 4 duplicate management functions now use 032_duplicate_manager.js
-//              Eliminated 333 duplicate lines (-22% reduction).
+//              REFACTORED: 4 manual loops replaced with SHEET_ITERATOR.forEachChunk()
+//              Eliminated 333+180 = 513 duplicate lines total (-30% reduction).
 // =============================================================
 
 const DEBUG = (function () {
@@ -80,7 +81,6 @@ const DEBUG = (function () {
    * CORRETTO: Aggiorna SOLO le celle Famiglia o Categoria VUOTE.
    */
   function syncCategoriesRetroactive() {
-    const startTime = new Date();
     const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
     const CHUNK_SIZE = 500;
 
@@ -122,86 +122,90 @@ const DEBUG = (function () {
         continue;
       }
 
-      let currentRow = cursor.nextRow;
       let updates = {};
       const maxColNeeded = Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria) + 1;
 
-      while (currentRow <= lastRow) {
-        const elapsed = (new Date() - startTime) / 1000;
-        if (elapsed > maxSec) {
+      // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling
+      const iteratorResult = SHEET_ITERATOR.forEachChunk({
+        sheet: sh,
+        sheetName: sheetName,
+        startRow: cursor.nextRow,
+        endRow: lastRow,
+        batchSize: CHUNK_SIZE,
+        maxColumns: maxColNeeded,
+        cursorKey: SYNC_CAT_CURSOR_KEY,
+        maxRuntimeSec: maxSec,
+        onTimeout: () => {
           if (Object.keys(updates).length > 0) {
             UTIL.updateSheetInPlace(sh, updates, headerRow);
             updates = {};
           }
           cursor.sheetIndex = i;
-          cursor.nextRow = currentRow;
           STATE.setJSON(SYNC_CAT_CURSOR_KEY, cursor);
-          UTIL.showToast(`Timeout. Pausa (${sheetName}, riga ${currentRow}). Clicca di nuovo per riprendere.`, 'Pausa', 10);
-          LOG.warn('SYNC_CATEGORIES', `Timeout ${sheetName}. Ripresa da riga ${currentRow}.`);
-          return;
-        }
+          UTIL.showToast(`Timeout. Pausa (${sheetName}). Clicca di nuovo per riprendere.`, 'Pausa', 10);
+          LOG.warn('SYNC_CATEGORIES', `Timeout ${sheetName}. Ripresa salvata.`);
+        },
+        processChunk: (chunkData, chunkStartRow) => {
+          // --- LOGICA CORRETTA (SOLO CELLE VUOTE) ---
+          for (let j = 0; j < chunkData.length; j++) {
+            const rowData = chunkData[j];
+            const rowNum = chunkStartRow + j;
 
-        if (currentRow % 50 === 0) {
-          UTIL.showToast(`Riallineo ${sheetName}: riga ${currentRow}/${lastRow}...`, 'Manutenzione', -1);
-        }
+            const idNorm = UTIL.normKey(rowData[idx.FornitoreID]).replace(/^0+/, '');
+            if (!idNorm) continue;
 
-        const chunkRowCount = Math.min(CHUNK_SIZE, lastRow - currentRow + 1);
-        let chunkData;
-        try {
-          chunkData = sh.getRange(currentRow, 1, chunkRowCount, maxColNeeded).getValues();
-        } catch (e) {
-          LOG.error('SYNC_CATEGORIES', `Errore lettura chunk ${sheetName} da riga ${currentRow}`, { error: e.message });
-          currentRow += chunkRowCount;
-          continue;
-        }
+            const curr = supplierMap.get(idNorm);
+            if (!curr) continue; // Fornitore non in mappa
 
-        // --- INIZIO LOGICA CORRETTA (SOLO CELLE VUOTE) ---
-        for (let j = 0; j < chunkData.length; j++) {
-          const rowData = chunkData[j];
-          const rowNum = currentRow + j;
+            const existingFamiglia = String(rowData[idx.Famiglia] ?? '').trim();
+            const existingCategoria = String(rowData[idx.Categoria] ?? '').trim();
+            
+            let needsUpdate = false;
+            let rowUpdates = {}; // Aggiornamenti solo per questa riga
 
-          const idNorm = UTIL.normKey(rowData[idx.FornitoreID]).replace(/^0+/, '');
-          if (!idNorm) continue;
+            // Condizione 1: Famiglia è vuota E il fornitore ha una famiglia da impostare
+            if (existingFamiglia === '' && curr.famiglia) {
+              rowUpdates[idx.Famiglia] = curr.famiglia;
+              needsUpdate = true;
+            }
 
-          const curr = supplierMap.get(idNorm);
-          if (!curr) continue; // Fornitore non in mappa
-
-          const existingFamiglia = String(rowData[idx.Famiglia] ?? '').trim();
-          const existingCategoria = String(rowData[idx.Categoria] ?? '').trim();
-          
-          let needsUpdate = false;
-          let rowUpdates = {}; // Aggiornamenti solo per questa riga
-
-          // Condizione 1: Famiglia è vuota E il fornitore ha una famiglia da impostare
-          if (existingFamiglia === '' && curr.famiglia) {
-            rowUpdates[idx.Famiglia] = curr.famiglia;
-            needsUpdate = true;
+            // Condizione 2: Categoria è vuota E il fornitore ha una categoria da impostare
+            if (existingCategoria === '' && curr.categoria) {
+              rowUpdates[idx.Categoria] = curr.categoria;
+              needsUpdate = true;
+            }
+            
+            // Se la riga deve essere aggiornata (anche solo uno dei due campi)
+            if (needsUpdate) {
+              if (!updates[rowNum]) updates[rowNum] = {};
+              Object.assign(updates[rowNum], rowUpdates);
+            }
           }
 
-          // Condizione 2: Categoria è vuota E il fornitore ha una categoria da impostare
-          if (existingCategoria === '' && curr.categoria) {
-            rowUpdates[idx.Categoria] = curr.categoria;
-            needsUpdate = true;
-          }
-          
-          // Se la riga deve essere aggiornata (anche solo uno dei due campi)
-          if (needsUpdate) {
-            if (!updates[rowNum]) updates[rowNum] = {};
-            // Applica solo gli aggiornamenti necessari a quella riga
-            Object.assign(updates[rowNum], rowUpdates);
-          }
-        }
-        // --- FINE LOGICA CORRETTA ---
-
-        currentRow += chunkRowCount;
-
-        if (Object.keys(updates).length >= CHUNK_SIZE * 2 || currentRow > lastRow) {
-          if (Object.keys(updates).length > 0) {
+          // Flush periodico
+          if (Object.keys(updates).length >= CHUNK_SIZE * 2) {
             const flushed = UTIL.updateSheetInPlace(sh, updates, headerRow);
             LOG.info('SYNC_CATEGORIES', `Aggiornate ${flushed} celle vuote in ${sheetName}.`);
             updates = {};
           }
+
+          // UI progress
+          if (chunkStartRow % (CHUNK_SIZE * 2) === 0) {
+            UTIL.showToast(`Riallineo ${sheetName}: riga ${chunkStartRow}/${lastRow}...`, 'Manutenzione', -1);
+          }
         }
+      });
+
+      // Check if interrupted
+      if (iteratorResult.interrupted) {
+        return;
+      }
+
+      // Flush finale per questo foglio
+      if (Object.keys(updates).length > 0) {
+        const flushed = UTIL.updateSheetInPlace(sh, updates, headerRow);
+        LOG.info('SYNC_CATEGORIES', `Aggiornate ${flushed} celle vuote in ${sheetName} (finale).`);
+        updates = {};
       }
 
       cursor.sheetIndex = i + 1; cursor.nextRow = 0;
@@ -256,7 +260,6 @@ const DEBUG = (function () {
    * CORRETTO: Resa riprendibile con cursore.
    */
   function syncSuppliersFromInvoices() {
-    const startTime = new Date();
     const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
     const CHUNK_SIZE = 1000;
 
@@ -269,9 +272,8 @@ const DEBUG = (function () {
     const lastRowF = shF.getLastRow();
 
     let cursor = STATE.getJSON(SYNC_SUPPLIERS_CURSOR_KEY, { nextRow: headerRowF + 1 });
-    let currentRow = cursor.nextRow;
 
-    if (currentRow > lastRowF) { UTIL.showToast('Nessuna nuova fattura da cui sincronizzare fornitori.', 'Info'); STATE.clear(SYNC_SUPPLIERS_CURSOR_KEY); return; }
+    if (cursor.nextRow > lastRowF) { UTIL.showToast('Nessuna nuova fattura da cui sincronizzare fornitori.', 'Info'); STATE.clear(SYNC_SUPPLIERS_CURSOR_KEY); return; }
 
     const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
     const requiredF = ['FornitoreID', 'DenominazioneFornitore', 'RegimeFiscale'];
@@ -295,56 +297,60 @@ const DEBUG = (function () {
     const defaultImportRows = CONFIG.get('IMPORT_RIGHE_DEFAULT', false);
     let newRowsBatch = [];
     let added = 0;
+    const lastColNeeded = Math.max(idxF.FornitoreID, idxF.DenominazioneFornitore, idxF.RegimeFiscale) + 1;
 
     UTIL.showToast('Sincronizzazione Fornitori da Fatture...', 'Manutenzione', -1);
 
-    while (currentRow <= lastRowF) {
-      const elapsed = (new Date() - startTime) / 1000;
-      if (elapsed > maxSec) {
+    // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling
+    const iteratorResult = SHEET_ITERATOR.forEachChunk({
+      sheet: shF,
+      sheetName: SHEETS.SHEET_NAMES.Fatture,
+      startRow: cursor.nextRow,
+      endRow: lastRowF,
+      batchSize: CHUNK_SIZE,
+      maxColumns: lastColNeeded,
+      cursorKey: SYNC_SUPPLIERS_CURSOR_KEY,
+      maxRuntimeSec: maxSec,
+      onTimeout: () => {
         if (newRowsBatch.length > 0) {
           try { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); added += newRowsBatch.length; }
           catch (e) { LOG.error('DEBUG_SYNC_SUP_FROM_INV', 'Errore scrittura batch fornitori.', { error: e.message }); }
           finally { newRowsBatch = []; }
         }
-        STATE.setJSON(SYNC_SUPPLIERS_CURSOR_KEY, { nextRow: currentRow });
         UTIL.showToast(`Pausa per timeout: aggiunti finora ${added} fornitori. Riprendere.`, 'Pausa', 10);
-        LOG.warn('DEBUG_SYNC_SUP_FROM_INV', `Timeout dopo ${added} nuovi fornitori. Ripresa da riga ${currentRow}.`);
-        return;
-      }
+        LOG.warn('DEBUG_SYNC_SUP_FROM_INV', `Timeout dopo ${added} nuovi fornitori. Ripresa salvata.`);
+      },
+      processChunk: (chunk, chunkStartRow) => {
+        chunk.forEach(row => {
+          const idNorm = UTIL.normKey(row[idxF.FornitoreID]).replace(/^0+/, '');
+          const denom = String(row[idxF.DenominazioneFornitore] ?? '').trim();
+          if (!idNorm || !denom) return;
+          if (!existingIds.has(idNorm)) {
+            newRowsBatch.push([idNorm, denom, '', '', defaultImportRows]);
+            existingIds.add(idNorm);
+          }
+        });
 
-      const chunkSize = Math.min(CHUNK_SIZE, lastRowF - currentRow + 1);
-      let chunk;
-      try {
-        const lastColNeeded = Math.max(idxF.FornitoreID, idxF.DenominazioneFornitore, idxF.RegimeFiscale) + 1;
-        chunk = shF.getRange(currentRow, 1, chunkSize, lastColNeeded).getValues();
-      } catch (e) {
-        LOG.error('DEBUG_SYNC_SUP_FROM_INV', `Errore lettura chunk Fatture da riga ${currentRow}`, { error: e.message });
-        currentRow += chunkSize;
-        continue;
-      }
-
-      chunk.forEach(row => {
-        const idNorm = UTIL.normKey(row[idxF.FornitoreID]).replace(/^0+/, '');
-        const denom = String(row[idxF.DenominazioneFornitore] ?? '').trim();
-        if (!idNorm || !denom) return;
-        if (!existingIds.has(idNorm)) {
-          newRowsBatch.push([idNorm, denom, '', '', defaultImportRows]);
-          existingIds.add(idNorm);
+        // Flush batch periodico
+        if (newRowsBatch.length >= 1000) {
+          try { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); added += newRowsBatch.length; }
+          catch (e) { LOG.error('DEBUG_SYNC_SUP_FROM_INV', 'Errore scrittura batch fornitori.', { error: e.message }); }
+          finally { newRowsBatch = []; }
         }
-      });
 
-      if (newRowsBatch.length >= 1000) {
-        try { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); added += newRowsBatch.length; }
-        catch (e) { LOG.error('DEBUG_SYNC_SUP_FROM_INV', 'Errore scrittura batch fornitori.', { error: e.message }); }
-        finally { newRowsBatch = []; }
+        // UI progress
+        if (chunkStartRow % (CHUNK_SIZE * 2) === 0) {
+          UTIL.showToast(`Sincronizzo fornitori... (riga ${chunkStartRow}/${lastRowF})`, 'Manutenzione', -1);
+        }
       }
+    });
 
-      currentRow += chunkSize;
-      if (currentRow % (CHUNK_SIZE * 2) === 0) {
-        UTIL.showToast(`Sincronizzo fornitori... (riga ${currentRow}/${lastRowF})`, 'Manutenzione', -1);
-      }
+    // Check if interrupted
+    if (iteratorResult.interrupted) {
+      return;
     }
 
+    // Flush finale
     if (newRowsBatch.length > 0) {
       try { UTIL.writeBatched(shFor, Math.max(shFor.getLastRow() + 1, headerRowFor + 1), newRowsBatch); added += newRowsBatch.length; }
       catch (e) { LOG.error('DEBUG_SYNC_SUP_FROM_INV', 'Errore scrittura batch finale fornitori.', { error: e.message }); }
@@ -360,7 +366,6 @@ const DEBUG = (function () {
    * Forza il formato testo su colonne codici (Prodotti/Righe). Resumibile.
    */
   function forceTextFormatOnCodes() {
-    const startTime = new Date();
     const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
     const CHUNK_SIZE = 1000;
 
@@ -390,49 +395,52 @@ const DEBUG = (function () {
         continue;
       }
 
-      let currentRow = cursor.nextRow;
       const maxColNeeded = Math.max(...colIndices) + 1;
 
-      while (currentRow <= lastRow) {
-        const elapsed = (new Date() - startTime) / 1000;
-        if (elapsed > maxSec) {
-          cursor.sheetIndex = i; cursor.nextRow = currentRow;
+      // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling
+      const iteratorResult = SHEET_ITERATOR.forEachChunk({
+        sheet: sh,
+        sheetName: sheetName,
+        startRow: cursor.nextRow,
+        endRow: lastRow,
+        batchSize: CHUNK_SIZE,
+        maxColumns: maxColNeeded,
+        cursorKey: FORCE_TEXT_CURSOR_KEY,
+        maxRuntimeSec: maxSec,
+        onTimeout: () => {
+          cursor.sheetIndex = i;
           STATE.setJSON(FORCE_TEXT_CURSOR_KEY, cursor);
-          UTIL.showToast(`Timeout. Pausa (${sheetName}, riga ${currentRow}).`, 'Pausa', 10);
-          LOG.warn('FORCE_TEXT', `Timeout ${sheetName}. Ripresa da riga ${currentRow}.`);
-          return;
-        }
-
-        if (currentRow % 100 === 0) {
-          UTIL.showToast(`Applico formato testo ${sheetName}: riga ${currentRow}/${lastRow}...`, 'Manutenzione', -1);
-        }
-
-        const chunkRowCount = Math.min(CHUNK_SIZE, lastRow - currentRow + 1);
-        let range, chunkData;
-        try {
-          range = sh.getRange(currentRow, 1, chunkRowCount, maxColNeeded);
-          chunkData = range.getValues();
-        } catch (e) {
-          LOG.error('FORCE_TEXT', `Errore lettura chunk in ${sheetName} da riga ${currentRow}`, { error: e.message });
-          currentRow += chunkRowCount;
-          continue;
-        }
-
-        let changed = false;
-        chunkData.forEach(rowData => {
-          colIndices.forEach(ci => {
-            const o = rowData[ci];
-            const v = UTIL.forceText(o);
-            if (o !== v) { rowData[ci] = v; changed = true; }
+          UTIL.showToast(`Timeout. Pausa (${sheetName}).`, 'Pausa', 10);
+          LOG.warn('FORCE_TEXT', `Timeout ${sheetName}. Ripresa salvata.`);
+        },
+        processChunk: (chunkData, chunkStartRow) => {
+          let changed = false;
+          chunkData.forEach(rowData => {
+            colIndices.forEach(ci => {
+              const o = rowData[ci];
+              const v = UTIL.forceText(o);
+              if (o !== v) { rowData[ci] = v; changed = true; }
+            });
           });
-        });
 
-        if (changed) {
-          try { range.setValues(chunkData); }
-          catch (e) { LOG.error('FORCE_TEXT', `Errore scrittura chunk in ${sheetName}, riga ${currentRow}`, { error: e.message }); }
+          if (changed) {
+            try {
+              const range = sh.getRange(chunkStartRow, 1, chunkData.length, maxColNeeded);
+              range.setValues(chunkData);
+            }
+            catch (e) { LOG.error('FORCE_TEXT', `Errore scrittura chunk in ${sheetName}, riga ${chunkStartRow}`, { error: e.message }); }
+          }
+
+          // UI progress
+          if (chunkStartRow % (CHUNK_SIZE * 2) === 0) {
+            UTIL.showToast(`Applico formato testo ${sheetName}: riga ${chunkStartRow}/${lastRow}...`, 'Manutenzione', -1);
+          }
         }
+      });
 
-        currentRow += chunkRowCount;
+      // Check if interrupted
+      if (iteratorResult.interrupted) {
+        return;
       }
 
       cursor.sheetIndex = i + 1; cursor.nextRow = 0;
@@ -659,7 +667,6 @@ const DEBUG = (function () {
    */
   function clearDuplicateMarkings() {
     const CLEAR_CURSOR_KEY = App.config.keys.cursors.clearMarkDuplicates || 'CLEAR_MARKING_CURSOR_V1';
-    const startTime = new Date();
     const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
     const BATCH_SIZE_CLEAR = 500;
 
@@ -672,30 +679,39 @@ const DEBUG = (function () {
     if (lastRowF <= headerRowF) return;
 
     let cursor = STATE.getJSON(CLEAR_CURSOR_KEY, { nextRow: headerRowF + 1 });
-    let currentRow = cursor.nextRow;
 
     UTIL.showToast('Pulizia marcatura duplicati...', 'Manutenzione', -1);
-    LOG.info('DEBUG_CLEAR_MARKING', `Avvio pulizia da riga ${currentRow}.`);
+    LOG.info('DEBUG_CLEAR_MARKING', `Avvio pulizia da riga ${cursor.nextRow}.`);
 
-    while (currentRow <= lastRowF) {
-      const elapsed = (new Date() - startTime) / 1000;
-      if (elapsed > maxSec) {
-        STATE.setJSON(CLEAR_CURSOR_KEY, { nextRow: currentRow });
-        UTIL.showToast(`Timeout pulizia (riga ${currentRow}). Riprendere.`, 'Pausa', 10);
-        LOG.warn('DEBUG_CLEAR_MARKING', `Timeout. Ripresa da riga ${currentRow}.`);
-        return;
+    // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling
+    const iteratorResult = SHEET_ITERATOR.forEachChunk({
+      sheet: shF,
+      sheetName: SHEETS.SHEET_NAMES.Fatture,
+      startRow: cursor.nextRow,
+      endRow: lastRowF,
+      batchSize: BATCH_SIZE_CLEAR,
+      maxColumns: lastColF,
+      cursorKey: CLEAR_CURSOR_KEY,
+      maxRuntimeSec: maxSec,
+      onTimeout: () => {
+        UTIL.showToast('Timeout pulizia. Riprendere.', 'Pausa', 10);
+        LOG.warn('DEBUG_CLEAR_MARKING', 'Timeout. Ripresa salvata.');
+      },
+      processChunk: (chunkData, chunkStartRow) => {
+        const range = shF.getRange(chunkStartRow, 1, chunkData.length, lastColF);
+        try { range.setBackground(null); }
+        catch (e) { LOG.error('DEBUG_CLEAR_MARKING', `Errore reset sfondo da riga ${chunkStartRow}`, { error: e.message }); }
+
+        // UI progress
+        if (chunkStartRow % (BATCH_SIZE_CLEAR * 2) === 0) {
+          UTIL.showToast(`Pulisco marcatura: riga ${chunkStartRow}/${lastRowF}...`, 'Manutenzione', -1);
+        }
       }
+    });
 
-      const chunkRowCount = Math.min(BATCH_SIZE_CLEAR, lastRowF - currentRow + 1);
-      const range = shF.getRange(currentRow, 1, chunkRowCount, lastColF);
-
-      try { range.setBackground(null); }
-      catch (e) { LOG.error('DEBUG_CLEAR_MARKING', `Errore reset sfondo da riga ${currentRow}`, { error: e.message }); }
-
-      currentRow += chunkRowCount;
-      if (currentRow % (BATCH_SIZE_CLEAR * 2) === 0) {
-        UTIL.showToast(`Pulisco marcatura: riga ${currentRow}/${lastRowF}...`, 'Manutenzione', -1);
-      }
+    // Check if interrupted
+    if (iteratorResult.interrupted) {
+      return;
     }
 
     STATE.clear(CLEAR_CURSOR_KEY);
@@ -1166,7 +1182,7 @@ const DEBUG = (function () {
 
 // Registra DEBUG nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG', 'DUPLICATE_MANAGER']);
+  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG', 'DUPLICATE_MANAGER', 'SHEET_ITERATOR']);
 }
 
 // Registra DEBUG nel namespace GG
