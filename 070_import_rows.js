@@ -1,10 +1,11 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 70_import_rows.js
-// VERSIONE: 25.1 (Row Import)
+// VERSIONE: 26.0 (Row Import - REFACTORED with SHEET_ITERATOR)
 // DESCRIZIONE: Importa le righe. Filtro righe "spazzatura" dinamico
 //              • Logica di skip corretta (non blocca import futuri)
 //              • RigheImportate = TRUE solo se le righe sono state scritte
+//              REFACTORED: Manual loop replaced with SHEET_ITERATOR.forEachChunk()
 // =============================================================
 
 const IMPORT_ROWS = (function () {
@@ -204,41 +205,30 @@ const IMPORT_ROWS = (function () {
       });
     }
 
-    // Ciclo principale su blocchi
-    while (currentRow <= lastInvoiceRow) {
-      const elapsed = (new Date() - startTime) / 1000;
-      if (elapsed > maxSec) {
-        // Timeout
-        STATE.setJSON(CURSOR_KEY, { nextRow: currentRow });
+    // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling, timeout, progress
+    const iteratorResult = SHEET_ITERATOR.forEachChunk({
+      sheet: shF,
+      sheetName: SHEETS.SHEET_NAMES.Fatture,
+      startRow: currentRow,
+      endRow: lastInvoiceRow,
+      batchSize: CHUNK_SIZE,
+      maxColumns: maxColNeeded,
+      cursorKey: CURSOR_KEY,
+      maxRuntimeSec: maxSec,
+      onTimeout: () => {
         _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF);
-        LOG?.warn('ROWS', `Timeout. Ripresa salvata dalla riga ${currentRow}.`);
-
+        LOG?.warn('ROWS', 'Timeout. Ripresa salvata.');
         if (!isSilent) {
-          STATE.setJSON(App.config.keys.progress, {
-            current: currentRow, total: lastInvoiceRow, message: 'Timeout. In pausa...'
-          });
           UTIL.showToast('Timeout raggiunto. Clicca "Continua" per riprendere.', 'Pausa', 10);
         }
-        return;
-      }
+      },
+      processChunk: (invoicesChunk, chunkStartRow) => {
+        // Elabora blocco
+        for (let i = 0; i < invoicesChunk.length; i++) {
+          const invData = invoicesChunk[i];
+          const invRowNum = chunkStartRow + i;
 
-      // Legge blocco
-      const chunkRowCount = Math.min(CHUNK_SIZE, lastInvoiceRow - currentRow + 1);
-      let invoicesChunk = [];
-      try {
-        invoicesChunk = shF.getRange(currentRow, 1, chunkRowCount, maxColNeeded).getValues();
-      } catch (e) {
-        LOG?.error('ROWS_MAIN', `Errore lettura chunk fatture da riga ${currentRow}`, { error: e.message });
-        currentRow += chunkRowCount;
-        continue;
-      }
-
-      // Elabora blocco
-      for (let i = 0; i < invoicesChunk.length; i++) {
-        const invData = invoicesChunk[i];
-        const invRowNum = currentRow + i;
-
-        const fornitoreId = String(invData[idxF.FornitoreID] ?? '').trim().replace(/^IT/i, '').replace(/^0+/, '');
+          const fornitoreId = String(invData[idxF.FornitoreID] ?? '').trim().replace(/^IT/i, '').replace(/^0+/, '');
         const righeImportateFlag = invData[idxF.RigheImportate];
         const importaSrc = invData[idxF.ImportaRigheSrc];
 
@@ -291,17 +281,21 @@ const IMPORT_ROWS = (function () {
         }
       }
 
-      currentRow += chunkRowCount;
-      const progressRow = Math.min(currentRow - 1, lastInvoiceRow);
-
-      // Aggiorna UI
-      if (!isSilent) {
+      // UI progress update
+      if (!isSilent && chunkStartRow % (CHUNK_SIZE * 2) === 0) {
+        const progressRow = Math.min(chunkStartRow + invoicesChunk.length - 1, lastInvoiceRow);
         STATE.setJSON(App.config.keys.progress, {
           current: progressRow, total: lastInvoiceRow,
           message: `Importo righe: ${progressRow}/${lastInvoiceRow}...`
         });
         UTIL.showToast(`Elaboro fattura ${progressRow}/${lastInvoiceRow}...`, 'Importazione Righe', 3);
       }
+    }
+    });
+
+    // Check if iterator was interrupted by timeout
+    if (iteratorResult.interrupted) {
+      return;
     }
 
     // Scrittura finale
@@ -552,7 +546,7 @@ const IMPORT_ROWS = (function () {
 
 // Registra IMPORT_ROWS nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('IMPORT_ROWS', ['SHEETS', 'LOG', 'UTIL', 'PRODUCTS', 'STATE', 'CONFIG']);
+  ModuleRegistry.register('IMPORT_ROWS', ['SHEETS', 'LOG', 'UTIL', 'PRODUCTS', 'STATE', 'CONFIG', 'SHEET_ITERATOR']);
 }
 
 // Registra IMPORT_ROWS nel namespace GG

@@ -1,9 +1,10 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 80_pdf_export.js
-// VERSIONE: 25.0 (PDF Export Engine)
+// VERSIONE: 26.0 (PDF Export Engine - REFACTORED with SHEET_ITERATOR)
 // DESCRIZIONE: Motore di creazione PDF (resumibile, chunked, robusto).
 // NOTA: Richiede un file Html "PdfTemplate" nel progetto.
+//       REFACTORED: Manual loop replaced with SHEET_ITERATOR.forEachChunk()
 // =============================================================
 
 const PDF = (function () {
@@ -81,40 +82,31 @@ const PDF = (function () {
       });
     }
 
-    while (currentRow <= lastRow) {
-      const elapsed = (new Date() - startTime) / 1000;
-      if (elapsed > maxSec) {
-        // Timeout: salva stato + flush aggiornamenti
-        STATE.setJSON(CURSOR_KEY, { nextRow: currentRow });
+    // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling, timeout, progress
+    const iteratorResult = SHEET_ITERATOR.forEachChunk({
+      sheet: sh,
+      sheetName: SHEETS.SHEET_NAMES.Fatture,
+      startRow: currentRow,
+      endRow: lastRow,
+      batchSize: CHUNK_SIZE,
+      maxColumns: maxColNeeded,
+      cursorKey: CURSOR_KEY,
+      maxRuntimeSec: maxSec,
+      onTimeout: () => {
         if (pendingUpdates > 0) {
           UTIL.updateSheetInPlace(sh, linkUpdates, headerRow);
           _clearObject(linkUpdates); pendingUpdates = 0;
         }
-        LOG?.warn('PDF', `Timeout. Ripresa salvata dalla riga ${currentRow}.`);
+        LOG?.warn('PDF', 'Timeout. Ripresa salvata.');
         if (!isSilent) {
           UTIL.showToast('Timeout raggiunto. Premi "Crea PDF" per riprendere.', 'Pausa', 10);
-          STATE.setJSON(App.config.keys.progress, {
-            current: currentRow, total: lastRow, message: 'Timeout. In pausa...'
-          });
         }
-        return;
-      }
-
-      // Legge un blocco minimale di colonne
-      const chunkRowCount = Math.min(CHUNK_SIZE, lastRow - currentRow + 1);
-      let chunkData = [];
-      try {
-        chunkData = sh.getRange(currentRow, 1, chunkRowCount, maxColNeeded).getValues();
-      } catch (e) {
-        LOG?.error('PDF_MAIN', `Errore lettura chunk dati (riga ${currentRow})`, { error: e.message });
-        currentRow += chunkRowCount;
-        continue;
-      }
-
-      // Elabora il blocco
-      for (let i = 0; i < chunkData.length; i++) {
-        const rowData = chunkData[i];
-        const rowNum = currentRow + i;
+      },
+      processChunk: (chunkData, chunkStartRow) => {
+        // Elabora il blocco
+        for (let i = 0; i < chunkData.length; i++) {
+          const rowData = chunkData[i];
+          const rowNum = chunkStartRow + i;
 
         const fileId = rowData[idx.FileID];
         const fileName = rowData[idx.FileName];
@@ -213,15 +205,20 @@ const PDF = (function () {
         }
       }
 
-      currentRow += chunkRowCount;
-
-      if (!isSilent) {
-        const progressRow = Math.min(currentRow - 1, lastRow);
+      // UI progress update
+      if (!isSilent && chunkStartRow % (CHUNK_SIZE * 2) === 0) {
+        const progressRow = Math.min(chunkStartRow + chunkData.length - 1, lastRow);
         STATE.setJSON(App.config.keys.progress, {
           current: progressRow, total: lastRow,
           message: `Creazione PDF: ${progressRow}/${lastRow}...`
         });
       }
+    }
+    });
+
+    // Check if iterator was interrupted by timeout
+    if (iteratorResult.interrupted) {
+      return;
     }
 
     // Flush finale degli aggiornamenti link
@@ -379,7 +376,7 @@ const PDF = (function () {
 
 // Registra PDF nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('PDF', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG']);
+  ModuleRegistry.register('PDF', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG', 'SHEET_ITERATOR']);
 }
 
 // Registra PDF nel namespace GG
