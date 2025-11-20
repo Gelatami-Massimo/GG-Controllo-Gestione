@@ -128,11 +128,11 @@ const SHEETS = (function () {
     // --- SCHEMA CONFIG allineato (solo colonne base) ---
     'Config': ['Key', 'Value', 'Description'],
 
-    // NB: Reparto subito dopo Categoria, Data resta tra RegimeFiscale e Anno
+    // NB: Reparto subito dopo Categoria, Destinazione dopo Reparto, Data resta tra RegimeFiscale e Anno
     'Fatture': [
       'FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF',
       'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
-      'Reparto',
+      'Reparto', 'Destinazione',
       'RegimeFiscale', 'Data', 'Anno', 'Mese', 'NumeroDoc', 'TipoDoc',
       'TotImponibile', 'TotImposta', 'Valuta', 'TotDocumento',
       'RigheImportateNum', 'TotRigheNetto',

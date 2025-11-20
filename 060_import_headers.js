@@ -481,20 +481,35 @@ const IMPORT_HEADERS = (function () {
   // ============================================================
   // Reparto di default per le fatture
   // ============================================================
-  function _resolveRepartoForFattura(sede, indirizzo = '') {
-    // Normalizza l'indirizzo per confronto case-insensitive
-    const indirizzoNorm = String(indirizzo || '')
-      .toLowerCase()
+  /**
+   * Calcola il reparto per una fattura basato su destinazione.
+   * Se il reparto è già valorizzato, non lo modifica (correzioni manuali).
+   * 
+   * @param {string} destinazione - Indirizzo di destinazione della fattura
+   * @param {string} repartoEsistente - Valore corrente di Reparto (se presente)
+   * @return {string} Reparto finale calcolato o esistente
+   */
+  function computeRepartoForFattura_(destinazione, repartoEsistente) {
+    // Se il reparto è già valorizzato, non lo tocchiamo (consente correzioni manuali)
+    if (repartoEsistente && String(repartoEsistente).trim() !== '') {
+      return repartoEsistente;
+    }
+    
+    // Normalizza la destinazione per confronto case-insensitive
+    const dest = String(destinazione || '')
+      .toUpperCase()
       .replace(/\s+/g, ' ')
       .trim();
     
-    // Logica specifica: se indirizzo contiene 'via nazionale 202', reparto = Hotel
-    if (indirizzoNorm.includes('via nazionale 202')) {
-      return 'Hotel';
+    // Default per tutti i casi
+    let reparto = 'Gelateria';
+    
+    // Logica specifica: se destinazione contiene 'VIA NAZIONALE 202', reparto = Hotel
+    if (dest.indexOf('VIA NAZIONALE 202') !== -1) {
+      reparto = 'Hotel';
     }
     
-    // Default per tutti gli altri casi
-    return 'Gelateria';
+    return reparto;
   }
 
   // ============================================================
@@ -591,8 +606,15 @@ const IMPORT_HEADERS = (function () {
 
         const isCreditNote = (data.doc.tipo || '').toLowerCase().includes('nota di credito');
         const sede = data.sede || 'Non Assegnata';
-        const indirizzoCliente = data.indirizzoCliente || '';
-        const reparto = _resolveRepartoForFattura(sede, indirizzoCliente);
+        
+        // ✅ Destinazione: compone l'indirizzo di destinazione dalla fattura XML
+        const destinazione = data.indirizzoCliente || '';
+        
+        // ✅ Calcola Reparto usando computeRepartoForFattura_
+        // Durante import di nuove fatture, repartoEsistente è sempre vuoto,
+        // quindi il reparto viene sempre calcolato dalla destinazione
+        const reparto = computeRepartoForFattura_(destinazione, '');
+        
         const numeroDocFormatted = UTIL.forceText(data.doc.numero);
 
         const finalImponibile = isCreditNote
@@ -616,6 +638,7 @@ const IMPORT_HEADERS = (function () {
           Famiglia: supplierInfo.famiglia,
           Categoria: supplierInfo.categoria,
           Reparto: reparto,
+          Destinazione: destinazione,
           RegimeFiscale: data.fornitore.regime,
           Data: data.doc.data,
           Anno: data.doc.anno,
