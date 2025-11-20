@@ -1,5 +1,5 @@
 {
-  "scriptId": "13XRO0h4qOu7TSTZ-IUTnQySdnGOE7VScejFWfDxZC_rdys-9o8LqNn9KCASP",
+  "scriptId": "13XRO0h4qOu7TSTZ-IUTnQySdnGOE7VScejFWfDxZC_rdys-9o8LqNn9K",
   "rootDir": "",
   "scriptExtensions": [
     ".js",
@@ -25,10 +25,10 @@
     "060_import_headers.js",
     "070_import_rows.js",
     "080_pdf_export.js",
+    "085_magazzino_ingredienti.js",
     "090_dashboard.js",
     "100_reporting.js",
     "110_warehouse.js",
-    "115_magazzino_ingredienti.js",
     "120_pnl.js",
     "130_debug.js",
     "140_status.js",
