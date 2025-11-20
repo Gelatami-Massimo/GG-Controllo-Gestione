@@ -65,6 +65,8 @@ function onOpen() {
     .addItem('🚀 Setup Iniziale', App.ui.fn.runInitialSetup)
     .addItem('⚙️ Impostazioni Sistema', runConfigDialog)
     .addSeparator()
+    .addItem('📋 Verifica Struttura Fogli', 'DEV_EnsureSheetsAndFormats')
+    .addSeparator()
     .addItem('🕐 Attiva Import Automatico', App.ui.fn.runCreateTrigger)
     .addItem('🛑 Disattiva Import Automatico', App.ui.fn.runDeleteTriggers)
   );
