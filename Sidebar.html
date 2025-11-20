@@ -193,7 +193,7 @@
     </style>
   </head>
   <body>
-    <h4>🧊 GELATAMI</h4>
+    <h4>🧊 Pannello GELATAMI</h4>
 
     <div class="info-panel">
       <div class="info-row">
@@ -221,58 +221,58 @@
     <!-- 📥 IMPORT -->
     <section class="gg-section gg-import">
       <h5>📥 Import</h5>
-      <p class="gg-section-desc">Importazione fatture XML e generazione PDF</p>
+      <p class="gg-section-desc">Carica fatture XML dal Drive</p>
       <div class="gg-buttons-grid full">
         <button id="continue-btn" class="btn-warn" onclick="runServerFunction('<?!= App.ui.fn.runContinue ?>')" title="Riprendi import interrotto">▶ Continua</button>
       </div>
       <div class="gg-buttons-grid">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runImportHeaders ?>')" title="Importa solo intestazioni fatture">Intestazioni</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runImportHeaders ?>')" title="Importa intestazioni fatture">Intestazioni</button>
         <button onclick="runServerFunction('<?!= App.ui.fn.runImportRows ?>')" title="Importa righe prodotti">Righe</button>
       </div>
       <div class="gg-buttons-grid full">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePdfs ?>')" title="Genera PDF mancanti">📄 PDF mancanti</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePdfs ?>')" title="Genera PDF mancanti">📄 PDF</button>
       </div>
     </section>
 
     <!-- 📊 ANALISI -->
     <section class="gg-section gg-analytics">
       <h5>📊 Analisi</h5>
-      <p class="gg-section-desc">Report, dashboard e analisi dati</p>
+      <p class="gg-section-desc">Dashboard e report finanziari</p>
       <div class="gg-buttons-grid">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateDashboard ?>')" title="Genera dashboard riepilogativa">Dashboard</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateDashboard ?>')" title="Dashboard riepilogativa">Dashboard</button>
         <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePnlSheet ?>')" title="Conto economico">P&L</button>
-        <button onclick="runServerFunction('buildMagazzinoByYear')" title="Report magazzino per prodotto">Magazzino</button>
-        <button onclick="runServerFunction('buildMagazzinoIngredientiByYear')" title="Report magazzino aggregato per anno e ingrediente">Mag. Ingred.</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runReconciliationReport ?>')" title="Report di audit e integrità">Audit</button>
+        <button onclick="runServerFunction('buildMagazzinoByYear')" title="Magazzino per prodotto">Magazzino</button>
+        <button onclick="runServerFunction('buildMagazzinoIngredientiByYear')" title="Magazzino per ingrediente">Mag. Ingred.</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runReconciliationReport ?>')" title="Controllo integrità dati">Audit</button>
       </div>
     </section>
 
     <!-- 🔧 MANUTENZIONE -->
     <section class="gg-section gg-maintenance">
       <h5>🔧 Manutenzione</h5>
-      <p class="gg-section-desc">Ottimizzazione e pulizia dati</p>
+      <p class="gg-section-desc">Pulizia e ottimizzazione</p>
       <div class="gg-buttons-grid">
-        <button class="btn-primary" onclick="runServerFunction('<?!= App.ui.fn.runCompleteMaintenance ?>')" title="Esegue tutte le operazioni di manutenzione">Man. completa</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runSyncSuppliers ?>')" title="Sincronizza fornitori">Fornitori</button>
+        <button class="btn-primary" onclick="runServerFunction('<?!= App.ui.fn.runCompleteMaintenance ?>')" title="Manutenzione completa automatica">✨ Completa</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runSyncSuppliers ?>')" title="Aggiorna anagrafica fornitori">Fornitori</button>
         <button onclick="runServerFunction('<?!= App.ui.fn.runSyncCategoriesRetroactive ?>')" title="Riallinea categorie prodotti">Categorie</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runMarkDuplicateInvoices ?>')" title="Gestisci fatture duplicate">Duplicati</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runClearCache ?>')" title="Pulisci cache di sistema">Cache</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runMarkDuplicateInvoices ?>')" title="Marca fatture duplicate">Duplicati</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runClearCache ?>')" title="Pulisci cache">Cache</button>
       </div>
     </section>
 
     <!-- ⚙️ CONFIGURAZIONE -->
     <section class="gg-section gg-config">
       <h5>⚙️ Config</h5>
-      <p class="gg-section-desc">Impostazioni e gestione trigger</p>
+      <p class="gg-section-desc">Impostazioni e automazioni</p>
       <div class="gg-buttons-grid">
         <button onclick="runServerFunction('<?!= App.ui.fn.runInitialSetup ?>')" title="Setup iniziale fogli">Setup</button>
-        <button class="btn-primary" onclick="openConfigDialog()" title="Impostazioni sistema">Impostazioni</button>
-        <button class="btn-success" onclick="runServerFunction('DEV_EnsureSheetsAndFormats')" title="Verifica e aggiorna struttura fogli">Struttura</button>
-        <button class="btn-success" onclick="openTriggerDashboard()" title="Dashboard trigger automatici">Trigger dash</button>
+        <button class="btn-primary" onclick="openConfigDialog()" title="Configurazione sistema">Impostazioni</button>
+        <button class="btn-success" onclick="runServerFunction('DEV_EnsureSheetsAndFormats')" title="Verifica struttura fogli">Struttura</button>
+        <button class="btn-success" onclick="openTriggerDashboard()" title="Monitoraggio trigger">Trigger</button>
       </div>
       <div class="gg-buttons-grid">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateTrigger ?>')" title="Attiva import automatico ogni 15 min">Attiva import</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runDeleteTriggers ?>')" title="Disattiva tutti i trigger">Stop import</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateTrigger ?>')" title="Attiva import automatico">▶️ Attiva</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runDeleteTriggers ?>')" title="Disattiva import automatico">⏸️ Disattiva</button>
       </div>
     </section>
 

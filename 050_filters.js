@@ -9,7 +9,17 @@ const FILTERS = (function () {
 
   // ---------------------- UI ----------------------
 
-  // Apre la dialog box per il filtro manuale
+  /**
+   * Apre dialog HTML per selezione filtri manuali su un foglio specificato.
+   * Mostra interfaccia utente (FilterDialog.html) con colonne disponibili per filtrare.
+   * 
+   * @param {string} sheetName - Nome del foglio da filtrare (es. 'Righe Fatture')
+   * @returns {void}
+   * @throws {Error} Se FilterDialog.html non trovato o foglio non ha intestazioni valide
+   * 
+   * @example
+   * FILTERS.applyManualDialog('Righe Fatture');
+   */
   function applyManualDialog(sheetName) {
     const sh = SHEETS.get(sheetName);
     if (!sh) {
@@ -53,7 +63,15 @@ const FILTERS = (function () {
 
   // ---------------------- Public API ----------------------
 
-  // Rimuove i filtri ed eventualmente ricrea un filtro “vuoto” sull’area dati
+  /**
+   * Rimuove tutti i filtri attivi sul foglio e ricrea filtro pulito sull'area dati.
+   * 
+   * @param {string} sheetName - Nome del foglio (es. 'Righe Fatture')
+   * @returns {void}
+   * 
+   * @example
+   * FILTERS.clearFilter('Righe Fatture');
+   */
   function clearFilter(sheetName) {
     try {
       const sh = SHEETS.get(sheetName);
@@ -75,7 +93,25 @@ const FILTERS = (function () {
     }
   }
 
-  // Applica un filtro su colonna e valore con parsing “smart” dell’espressione
+  /**
+   * Applica filtro smart su colonna specificata con parsing automatico tipo dato.
+   * 
+   * Supporta:
+   * - Testo: "abc" (contains), "=abc" (equals)
+   * - Numero: >, >=, <, <=, = (es. ">= 10"), range "10..20"
+   * - Data: "YYYY-MM-DD" o "DD/MM/YYYY", range "2024-01-01..2024-01-31"
+   * 
+   * @param {string} colName - Nome colonna da filtrare (es. 'DestReparto')
+   * @param {string} filterValue - Espressione filtro (es. "=Laboratorio", ">= 100", "2024-01-01..2024-12-31")
+   * @param {string} sheetName - Nome foglio (es. 'Righe Fatture')
+   * @returns {void}
+   * @throws {Error} Se colonna non trovata o filtro non applicabile
+   * 
+   * @example
+   * FILTERS.runManualFilter('DestReparto', '=Laboratorio', 'Righe Fatture');
+   * FILTERS.runManualFilter('CostoUnitario', '>= 10', 'Righe Fatture');
+   * FILTERS.runManualFilter('DataFattura', '2024-01-01..2024-12-31', 'Righe Fatture');
+   */
   function runManualFilter(colName, filterValue, sheetName) {
     const sh = SHEETS.get(sheetName);
     if (!sh) throw new Error(`Foglio '${sheetName}' non trovato.`);
@@ -288,7 +324,16 @@ if (typeof GG !== 'undefined') {
 
 /**
  * Wrapper globale richiesto da HtmlService per la dialog box.
- * Ritorna { success, error? } alla pagina HTML.
+ * Esegue il filtro manuale su un foglio e ritorna il risultato alla pagina HTML.
+ * 
+ * @param {string} colName - Nome della colonna da filtrare
+ * @param {string} filterValue - Valore del filtro da applicare
+ * @param {string} sheetName - Nome del foglio su cui applicare il filtro
+ * @returns {{success: boolean, error?: string}} Oggetto con successo o errore
+ * 
+ * @example
+ * const result = runManualFilter('Fornitore', 'ACME', 'Fatture');
+ * if (result.success) console.log('Filtro applicato');
  */
 function runManualFilter(colName, filterValue, sheetName) {
   try {

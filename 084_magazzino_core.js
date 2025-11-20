@@ -231,6 +231,26 @@ const MAGAZZINO_CORE = (() => {
    * Genera report Magazzino per PRODOTTO (Anno+Prodotto+Reparto)
    * @public
    */
+  /**
+   * Costruisce report magazzino aggregato per PRODOTTO.
+   * 
+   * Aggregazione:
+   * - Per Anno, CodiceInterno, FornitoreID, Descrizione, CategoriaProdotto, Reparto, UMBase
+   * - Somma: PZ totali, KG totali, Costo Totale €
+   * - Calcola: Costo Medio €/UMBase
+   * 
+   * Conversioni UM:
+   * - Se fattura in CT (cartoni): PZ_TOT = QuantitàCT * PZxCT
+   * - Se UMBase=KG: KG_TOT = PZ_TOT * KGxPZ
+   * - Se UMBase=PZ: KG_TOT non applicabile
+   * 
+   * Output: Scrive/aggiorna foglio "Magazzino" con dati aggregati
+   * 
+   * @returns {void}
+   * 
+   * @example
+   * MAGAZZINO_CORE.buildMagazzinoByYear();
+   */
   function buildMagazzinoByYear() {
     try {
       UTIL.showToast('Creazione Report Magazzino per Prodotto...', 'Magazzino', 10);
@@ -383,6 +403,25 @@ const MAGAZZINO_CORE = (() => {
    * Genera report Magazzino Ingredienti per INGREDIENTE (Anno+Ingrediente+Reparto)
    * @public
    */
+  /**
+   * Costruisce report magazzino ingredienti per gelateria (filtro Ingrediente=TRUE).
+   * 
+   * Aggregazione:
+   * - Per Anno, Ingrediente, Reparto, UMBase
+   * - Somma: PZ totali, KG totali, Costo Totale €
+   * - Calcola: Costo Medio €/UMBase, % Incidenza su totale costi ingredienti
+   * 
+   * Filtri:
+   * - Solo prodotti con Ingrediente=TRUE (da foglio Prodotti)
+   * - Esclusi NonInUso=TRUE
+   * 
+   * Output: Scrive/aggiorna foglio "Magazzino Ingredienti" con dati aggregati
+   * 
+   * @returns {void}
+   * 
+   * @example
+   * MAGAZZINO_CORE.buildMagazzinoIngredientiByYear();
+   */
   function buildMagazzinoIngredientiByYear() {
     try {
       UTIL.showToast('Creazione Report Magazzino Ingredienti...', 'Magazzino Ingredienti', 10);
@@ -529,10 +568,29 @@ if (typeof GG !== 'undefined') {
 }
 
 // Funzioni globali per il menu
+
+/**
+ * Costruisce il report magazzino per prodotto raggruppato per anno.
+ * Wrapper pubblico chiamato dal menu GELATAMI.
+ * 
+ * @returns {void}
+ * 
+ * @example
+ * buildMagazzinoByYear(); // Chiamato dal menu
+ */
 function buildMagazzinoByYear() {
   MAGAZZINO_CORE.buildMagazzinoByYear();
 }
 
+/**
+ * Costruisce il report magazzino ingredienti raggruppato per anno.
+ * Wrapper pubblico chiamato dal menu GELATAMI.
+ * 
+ * @returns {void}
+ * 
+ * @example
+ * buildMagazzinoIngredientiByYear(); // Chiamato dal menu
+ */
 function buildMagazzinoIngredientiByYear() {
   MAGAZZINO_CORE.buildMagazzinoIngredientiByYear();
 }

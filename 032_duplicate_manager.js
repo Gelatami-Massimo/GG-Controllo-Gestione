@@ -303,44 +303,49 @@ const DUPLICATE_MANAGER = (function() {
 
   /**
    * Build map: chiave → [rowNumbers].
+   * Uses SHEET_ITERATOR for consistent chunk handling.
    * @private
    */
   function _buildDuplicateMap(sheet, headerRow, lastRow, maxCol, idx, keyBuilder, batchSize) {
     const duplicateMap = new Map();
-    let currentRow = headerRow + 1;
 
-    while (currentRow <= lastRow) {
-      const chunkSize = Math.min(batchSize, lastRow - currentRow + 1);
-      const data = sheet.getRange(currentRow, 1, chunkSize, maxCol).getValues();
+    // REFACTORED: Use SHEET_ITERATOR.forEachChunk for consistent chunk iteration
+    SHEET_ITERATOR.forEachChunk({
+      sheet: sheet,
+      sheetName: 'DuplicateDetection', // For logging
+      startRow: headerRow + 1,
+      endRow: lastRow,
+      batchSize: batchSize,
+      maxColumns: maxCol,
+      maxRuntimeSec: 300, // 5 min timeout safety
+      processChunk: (chunk, chunkStartRow) => {
+        for (let i = 0; i < chunk.length; i++) {
+          const row = chunk[i];
+          const rowNum = chunkStartRow + i;
 
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i];
-        const rowNum = currentRow + i;
+          try {
+            const key = keyBuilder(row, idx);
+            
+            if (!key || typeof key !== 'string') {
+              // Skip righe con chiave invalida
+              continue;
+            }
 
-        try {
-          const key = keyBuilder(row, idx);
-          
-          if (!key || typeof key !== 'string') {
-            // Skip righe con chiave invalida
-            continue;
+            if (!duplicateMap.has(key)) {
+              duplicateMap.set(key, []);
+            }
+
+            duplicateMap.get(key).push(rowNum);
+
+          } catch (e) {
+            LOG.warn('DUPLICATE_MANAGER', `Error building key for row ${rowNum}`, {
+              error: e.message
+            });
+            // Continua con prossima riga
           }
-
-          if (!duplicateMap.has(key)) {
-            duplicateMap.set(key, []);
-          }
-
-          duplicateMap.get(key).push(rowNum);
-
-        } catch (e) {
-          LOG.warn('DUPLICATE_MANAGER', `Error building key for row ${rowNum}`, {
-            error: e.message
-          });
-          // Continua con prossima riga
         }
       }
-
-      currentRow += chunkSize;
-    }
+    });
 
     return duplicateMap;
   }

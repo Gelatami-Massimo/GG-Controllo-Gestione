@@ -9,6 +9,31 @@ const REPORTING = (function () {
 
   const REPORT_SHEET_NAME = 'Report Controllo';
 
+  /**
+   * Genera report audit completo con riconciliazione dati Drive/Sheets.
+   * 
+   * Sezioni report:
+   * 1. RIEPILOGO GENERALE: fatture, righe, fornitori, prodotti totali
+   * 2. AUDIT FINANZIARIO:
+   *    - Conteggio file XML vs fatture nel foglio (discrepanza)
+   *    - Somma totali certificata (da XML) vs totali foglio Fatture (discrepanza importi)
+   * 3. AUDIT INTEGRITÀ DATI:
+   *    - Righe con RichiedeSetup=TRUE (mancanza dati conversione UM)
+   *    - Fatture senza righe importate (RigheImportate=FALSE)
+   *    - Prodotti senza codice (TipoRiga='ProdottoSenzaCodice')
+   *    - Duplicati fatture (FileId duplicati)
+   *    - Duplicati righe (FileId|NumeroLinea duplicati)
+   * 4. CONTEGGIO FILE PER MESE: Aggregazione per Anno-Mese (da Data Fattura)
+   * 5. CONTEGGIO FILE PER CARTELLA: Aggregazione per percorso cartella Drive
+   * 6. CONTROLLO STRUTTURA FOGLI: Verifica esistenza colonne richieste in ogni foglio
+   * 
+   * Output: Foglio "Report Controllo" con tabelle formattate e link ai fogli
+   * 
+   * @returns {void}
+   * 
+   * @example
+   * REPORTING.run();
+   */
   function run() {
     UTIL.showToast('Generazione Report di Audit in corso...', 'Reporting', 10);
 

@@ -7,6 +7,29 @@
 
 const DASHBOARD = (function () {
 
+  /**
+   * Crea o aggiorna il foglio Dashboard con KPI finanziari, MOL e dati annuali/mensili.
+   * 
+   * Workflow:
+   * 1. Calcola dati P&L da foglio Dati Mensili:
+   *    a. Aggregazione GLOBALE (tutte sedi combinate)
+   *    b. Aggregazione per SEDE (separata per ogni unità)
+   * 2. Per ogni anno e sede:
+   *    - Mese per mese: Fatturato, Costo Fornitori (Netto/Totale), Costo Personale
+   *    - Totali annuali: Incidenza Costo Netto %, Incidenza Personale %, MOL Netto
+   * 3. Scrive sezioni formattate con:
+   *    - Tabelle dati mensili (8 colonne)
+   *    - Righe totali annuali con formule SUM()
+   *    - Formati valuta (€) e percentuali
+   * 4. Autoresize colonne e attiva foglio
+   * 
+   * Output: Foglio "Dashboard" pronto per analisi visuale
+   * 
+   * @returns {void}
+   * 
+   * @example
+   * DASHBOARD.create();
+   */
   function create() {
     UTIL.showToast('Aggiornamento Dashboard...', 'Dashboard', 10);
     const ss = SpreadsheetApp.getActiveSpreadsheet();

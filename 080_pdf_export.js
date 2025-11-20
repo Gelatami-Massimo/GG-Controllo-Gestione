@@ -9,6 +9,30 @@ const PDF = (function () {
 
   const CURSOR_KEY = App.config.keys.cursors.pdf;
 
+  /**
+   * Genera file PDF da file XML fatture e salva in cartella output.
+   * 
+   * Workflow:
+   * 1. Legge foglio Fatture, filtra righe con LinkPDF vuoto
+   * 2. Per ogni fattura:
+   *    a. Verifica se PDF già esistente in cartella output (nome match)
+   *    b. Se esistente: aggiorna LinkPDF con URL esistente
+   *    c. Se non esistente:
+   *       - Genera PDF da XML con HtmlService (template PdfTemplate.html)
+   *       - Naming: "DenominazioneFornitore - NumeroDoc.pdf" (sanificato)
+   *       - Salva in CARTELLA_OUTPUT_ID configurata
+   *       - Aggiorna LinkPDF con URL nuovo file
+   * 3. Scrittura batch: flush aggiornamenti ogni PDF_FLUSH_EVERY righe
+   * 4. Colonna opzionale PDFStato: SUCCESS/ERROR per tracciamento
+   * 5. Gestione timeout: salva stato, riprendibile
+   * 
+   * @param {boolean} [isSilent=false] - Se true, disabilita aggiornamenti UI progress
+   * @returns {void}
+   * @throws {Error} Se CARTELLA_OUTPUT_ID non configurata o inaccessibile
+   * 
+   * @example
+   * PDF.run();
+   */
   function run(isSilent = false) {
     const outputFolderId = CONFIG.get('CARTELLA_OUTPUT_ID');
     if (!outputFolderId) {

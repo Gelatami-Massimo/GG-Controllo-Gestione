@@ -46,52 +46,38 @@ const IMPORT_ROWS = (function () {
   }
 
   /**
-   * Classifica il tipo di riga secondo logica robusta multi-fornitore.
+   * Classifica tipo riga fattura con logica multi-fornitore robusta.
    * 
-   * Regole:
+   * REGOLE:
    * 1. OMAGGIO: Quantità > 0 e PrezzoTotale = 0
-   * 2. SCONTO: 
+   * 2. SCONTO:
    *    - Quantità = 0 e PrezzoTotale ≠ 0, OPPURE
-   *    - PrezzoTotale < 0 e descrizione/codice contiene keyword sconto, OPPURE
-   *    - CodiceTipo è un codice sconto (SC, S, DSC)
+   *    - PrezzoTotale < 0 e descrizione/CodiceTipo contiene keyword sconto, OPPURE
+   *    - CodiceTipo è codice sconto esplicito (SC, S, DSC, SCONTO, DISCOUNT)
    * 3. TESTO: Quantità = 0, PrezzoTotale = 0, nessuna keyword sconto
-   * 4. ARTICOLO: default (Quantità > 0, PrezzoTotale > 0, non OMAGGIO)
+   * 4. ARTICOLO: default (Quantità > 0, PrezzoTotale > 0)
    * 
-   * @param {number} quantita - Quantità della riga
-   * @param {number} prezzoTotale - Prezzo totale della riga
-   * @param {string} descrizione - Descrizione della riga
+   * @param {number} quantita - Quantità riga fattura
+   * @param {number} prezzoTotale - Prezzo totale riga
+   * @param {string} descrizione - Descrizione riga
    * @param {string} codiceTipo - CodiceTipo (se presente)
    * @returns {string} "ARTICOLO" | "SCONTO" | "OMAGGIO" | "TESTO"
    * 
    * @example
    * // ARTICOLO: Prodotto normale
-   * _classifyRowType(10, 15.00, "Latte Intero 1L", "ART")
-   * // → "ARTICOLO"
+   * _classifyRowType(10, 15.00, "Latte Intero 1L", "ART") // → "ARTICOLO"
    * 
    * @example
    * // OMAGGIO: Quantità positiva ma prezzo zero
-   * _classifyRowType(5, 0, "Campione omaggio yogurt", "PROMO")
-   * // → "OMAGGIO"
+   * _classifyRowType(5, 0, "Campione omaggio yogurt", "PROMO") // → "OMAGGIO"
    * 
    * @example
-   * // SCONTO: Quantità zero, prezzo negativo
-   * _classifyRowType(0, -5.00, "Sconto cliente fedele", "")
-   * // → "SCONTO"
-   * 
-   * @example
-   * // SCONTO: Prezzo negativo con keyword
-   * _classifyRowType(1, -2.50, "APPLICAZIONE SCONTI PIEDE", "")
-   * // → "SCONTO"
-   * 
-   * @example
-   * // SCONTO: CodiceTipo esplicito
-   * _classifyRowType(0, -10.00, "Riduzione per volume", "SC")
-   * // → "SCONTO"
+   * // SCONTO: Quantità zero, prezzo negativo con keyword
+   * _classifyRowType(0, -5.00, "Sconto cliente fedele", "") // → "SCONTO"
    * 
    * @example
    * // TESTO: Nota senza valore economico
-   * _classifyRowType(0, 0, "Consegna prevista: 15/11/2025", "")
-   * // → "TESTO"
+   * _classifyRowType(0, 0, "Consegna prevista: 15/11/2025", "") // → "TESTO"
    */
   function _classifyRowType(quantita, prezzoTotale, descrizione, codiceTipo) {
     // Normalizza input (gestisce null/undefined)
@@ -223,6 +209,30 @@ const IMPORT_ROWS = (function () {
   // MAIN LOGIC
   // ============================================================
 
+  /**
+   * Importa righe dettaglio fatture da XML, collegate al foglio Fatture.
+   * 
+   * Workflow:
+   * 1. Filtra fatture con RigheImportate=FALSE dal foglio Fatture
+   * 2. Per ogni fattura:
+   *    a. Parse XML DettaglioLinee (NumeroLinea, Descrizione, Quantita, UnitaMisura, PrezzoTotale, AliquotaIVA)
+   *    b. Classifica TipoRiga (_classifyRowType): ARTICOLO, SCONTO, OMAGGIO, TESTO
+   *    c. Gestisce prodotti SENZA codice: assegna TipoRiga='ProdottoSenzaCodice'
+   *    d. Chiama PRODUCTS.ensureProduct() per creare/trovare CodiceInterno
+   *    e. Calcola CostoUnitario con PRODUCTS.calculateUnitCost() (conversioni UM)
+   *    f. Copia DestReparto/Categoria da Fatture/Prodotti
+   *    g. Scrive riga in Righe Fatture
+   *    h. Marca fattura come RigheImportate=TRUE
+   * 3. Prevenzione duplicati: cache FileId|NumeroLinea
+   * 4. Gestione timeout: salva stato, riprendibile con prossima esecuzione
+   * 
+   * @param {boolean} [isSilent=false] - Se true, disabilita aggiornamenti UI progress
+   * @returns {void}
+   * @throws {Error} Se fogli Fatture/Prodotti/Righe non accessibili
+   * 
+   * @example
+   * IMPORT_ROWS.run();
+   */
   function run(isSilent = false) {
     if (!isSilent) STATE.clear(App.config.keys.progress);
     

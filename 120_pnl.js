@@ -6,7 +6,35 @@
 // =============================================================
 
 /**
- * Crea o aggiorna il foglio 'Conto Economico Riclassificato'
+ * Crea o aggiorna foglio Conto Economico Riclassificato con P&L multi-anno.
+ * 
+ * Workflow:
+ * 1. Carica dati da:
+   *    a. Foglio Dati Mensili: Fatturato e Costo Personale per SEDE e MESE
+   *    b. Foglio Fatture: Costi Fornitori aggregati per Famiglia (da mappatura categorie)
+ * 2. Aggregazione dati:
+   *    a. GLOBALE: somma tutte le sedi
+   *    b. Per SEDE: report separato per ogni unità
+ * 3. Struttura P&L:
+   *    - FATTURATO (riga)
+   *    - Famiglie Fornitori (righe per categoria: "1 Prodotti", "2 Servizi", "3 Cedolini", ecc.)
+   *    - Colonne: Anno-Mese (YYYY-MM) + Totali Annuali
+ * 4. Calcoli:
+   *    - Totale Costi = Somma famiglie fornitori + Costo Personale
+   *    - MOL (Margine Operativo Lordo) = Fatturato - Totale Costi
+   *    - Incidenza %: (Voce / Fatturato) * 100
+ * 5. Formattazione:
+   *    - Valuta € con rosso per negativi
+   *    - Percentuali 0.00%
+   *    - Righe totali grassetto/sfondo
+   *    - Frozen rows/columns per navigazione
+ * 
+ * Output: Foglio "Conto Economico Riclassificato" pronto per analisi multi-anno
+ * 
+ * @returns {void}
+ * 
+ * @example
+ * createPnlSheet();
  */
 function createPnlSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();

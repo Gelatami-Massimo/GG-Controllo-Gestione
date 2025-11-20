@@ -6,8 +6,11 @@
 // =============================================================
 
 /**
- * onOpen()
  * Crea il menu principale "GELATAMI" nella UI del foglio.
+ * Entry point principale per la UI, eseguito all'apertura del foglio.
+ * Valida le dipendenze dei moduli e crea il menu con tutte le funzionalità disponibili.
+ * 
+ * @returns {void}
  */
 function onOpen() {
   // --- VALIDAZIONE DIPENDENZE MODULI ---
@@ -27,63 +30,69 @@ function onOpen() {
 
   const ui = SpreadsheetApp.getUi();
   const menu = ui.createMenu('🧊 GELATAMI')
-    .addItem('➡️ Pannello di Controllo', App.ui.fn.openSidebar)
+    .addItem('🎛️ Pannello', App.ui.fn.openSidebar)
     .addSeparator();
 
   // --- Importazione ---
-  menu.addSubMenu(ui.createMenu('📥 Importazione')
-    .addItem('▶️ Continua Import', App.ui.fn.runContinue)
+  menu.addSubMenu(ui.createMenu('📥 Import')
+    .addItem('▶️ Continua', App.ui.fn.runContinue)
     .addSeparator()
-    .addItem('1️⃣ Importa Intestazioni', App.ui.fn.runImportHeaders)
-    .addItem('2️⃣ Importa Righe', App.ui.fn.runImportRows)
+    .addItem('Intestazioni', App.ui.fn.runImportHeaders)
+    .addItem('Righe', App.ui.fn.runImportRows)
     .addSeparator()
-    .addItem('📄 Genera PDF Mancanti', App.ui.fn.runCreatePdfs)
+    .addItem('PDF', App.ui.fn.runCreatePdfs)
   );
 
   // --- Report e Analisi ---
-  menu.addSubMenu(ui.createMenu('📊 Report e Analisi')
-    .addItem('📈 Dashboard', App.ui.fn.runCreateDashboard)
-    .addItem('📑 Conto Economico (P&L)', App.ui.fn.runCreatePnlSheet)
-    .addItem('📦 Magazzino (per Prodotto)', 'buildMagazzinoByYear')
-    .addItem('🧪 Magazzino Ingredienti (per Anno)', 'buildMagazzinoIngredientiByYear')
+  menu.addSubMenu(ui.createMenu('📊 Analisi')
+    .addItem('Dashboard', App.ui.fn.runCreateDashboard)
+    .addItem('P&L', App.ui.fn.runCreatePnlSheet)
+    .addItem('Magazzino', 'buildMagazzinoByYear')
+    .addItem('Mag. Ingredienti', 'buildMagazzinoIngredientiByYear')
     .addSeparator()
-    .addItem('🔍 Report di Audit', App.ui.fn.runReconciliationReport)
+    .addItem('Audit', App.ui.fn.runReconciliationReport)
   );
 
   // --- Manutenzione ---
   menu.addSubMenu(ui.createMenu('🔧 Manutenzione')
-    .addItem('✨ Manutenzione Completa', App.ui.fn.runCompleteMaintenance)
+    .addItem('✨ Completa', App.ui.fn.runCompleteMaintenance)
     .addSeparator()
-    .addItem('🖨️ Sincronizza Fornitori', App.ui.fn.runSyncSuppliers)
-    .addItem('🔄 Riallinea Categorie', App.ui.fn.runSyncCategoriesRetroactive)
+    .addItem('Fornitori', App.ui.fn.runSyncSuppliers)
+    .addItem('Categorie', App.ui.fn.runSyncCategoriesRetroactive)
     .addSeparator()
-    .addItem('🟡 Gestisci Duplicati', App.ui.fn.runMarkDuplicateInvoices)
-    .addItem('🧹 Pulisci Cache', App.ui.fn.runClearCache)
+    .addItem('Duplicati', App.ui.fn.runMarkDuplicateInvoices)
+    .addItem('Cache', App.ui.fn.runClearCache)
   );
 
   // --- Configurazione ---
   menu.addSubMenu(ui.createMenu('⚙️ Config')
-    .addItem('🚀 Setup Iniziale', App.ui.fn.runInitialSetup)
-    .addItem('⚙️ Impostazioni', runConfigDialog)
+    .addItem('Setup', App.ui.fn.runInitialSetup)
+    .addItem('Impostazioni', runConfigDialog)
     .addSeparator()
-    .addItem('🕐 Attiva Import Auto', App.ui.fn.runCreateTrigger)
-    .addItem('🛑 Disattiva Import Auto', App.ui.fn.runDeleteTriggers)
+    .addItem('▶️ Attiva Auto', App.ui.fn.runCreateTrigger)
+    .addItem('⏸️ Disattiva Auto', App.ui.fn.runDeleteTriggers)
   );
 
   menu.addToUi();
 }
 
 /**
- * onInstall(e)
- * Installa il menu anche al primo deploy da Editor.
+ * Installa il menu al primo deploy dell'add-on.
+ * Trigger di installazione che configura l'ambiente iniziale.
+ * 
+ * @param {Object} e - Evento di installazione fornito da Google Apps Script
+ * @returns {void}
  */
 function onInstall(e) {
   onOpen(e);
 }
 
 /**
- * openSidebar()
- * Apre la sidebar "Pannello di Controllo" se presente nel progetto.
+ * Apre la sidebar "Pannello di Controllo" nell'interfaccia utente.
+ * Carica il template HTML Sidebar.html e lo visualizza come pannello laterale.
+ * 
+ * @returns {void}
+ * @throws {Error} Se il file Sidebar.html non è presente nel progetto
  */
 function openSidebar() {
   const ui = SpreadsheetApp.getUi();
@@ -110,11 +119,14 @@ function openSidebar() {
 /**
  * Esegue una funzione in modo sicuro con Lock globale,
  * messaggi di stato e gestione errori centralizzata.
+ * Acquisisce un lock per evitare esecuzioni concorrenti, mostra toast di progresso
+ * e gestisce automaticamente gli errori con alert all'utente.
  *
- * @param {Function} fn         Funzione da eseguire
- * @param {string}   scope      Etichetta logica per logging
- * @param {string}   startMsg   Messaggio di avvio
- * @param {string}   successMsg Messaggio finale di completamento
+ * @param {Function} fn - Funzione da eseguire
+ * @param {string} scope - Etichetta logica per logging (es: 'Import', 'PDF')
+ * @param {string} startMsg - Messaggio toast di avvio operazione
+ * @param {string} successMsg - Messaggio toast di completamento con successo
+ * @returns {void}
  */
 function _runSafely(fn, scope, startMsg, successMsg) {
   const LOCK_TIMEOUT_MS = 30000; // 30s timeout per lock manuali
@@ -159,14 +171,31 @@ function _runSafely(fn, scope, startMsg, successMsg) {
 // WRAPPER FUNZIONALI — Disaccoppiati e centralizzati
 // =============================================================
 
+/** Esegue il setup iniziale guidato del sistema. @returns {void} */
 function runInitialSetup() { _runSafely(() => SETUP.run(), 'Setup', 'Avvio Setup Guidato...', 'Setup completato!'); }
+
+/** Riprende l'importazione intestazioni dal punto di interruzione. @returns {void} */
 function runContinue() { _runSafely(() => IMPORT_HEADERS.runContinue(), 'Import', 'Ripresa importazione...', 'Ciclo di importazione completato.'); }
+
+/** Importa le intestazioni delle fatture XML. @returns {void} */
 function runImportHeaders() { _runSafely(() => IMPORT_HEADERS.run(), 'Import', 'Avvio importazione/conteggio...', 'Importazione intestazioni e conteggio file completati.'); }
+
+/** Importa le righe di dettaglio delle fatture. @returns {void} */
 function runImportRows() { _runSafely(() => IMPORT_ROWS.run(), 'Import', 'Avvio importazione righe...', 'Importazione righe completata.'); }
+
+/** Genera i PDF delle fatture mancanti. @returns {void} */
 function runCreatePdfs() { _runSafely(() => PDF.run(), 'PDF', 'Creazione PDF in corso...', 'Creazione PDF completata.'); }
+
+/** Genera il report di audit e riconciliazione. @returns {void} */
 function runReconciliationReport() { _runSafely(() => REPORTING.run(), 'Reporting', 'Generazione Report di Audit...', 'Report generato.'); }
 
-// ✅ FUNZIONE MASTER: Manutenzione Completa (Filtri + Formati + Integrità + Duplicati)
+/**
+ * Esegue la manutenzione completa del sistema.
+ * Include: verifica struttura fogli, applicazione formati, gestione duplicati,
+ * sanity check integrità dati.
+ * 
+ * @returns {void}
+ */
 function runCompleteMaintenance() {
   _runSafely(() => {
     // 1. Verifica struttura fogli e applica filtri su TUTTI i fogli
@@ -185,20 +214,44 @@ function runCompleteMaintenance() {
   }, 'Maintenance', 'Manutenzione completa in corso...', 'Manutenzione completata! Fogli verificati, codici formattati, duplicati marcati, integrità controllata.');
 }
 
+/** Pulisce la cache e azzera i cursori di ripresa import. @returns {void} */
 function runClearCache() { _runSafely(() => DEBUG.clearCache(), 'Debug', 'Pulizia cache e cursori...', 'Cache e cursori azzerati.'); }
+
+/** Aggiorna la dashboard finanziaria con i dati più recenti. @returns {void} */
 function runCreateDashboard() { _runSafely(() => DASHBOARD.create(), 'Dashboard', 'Aggiornamento dashboard...', 'Dashboard aggiornata.'); }
+
+/** Crea o aggiorna il report magazzino. @returns {void} */
 function runCreateWarehouse() { _runSafely(() => WAREHOUSE.create(), 'Warehouse', 'Creazione/Aggiornamento magazzino...', 'Magazzino aggiornato!'); }
+
+/** Attiva l'import automatico programmato. @returns {void} */
 function runCreateTrigger() { _runSafely(() => createTimeBasedTrigger(), 'Trigger', 'Installazione import automatico...', 'Operazione trigger completata.'); }
+
+/** Disattiva tutti i trigger di import automatico. @returns {void} */
 function runDeleteTriggers() { _runSafely(() => deleteTriggers(), 'Trigger', 'Rimozione import automatico...', 'Operazione trigger completata.'); }
+
+/** Genera il foglio Conto Economico (P&L). @returns {void} */
 function runCreatePnlSheet() { _runSafely(() => createPnlSheet(), 'PNL', 'Creazione/Aggiornamento P&L...', 'P&L aggiornato.'); }
 
 // --- WRAPPER FUNCTIONS FOR DEBUG MODULE ---
+
+/** Marca visivamente le fatture duplicate nel foglio Fatture. @returns {void} */
 function runMarkDuplicateInvoices() {
     _runSafely(() => DEBUG.markDuplicateInvoices(), 'Debug', 'Marcatura Duplicati in corso...', 'Marcatura completata!');
 }
+
+/** Sincronizza l'anagrafica fornitori con le nuove fatture importate. @returns {void} */
 function runSyncSuppliers() { _runSafely(() => DEBUG.syncSuppliersFromInvoices(), 'Debug', 'Sincronizzazione fornitori (nuovi)...', 'Anagrafica fornitori sincronizzata!'); }
+
+/** Riallinea le categorie prodotti storiche con la configurazione attuale. @returns {void} */
 function runSyncCategoriesRetroactive() { _runSafely(() => DEBUG.syncCategoriesRetroactive(), 'Debug', 'Riallineamento categorie storiche...', 'Categorie storiche riallineate!'); }
+
+/** Apre il dialog di configurazione delle impostazioni sistema. @returns {void} */
 function runConfigDialog() { _runSafely(() => CONFIG_UI.openDialog(), 'Config', 'Apertura dialog configurazione...', 'Dialog chiuso.'); }
+
+/**
+ * Apre il foglio Trigger Status per visualizzare lo stato dei trigger automatici.
+ * @returns {void}
+ */
 function openTriggerStatusSheet() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();

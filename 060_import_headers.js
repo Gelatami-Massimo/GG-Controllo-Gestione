@@ -34,11 +34,44 @@ const IMPORT_HEADERS = (function () {
   // ------------------------------------------------------------
   // API principale
   // ------------------------------------------------------------
+  /**
+   * Importa testata fatture XML da cartella configurata (ConfigImportFolder).
+   * 
+   * Workflow:
+   * 1. DISCOVERY: Scansione ricorsiva cartella, filtra file già processati
+   * 2. SCAN_EXTRACT: Per ogni XML:
+   *    a. Parse FatturaElettronica (CedentePrestatore, DatiGeneraliDocumento)
+   *    b. Estrae: P.IVA, denominazione, numero, data, causale, scadenza
+   *    c. Calcola DestReparto con logica fallback (causale → categoria → default)
+   *    d. Conteggio per mese/cartella (audit)
+   * 3. WRITE: Scrittura batch foglio Fatture, registra FileId (prevenzione duplicati)
+   * 
+   * LIMITI:
+   * - Timeout 3 minuti: salva stato, utente riprende con runContinue()
+   * - GoldenTotal: contatore totale file processati (audit)
+   * 
+   * @param {boolean} [isSilent=false] - Se true, disabilita aggiornamenti UI progress
+   * @returns {void}
+   * @throws {Error} Se cartella import non configurata o inaccessibile
+   * 
+   * @example
+   * IMPORT_HEADERS.run();
+   */
   function run(isSilent = false) {
     _clearAllStates(true); // Pulisce conteggi finali E goldenTotal
     _mainLoop(isSilent);
   }
 
+  /**
+   * Riprende import testata fatture dopo interruzione timeout.
+   * Recupera stato da PropertiesService/CacheService e continua da ultimo file processato.
+   * 
+   * @param {boolean} [isSilent=false] - Se true, disabilita aggiornamenti UI progress
+   * @returns {void}
+   * 
+   * @example
+   * IMPORT_HEADERS.runContinue();
+   */
   function runContinue(isSilent = false) {
     _mainLoop(isSilent); // Non pulisce conteggi finali / goldenTotal
   }

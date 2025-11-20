@@ -7,8 +7,11 @@
 
 const PRODUCTS = (() => {
   /**
-   * Carica in memoria gli indici e i dati prodotti.
-   * @returns {{keyToData: Map<string, any>, internalCodes: Set<string>, newRows: any[]}}
+   * Carica in memoria gli indici e i dati prodotti dal foglio Prodotti.
+   * Costruisce mappa keyToData (fornitoreId+codiceFornitore -> prodotto) e
+   * set internalCodes per gestione unicità codici interni.
+   * 
+   * @returns {{keyToData: Map<string, Object>, internalCodes: Set<string>, newRows: Array}} Cache prodotti
    */
   function primeCache() {
     const cache = {
@@ -59,15 +62,17 @@ const PRODUCTS = (() => {
   }
 
   /**
-   * Assicura che un prodotto esista, creandolo se necessario.
-   * @param {string} fornitoreId
-   * @param {string} fornitoreName
-   * @param {string} codiceFornRaw
-   * @param {string} descrizione
-   * @param {string} um
-   * @param {{keyToData: Map, internalCodes: Set, newRows: any[]}} cache
-   * @param {string} categoriaFornitore - Categoria del fornitore da copiare in CategoriaProdotto
-   * @returns {string} codice interno creato o esistente
+   * Assicura che un prodotto esista nel catalogo, creandolo se necessario.
+   * Se il prodotto non esiste, genera automaticamente CodiceInterno univoco.
+   * 
+   * @param {string} fornitoreId - P.IVA fornitore
+   * @param {string} fornitoreName - Denominazione fornitore
+   * @param {string} codiceFornRaw - Codice articolo fornitore
+   * @param {string} descrizione - Descrizione prodotto
+   * @param {string} um - Unità di misura
+   * @param {{keyToData: Map, internalCodes: Set, newRows: Array}} cache - Cache prodotti da primeCache()
+   * @param {string} [categoriaFornitore=''] - Categoria del fornitore da copiare in CategoriaProdotto
+   * @returns {string} Codice interno del prodotto (esistente o appena creato)
    */
   function ensureProduct(fornitoreId, fornitoreName, codiceFornRaw, descrizione, um, cache, categoriaFornitore = '') {
     const key = _getProductKey(fornitoreId, codiceFornRaw, descrizione, um);
@@ -138,8 +143,11 @@ const PRODUCTS = (() => {
   }
 
   /**
-   * Scrive i nuovi prodotti accumulati nel foglio in un unico batch.
-   * @param {{newRows:any[]}} cache
+   * Scrive i nuovi prodotti accumulati nel cache.newRows al foglio Prodotti.
+   * Scrittura batch unica per performance.
+   * 
+   * @param {{newRows: Array}} cache - Cache prodotti con array newRows da scrivere
+   * @returns {void}
    */
   function flushNewRows(cache) {
     if (!cache || !cache.newRows || cache.newRows.length === 0) return;
@@ -237,13 +245,13 @@ const PRODUCTS = (() => {
   }
 
   /**
-   * Verifica se un prodotto è attivo.
-   * Un prodotto è considerato attivo se:
-   * - NonInUso === FALSE (esplicitamente attivo)
-   * - NonInUso === undefined/null/'' (compatibilità retroattiva con prodotti esistenti)
-   * @param {any} productRow - Riga prodotto (array o oggetto con indice NonInUso)
-   * @param {number} nonInUsoIndex - Indice della colonna NonInUso (se productRow è array)
-   * @returns {boolean} TRUE se il prodotto è attivo
+   * Verifica se un prodotto è attivo (NonInUso = false/null/undefined).
+   * Prodotto attivo: disponibile per import righe e calcoli.
+   * Prodotto non attivo (NonInUso=true): ignorato durante import.
+   * 
+   * @param {Array|Object} productRow - Riga prodotto (array da getValues() o oggetto)
+   * @param {number} [nonInUsoIndex] - Indice colonna NonInUso se productRow è array
+   * @returns {boolean} True se prodotto attivo, false se disabilitato
    */
   function isProductActive(productRow, nonInUsoIndex) {
     if (!productRow) return false;
@@ -266,25 +274,25 @@ const PRODUCTS = (() => {
   }
 
   /**
-   * Calcola il costo unitario di un prodotto in base alle conversioni UM.
+   * Calcola il costo unitario di un prodotto in base alle conversioni UM configurate.
    * 
    * REGOLE CONVERSIONE:
    * 1. Fattura in KG + UMBase=KG → €/KG = PrezzoTotale / QuantitaKG
    * 2. Fattura in PZ + UMBase=PZ → €/PZ = PrezzoTotale / QuantitaPZ
-   * 3. Fattura in CT:
+   * 3. Fattura in CT (cartoni):
    *    a. PZ_TOT = QuantitaCT * PZxCT
    *    b. Se UMBase=KG: KG_TOT = PZ_TOT * KGxPZ → €/KG = PrezzoTotale / KG_TOT
    *    c. Se UMBase=PZ: €/PZ = PrezzoTotale / PZ_TOT
    * 
    * VINCOLI:
    * - Nessuna conversione "indovinata"
-   * - Se mancano dati necessari → RichiedeSetup=TRUE, CostoUnitario non calcolato
+   * - Se mancano dati necessari → RichiedeSetup=true, CostoUnitario non calcolato
    * 
    * @param {string} codiceInterno - Codice interno prodotto
    * @param {number} quantitaFattura - Quantità dalla fattura
    * @param {string} umFattura - UM dalla fattura (KG, PZ, CT, ecc.)
    * @param {number} prezzoTotale - Prezzo totale della riga fattura
-   * @returns {{costoUnitario: number|null, umCosto: string|null, richiedeSetup: boolean}}
+   * @returns {{costoUnitario: number|null, umCosto: string|null, richiedeSetup: boolean}} Risultato calcolo costo
    */
   function calculateUnitCost(codiceInterno, quantitaFattura, umFattura, prezzoTotale) {
     const result = {

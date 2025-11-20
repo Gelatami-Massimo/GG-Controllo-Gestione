@@ -6,9 +6,25 @@
 // =============================================================
 
 /**
- * Funzione chiamata dalla sidebar per ottenere lo stato statico del sistema.
- * CORRETTO: Legge il conteggio totale dei file e l'intervallo del trigger
- * da STATE/CONFIG invece di ricalcolarli (causando timeout).
+ * Recupera stato statico del sistema per Sidebar UI (chiamata rapida, no timeout).
+ * 
+ * Dati restituiti:
+ * - needsContinue: {boolean} - true se esistono cursori attivi (import in pausa)
+ * - processedFiles: {number} - File XML già processati (conteggio da foglio Fatture)
+ * - totalFiles: {number} - Totale file XML trovati in cartella input (da STATE cache)
+ * - triggerActive: {boolean} - true se trigger automatico installato
+ * - triggerEveryMinutes: {number} - Intervallo trigger in minuti (da CONFIG)
+ * - lastRun: {string} - Tempo trascorso dall'ultima esecuzione (es. "15 min fa")
+ * 
+ * NOTA: Lettura veloce, nessuna scansione Drive/calcolo pesante.
+ * 
+ * @returns {{success: boolean, needsContinue: boolean, processedFiles: number, totalFiles: number, triggerActive: boolean, triggerEveryMinutes: number, lastRun: string}|{success: boolean, error: string}} Stato sistema o errore
+ * 
+ * @example
+ * const status = getSystemStatus();
+ * if (status.success) {
+ *   console.log(`Processati: ${status.processedFiles}/${status.totalFiles}`);
+ * }
  */
 function getSystemStatus() {
   try {
@@ -88,7 +104,21 @@ function getSystemStatus() {
 }
 
 /**
- * Funzione chiamata in polling dalla sidebar per ottenere l'avanzamento IN TEMPO REALE.
+ * Recupera stato avanzamento IN TEMPO REALE per polling Sidebar (barra progresso).
+ * 
+ * Dati restituiti (se processo attivo):
+ * - phase: {string} - Fase corrente (es. 'DISCOVERY', 'SCAN_EXTRACT', 'WRITE')
+ * - current: {number} - Riga/file corrente processato
+ * - total: {number} - Totale righe/file da processare
+ * - message: {string} - Messaggio descrittivo (es. 'Fase 2: Estrazione dati...')
+ * 
+ * @returns {Object|null} Oggetto progress da STATE o null se nessun processo attivo
+ * 
+ * @example
+ * const progress = getRunningStatus();
+ * if (progress) {
+ *   console.log(`${progress.phase}: ${progress.current}/${progress.total}`);
+ * }
  */
 function getRunningStatus() {
   // Questa funzione è corretta, legge solo la chiave di progresso

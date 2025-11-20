@@ -6,11 +6,24 @@
 // =============================================================
 
 /**
- * Invia una notifica email all'admin quando il trigger viene disattivato
- * o quando si verificano eventi importanti.
+ * Invia notifica email all'admin su eventi trigger (disattivazione, errori, completamento).
  * 
- * @param {string} reason - Motivo della notifica (es. 'TRIGGER_OFF', 'ERROR', 'RESUMED')
- * @param {Object} details - Dettagli aggiuntivi da includere nel corpo email
+ * Motivi notifica:
+ * - TRIGGER_OFF_COMPLETED: Import completata, trigger disattivato
+ * - TRIGGER_KEPT_ACTIVE: Lavoro in corso, trigger mantenuto attivo
+ * - TRIGGER_ERROR: Errore critico durante esecuzione trigger
+ * 
+ * Email recuperata da:
+ * 1. CONFIG.get('ADMIN_EMAIL') (preferito)
+ * 2. Session.getActiveUser().getEmail() (fallback)
+ * 
+ * @param {string} reason - Motivo notifica ('TRIGGER_OFF_COMPLETED', 'TRIGGER_KEPT_ACTIVE', 'TRIGGER_ERROR', ecc.)
+ * @param {Object} details - Dettagli aggiuntivi (es. {hasHeadersCursor, hasRowsCursor, error, phase})
+ * @returns {void}
+ * 
+ * @example
+ * _sendTriggerNotification('TRIGGER_OFF_COMPLETED', {hasHeadersCursor: false, hasRowsCursor: false});
+ * _sendTriggerNotification('TRIGGER_ERROR', {error: 'Timeout', phase: 'IMPORT_ROWS'});
  */
 function _sendTriggerNotification(reason, details) {
   try {
@@ -102,6 +115,39 @@ function _sendTriggerNotification(reason, details) {
 /**
  * Funzione principale eseguita dall'attivatore automatico.
  * Esegue Headers, Rows e PDF generation.
+ */
+/**
+ * Orchestrazione automatica import completo: Headers, Rows, PDF (chiamata da trigger time-based).
+ * 
+ * Workflow:
+ * 1. Acquisisce lock (5s timeout): se occupato, salta esecuzione (evita sovrapposizioni)
+ * 2. Fase HEADERS:
+ *    a. IMPORT_HEADERS.runContinue(true) con retry automatico (max 3 tentativi)
+ *    b. Se errore persistente: log errore, continua con Rows
+ * 3. Fase ROWS:
+ *    a. IMPORT_ROWS.run(true) con retry automatico (max 3 tentativi)
+ *    b. Se errore persistente: log errore, continua con PDF
+ * 4. Fase PDF:
+ *    a. PDF.run(true) con retry automatico (max 3 tentativi)
+ *    b. Se errore persistente: log errore
+ * 5. Verifica completamento:
+ *    a. Controlla cursori attivi (HEADERS_CURSOR, ROWS_CURSOR)
+ *    b. Se nessun cursore: import completata, disattiva trigger, invia notifica
+ *    c. Se cursori attivi: import in corso, mantiene trigger attivo
+ * 6. Logging esecuzione:
+ *    a. Registra durata e successo in TRIGGER_DASHBOARD
+ *    b. Aggiorna timestamp lastRun in STATE
+ * 7. Rilascia lock
+ * 
+ * GESTIONE ERRORI:
+ * - Usa ERROR_HANDLER.safely() per fallback robusto
+ * - Invia notifica email admin su errori critici
+ * - Non blocca esecuzioni future anche se una fase fallisce
+ * 
+ * @returns {void}
+ * 
+ * @example
+ * runAutomatedImport(); // Chiamata automatica da trigger
  */
 function runAutomatedImport() {
   const LOCK_TIMEOUT_MS = 5000; // attesa breve (5s)
@@ -443,6 +489,28 @@ function _disableAutoTriggerSilently() {
  * Legge l'intervallo da Config: TRIGGER_EVERY_MIN (default 15, min 1, max 60).
  * CORRETTO: Usa chiave 'TRIGGER_EVERY_MIN'
  */
+/**
+ * Crea trigger automatico time-based per import periodico.
+ * 
+ * Workflow:
+ * 1. Legge intervallo da CONFIG.get('TRIGGER_EVERY_MIN', 15)
+ * 2. Arrotonda a valore valido Google Apps Script (1, 5, 10, 15, 30 minuti)
+ * 3. Verifica se trigger già esistente con stesso handler
+ * 4. Se esistente: chiede conferma sovrascrittura, elimina vecchio trigger
+ * 5. Crea nuovo trigger:
+ *    - Handler: App.config.triggerHandler (es. 'runAutomatedImport')
+ *    - Tipo: Time-based, everyMinutes(everyMin)
+ * 6. Mostra alert successo con intervallo configurato
+ * 
+ * VALORI VALIDI INTERVALLO:
+ * - 1, 5, 10, 15, 30 minuti (limitazioni Google Apps Script)
+ * - Se valore non valido, usa più vicino (es. 12 → 15, 7 → 5)
+ * 
+ * @returns {void}
+ * 
+ * @example
+ * createTimeBasedTrigger();
+ */
 function createTimeBasedTrigger() {
   const ui = SpreadsheetApp.getUi();
   const handler = App.config.triggerHandler;
@@ -538,6 +606,23 @@ function createTimeBasedTrigger() {
 
 /**
  * Elimina tutti gli attivatori associati all'handler configurato.
+ */
+/**
+ * Elimina tutti i trigger automatici associati al progetto.
+ * 
+ * Workflow:
+ * 1. Recupera handler da App.config.triggerHandler
+ * 2. Scansiona tutti trigger progetto (ScriptApp.getProjectTriggers())
+ * 3. Filtra trigger con getHandlerFunction() === handler
+ * 4. Elimina ogni trigger trovato
+ * 5. Mostra alert successo con conteggio trigger eliminati
+ * 
+ * NOTA: Se UI non disponibile (esecuzione da trigger), opera in silent mode.
+ * 
+ * @returns {void}
+ * 
+ * @example
+ * deleteTriggers();
  */
 function deleteTriggers() {
   // Try to get UI, but don't fail if not available

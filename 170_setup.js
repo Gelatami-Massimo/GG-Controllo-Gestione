@@ -7,6 +7,35 @@
 
 const SETUP = (function () {
 
+  /**
+   * Setup guidato iniziale con configurazione cartelle, trigger e manutenzione completa.
+   * 
+   * Workflow:
+   * 1. Prompt utente per:
+   *    a. ID Cartella INPUT (XML fatture)
+   *    b. ID Cartella OUTPUT (PDF generati)
+   *    c. Frequenza trigger automatico (minuti: 1, 5, 10, 15, 30)
+   * 2. Verifica permessi accesso cartelle Drive
+   * 3. Creazione struttura fogli:
+   *    - SHEETS.ensureAll(): crea fogli mancanti (Config, Fatture, Righe, Prodotti, Fornitori, ecc.)
+   *    - SHEETS.applyFormats(): applica formati personalizzati (valuta, date, ecc.)
+   *    - TRIGGER_DASHBOARD.initSheet(): prepara foglio Trigger Status
+   * 4. Scrittura configurazione nel foglio Config
+   * 5. Manutenzione automatica:
+   *    a. DEBUG.forceTextFormatOnCodes(): Forza formato testo su codici (FileID, CodiceInterno, ecc.)
+   *    b. DEBUG.manageDuplicateInvoices(): Marca fatture duplicate (FileId duplicati)
+   *    c. DEBUG.manageDuplicateRows(): Marca righe duplicate (FileId|NumeroLinea duplicati)
+   *    d. DEBUG.sanityCheck(): Verifica integrità dati (setup completo)
+   * 6. Mostra messaggio successo con riepilogo configurazione
+   * 
+   * NOTA: Se CONFIG già esiste, chiede conferma sovrascrittura.
+   * 
+   * @returns {void}
+   * @throws {Error} Se ID cartelle non validi o permessi mancanti
+   * 
+   * @example
+   * SETUP.run();
+   */
   function run() {
     const ui = SpreadsheetApp.getUi();
 

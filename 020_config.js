@@ -86,10 +86,29 @@ const CONFIG = (function () {
   }
 
   return {
+    /**
+     * Legge un valore di configurazione dal foglio Config.
+     * Supporta parsing automatico di numeri, booleani, date (ISO e italiane), valute.
+     * I valori vengono cachati in memoria per 5 minuti.
+     * 
+     * @param {string} key - Chiave configurazione da leggere
+     * @param {*} [defaultValue=null] - Valore di default se la chiave non esiste
+     * @returns {*} Valore configurazione parsato o defaultValue
+     * 
+     * @example
+     * const maxRuntime = CONFIG.get('MAX_RUNTIME_SEC', 240);
+     * const debugMode = CONFIG.get('MODALITA_DEBUG', false);
+     */
     get(key, defaultValue = null) {
       const cfg = _read();
       return cfg[key] ?? defaultValue;
     },
+    /**
+     * Invalida la cache di configurazione forzando la rilettura dal foglio al prossimo get().
+     * Utile dopo modifiche manuali al foglio Config.
+     * 
+     * @returns {void}
+     */
     invalidateCache() {
       cache.data = null;
       cacheTimestamp = 0;
@@ -265,10 +284,30 @@ const SHEETS = (function () {
     }
   }
 
+  /**
+   * Ottiene un oggetto Sheet per nome.
+   * 
+   * @param {string} sheetName - Nome del foglio da recuperare
+   * @returns {GoogleAppsScript.Spreadsheet.Sheet|null} Oggetto Sheet o null se non trovato
+   */
   function get(sheetName) {
     return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   }
 
+  /**
+   * Ritorna mappa delle intestazioni colonna con indici 0-based.
+   * Le chiavi sono normalizzate: spazi convertiti in underscore.
+   * Risultato cachato in memoria per performance.
+   * 
+   * @param {string} sheetName - Nome foglio (usa SHEETS.SHEET_NAMES)
+   * @param {boolean} [forceRefresh=false] - Se true, rilegge le intestazioni ignorando la cache
+   * @returns {Object<string, number>} Mappa header_normalizzato -> indice colonna (0-based)
+   * 
+   * @example
+   * const idx = SHEETS.headerIndex('Fatture');
+   * const fileId = row[idx.FileID];
+   * const numeroDoc = row[idx.NumeroDoc];
+   */
   function headerIndex(sheetName, forceRefresh = false) {
     if (_cache[sheetName] && _cache[sheetName].index && !forceRefresh) {
       return _cache[sheetName].index;
@@ -423,6 +462,14 @@ const SHEETS = (function () {
     }
   }
 
+  /**
+   * Verifica e crea tutti i fogli definiti in SHEETS.SCHEMAS.
+   * Per ogni foglio mancante: lo crea con intestazioni corrette.
+   * Per fogli esistenti: valida e ripristina intestazioni se necessario.
+   * Applica filtri automatici su tutti i fogli dati (esclusi Config e Log).
+   * 
+   * @returns {void}
+   */
   function ensureAll() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     LOG?.info('SHEETS_ENSURE', 'Avvio verifica struttura fogli...');
@@ -481,6 +528,13 @@ const SHEETS = (function () {
     }
   }
 
+  /**
+   * Applica formati numerici e di testo a tutte le colonne dei fogli.
+   * Formati applicati: valute (€), percentuali, date, numeri, testo (@).
+   * Le regole sono definite in FORMAT_RULES interno.
+   * 
+   * @returns {void}
+   */
   function applyFormats() {
     const FORMAT_RULES = {
       [SHEET_NAMES.Fatture]: [
@@ -611,6 +665,13 @@ const SHEETS = (function () {
     LOG?.info('SHEETS_FORMAT', 'Applicazione formati completata.');
   }
 
+  /**
+   * Ottiene mappa delle aziende clienti da foglio Aziende.
+   * Mappa P.IVA normalizzata (senza IT, senza zeri iniziali) -> Nome Sede.
+   * Risultato cachato per 10 minuti per performance.
+   * 
+   * @returns {Map<string, string>} Mappa PIva -> NomeSede
+   */
   function getCompanyMap() {
     // Phase 8.3: Query result caching - avoid repeated sheet reads
     const cacheKey = 'companyMap';
@@ -660,6 +721,13 @@ const SHEETS = (function () {
     return companyMap;
   }
 
+  /**
+   * Ottiene Set di tutti i FileID già processati nel foglio Fatture.
+   * Usato per evitare reimport di fatture duplicate.
+   * Risultato cachato per 10 minuti per performance.
+   * 
+   * @returns {Set<string>} Set di FileID già importati
+   */
   function getProcessedFileIds() {
     // Phase 8.3: Query result caching - avoid repeated sheet reads
     const cacheKey = 'processedFileIds';
@@ -745,7 +813,11 @@ if (typeof GG !== 'undefined') {
 }
 
 /**
- * Dev helper: riallinea intestazioni + formati in base a SCHEMAS/FORMAT_RULES.
+ * Helper sviluppo: riallinea intestazioni e formati fogli.
+ * Utile dopo modifiche agli SCHEMAS o FORMAT_RULES.
+ * Chiama SHEETS.ensureAll() e SHEETS.applyFormats().
+ * 
+ * @returns {void}
  */
 function DEV_EnsureSheetsAndFormats() {
   if (typeof SHEETS === 'undefined') {

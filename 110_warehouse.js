@@ -8,8 +8,14 @@
 const WAREHOUSE = (function () {
 
   /**
-   * Funzione legacy: delega a MAGAZZINO_CORE.buildMagazzinoByYear()
-   * @deprecated Usa direttamente buildMagazzinoByYear()
+   * Crea report magazzino prodotti (wrapper legacy, delega a MAGAZZINO_CORE).
+   * 
+   * @deprecated Usa direttamente MAGAZZINO_CORE.buildMagazzinoByYear()
+   * @returns {void}
+   * @throws {Error} Se MAGAZZINO_CORE non disponibile
+   * 
+   * @example
+   * WAREHOUSE.create();
    */
   function create() {
     if (typeof MAGAZZINO_CORE !== 'undefined' && MAGAZZINO_CORE.buildMagazzinoByYear) {

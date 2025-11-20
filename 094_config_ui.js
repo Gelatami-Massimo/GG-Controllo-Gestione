@@ -9,8 +9,21 @@ var CONFIG_UI = (function() {
   'use strict';
 
   /**
-   * Apre il dialog di configurazione.
-   * Mostra un'interfaccia HTML per modificare la CONFIG senza toccare il foglio.
+   * Apre dialog HTML per configurazione sistema user-friendly.
+   * Mostra interfaccia grafica (ConfigDialog.html) per modificare CONFIG senza toccare foglio manualmente.
+   * 
+   * Parametri configurabili:
+   * - CARTELLA_INPUT_ID/OUTPUT_ID: Cartelle Drive
+   * - TRIGGER_EVERY_MIN: Frequenza trigger automatico
+   * - MAX_RUNTIME_SEC: Timeout esecuzione
+   * - ROWS_CHUNK_SIZE, PDF_CHUNK_SIZE: Dimensioni batch
+   * - CATEGORIE_ESCLUSE_MAGAZZINO, MODALITA_DEBUG, ecc.
+   * 
+   * @returns {void}
+   * @throws {Error} Se ConfigDialog.html non trovato
+   * 
+   * @example
+   * CONFIG_UI.openDialog();
    */
   function openDialog() {
     try {
@@ -38,8 +51,13 @@ var CONFIG_UI = (function() {
   }
   
   /**
-   * Recupera la configurazione corrente (chiamata dal dialog HTML).
-   * @returns {Object} Configurazione attuale
+   * Recupera configurazione corrente per popolare dialog HTML (chiamata da ConfigDialog.html).
+   * 
+   * @returns {Object} Oggetto con tutte le chiavi CONFIG (es. {CARTELLA_INPUT_ID: '...', TRIGGER_EVERY_MIN: 15, ...})
+   * 
+   * @example
+   * const config = CONFIG_UI.getConfiguration();
+   * console.log(config.TRIGGER_EVERY_MIN); // 15
    */
   function getConfiguration() {
     try {
@@ -83,9 +101,20 @@ var CONFIG_UI = (function() {
   }
   
   /**
-   * Salva la configurazione modificata dal dialog (chiamata dal dialog HTML).
-   * @param {Object} newConfig - Nuova configurazione dal form
+   * Salva configurazione modificata dal dialog (chiamata da ConfigDialog.html).
+   * 
+   * Workflow:
+   * 1. Valida dati critici (CARTELLA_INPUT_ID, OUTPUT_ID)
+   * 2. Backup configurazione corrente in PropertiesService
+   * 3. Scrive nuovi valori nel foglio Config
+   * 4. Invalida cache CONFIG
+   * 
+   * @param {Object} newConfig - Nuova configurazione da form HTML
    * @returns {boolean} True se salvato con successo
+   * @throws {Error} Se validazione fallisce o foglio Config non accessibile
+   * 
+   * @example
+   * CONFIG_UI.saveConfiguration({TRIGGER_EVERY_MIN: 30, MAX_RUNTIME_SEC: 180});
    */
   function saveConfiguration(newConfig) {
     try {

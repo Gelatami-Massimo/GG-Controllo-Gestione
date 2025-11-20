@@ -705,15 +705,88 @@ const UTIL = (function () {
   // RETURN PUBLIC API
   // ============================================================================
   return {
+    /**
+     * Mostra un messaggio toast temporaneo nella UI del foglio.
+     * 
+     * @param {string} message - Messaggio da visualizzare
+     * @param {string} [title='Info'] - Titolo del toast
+     * @param {number} [timeout=5] - Durata in secondi (-1 per permanente)
+     * @returns {void}
+     */
     showToast: (message, title = 'Info', timeout = 5) => SpreadsheetApp.getActiveSpreadsheet().toast(message, title, timeout),
+    /**
+     * Parsing robusto di numeri da stringhe.
+     * Supporta: formati italiani (1.234,56), inglesi (1,234.56), valute (€ 123).
+     * 
+     * @param {*} value - Valore da parsare (string, number, null)
+     * @returns {number} Numero parsato o 0 se non valido
+     * 
+     * @example
+     * parseNumSmart('1.234,56'); // => 1234.56
+     * parseNumSmart('€ 45,99');   // => 45.99
+     * parseNumSmart('invalid'); // => 0
+     */
     parseNumSmart,
     // XML helpers pubblici
+    /**
+     * Ottiene il primo child element XML con supporto multi-namespace.
+     * Prova in ordine: namespace elemento, extraNs, FPA_NS, FPA_NS10, no namespace.
+     * 
+     * @param {GoogleAppsScript.XML_Service.Element} element - Elemento XML genitore
+     * @param {string} name - Nome del child da cercare
+     * @param {GoogleAppsScript.XML_Service.Namespace} [extraNs] - Namespace aggiuntivo da provare
+     * @returns {GoogleAppsScript.XML_Service.Element|null} Primo child trovato o null
+     */
     firstChild,
+    /**
+     * Ottiene il testo del primo child element XML.
+     * Wrapper di firstChild() + getText() con fallback a stringa vuota.
+     * 
+     * @param {GoogleAppsScript.XML_Service.Element} element - Elemento XML genitore
+     * @param {string} name - Nome del child da cercare
+     * @param {GoogleAppsScript.XML_Service.Namespace} [ns] - Namespace opzionale
+     * @returns {string} Testo del child o stringa vuota se non trovato
+     */
     firstText,
+    /**
+     * Estrae testo da un nodo XML generico.
+     * Supporta Element, Text node, o conversione diretta a stringa.
+     * 
+     * @param {*} node - Nodo XML o valore da convertire
+     * @returns {string} Testo estratto o stringa vuota
+     */
     textOf,
+    /**
+     * Scrive dati in un foglio in modalità batch con chunking automatico.
+     * Gestisce automaticamente espansione righe/colonne se necessario.
+     * 
+     * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - Foglio di destinazione
+     * @param {number} startRow - Riga iniziale (1-based)
+     * @param {Array<Array>} data - Array 2D di dati da scrivere
+     * @param {number} [batchSize=200] - Dimensione chunk per scrittura
+     * @returns {void}
+     * @throws {Error} Se la scrittura fallisce
+     */
     writeBatched,
+    /**
+     * Normalizza una stringa per uso come chiave.
+     * Trim + UpperCase per confronti case-insensitive.
+     * 
+     * @param {string} str - Stringa da normalizzare
+     * @returns {string} Stringa normalizzata (trimmed e uppercase)
+     */
     normKey: (str) => String(str ?? '').trim().toUpperCase(),
-    // Supplier ID normalization - DRY utility per evitare duplicazione
+    /**
+     * Normalizza un ID fornitore (P.IVA) rimuovendo prefisso IT e zeri iniziali.
+     * Utility DRY per evitare duplicazione logica normalizzazione P.IVA.
+     * 
+     * @param {string} id - P.IVA da normalizzare
+     * @returns {string} P.IVA normalizzata (senza IT, senza zeri iniziali)
+     * 
+     * @example
+     * normalizeSupplierId('IT01234567890'); // => '1234567890'
+     * normalizeSupplierId('00123456');      // => '123456'
+     */
     normalizeSupplierId: (id) => {
       const normalized = String(id ?? '')
         .trim()
@@ -721,12 +794,81 @@ const UTIL = (function () {
         .replace(/^0+/, '');  // Rimuovi zeri iniziali
       return normalized;
     },
+    /**
+     * Ottiene tutti i file da una cartella Google Drive ricorsivamente.
+     * Attraversa tutte le sottocartelle e gestisce gracefully errori di permessi.
+     * 
+     * @param {GoogleAppsScript.Drive.Folder} folder - Cartella radice da esplorare
+     * @returns {Array<GoogleAppsScript.Drive.File>} Array di file trovati
+     */
     getAllFilesRecursive,
+    /**
+     * Aggiorna celle specifiche in un foglio minimizzando le API calls.
+     * Legge tutto il range una volta, modifica in memoria, scrive in batch.
+     * 
+     * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - Foglio da aggiornare
+     * @param {Object<number, Object<number, *>>} updates - Mappa righe -> {colIndex: value}
+     * @param {number} [headerRows=1] - Numero righe header da saltare
+     * @returns {number} Numero celle effettivamente modificate
+     * 
+     * @example
+     * const updates = {
+     *   5: { 2: 'nuovo valore', 4: 123 },  // riga 5, colonne 2 e 4
+     *   8: { 1: 'altro valore' }           // riga 8, colonna 1
+     * };
+     * UTIL.updateSheetInPlace(sheet, updates, 1);
+     */
     updateSheetInPlace,
+    /**
+     * Forza una cella Google Sheets a interpretare il valore come testo.
+     * Aggiunge apostrofo iniziale se necessario (numeri con zeri iniziali, codici).
+     * 
+     * @param {*} value - Valore da forzare come testo
+     * @returns {string} Valore con apostrofo se necessario, altrimenti stringa originale
+     * 
+     * @example
+     * forceText('001');  // => "'001" (previene conversione a numero 1)
+     * forceText('ABC');  // => "ABC" (già testo, nessun apostrofo)
+     */
     forceText,
+    /**
+     * Acquisisce un lock globale per prevenire esecuzioni concorrenti.
+     * 
+     * @param {number} [timeoutMs=10000] - Timeout acquisizione in millisecondi
+     * @returns {boolean} True se lock acquisito, false se timeout o già locked
+     */
     acquireLock,
+    
+    /**
+     * Rilascia il lock globale precedentemente acquisito.
+     * @returns {void}
+     */
     releaseLock,
+    /**
+     * Converte un indice colonna (0-based) in lettera colonna stile A1.
+     * 
+     * @param {number} colIndex - Indice colonna (0 = 'A', 1 = 'B', ...)
+     * @returns {string} Lettera colonna ('A', 'B', ..., 'Z', 'AA', 'AB', ...)
+     * 
+     * @example
+     * getColumnLetter(0);  // => 'A'
+     * getColumnLetter(25); // => 'Z'
+     * getColumnLetter(26); // => 'AA'
+     */
     getColumnLetter,
+    /**
+     * Valida che tutte le colonne richieste esistano nell'indice header.
+     * 
+     * @param {Object<string, number>} idx - Indice header da SHEETS.headerIndex()
+     * @param {Array<string>} required - Array nomi colonne richieste
+     * @returns {Array<string>} Array nomi colonne mancanti (vuoto se tutte presenti)
+     * 
+     * @example
+     * const missing = UTIL.checkColumns(idx, ['FileID', 'NumeroDoc']);
+     * if (missing.length) {
+     *   throw new Error('Colonne mancanti: ' + missing.join(', '));
+     * }
+     */
     checkColumns,  // Column validation helper
     // DATE_UTILS namespace
     date: DATE_UTILS
@@ -777,7 +919,16 @@ const XMLSAFE = (function () {
       return null;
     }
   }
-  return { parseDriveXml };
+  return {
+    /**
+     * Parsa un file XML da Google Drive con gestione encoding multipli.
+     * Prova in ordine: UTF-8, ISO-8859-1, Windows-1252.
+     * Rimuove automaticamente BOM se presente.
+     * 
+     * @param {string} fileId - ID del file Drive da parsare
+     * @returns {GoogleAppsScript.XML_Service.Document|null} Documento XML parsato o null se errore
+     */
+    parseDriveXml };
 })();
 
 // Registra XMLSAFE nel ModuleRegistry
@@ -800,7 +951,23 @@ const STATE = (function () {
   const MAX_CACHE_CHUNK_SIZE = 95000;
 
   const standard = {
+    /**
+     * Legge un valore da PropertiesService.
+     * 
+     * @param {string} key - Chiave da leggere
+     * @returns {string|null} Valore memorizzato o null se non esiste
+     */
     get: (key) => P.getProperty(key),
+    
+    /**
+     * Scrive un valore in PropertiesService.
+     * Limite: 500KB per valore. Per dati più grandi usa STATE.cache.
+     * 
+     * @param {string} key - Chiave da scrivere
+     * @param {string} value - Valore da memorizzare
+     * @returns {void}
+     * @throws {Error} Se il valore supera 500KB
+     */
     set: (key, value) => {
        const strValue = String(value ?? '');
        if (strValue.length > MAX_PROP_SIZE) {
@@ -809,7 +976,20 @@ const STATE = (function () {
        }
        P.setProperty(key, strValue);
     },
+    /**
+     * Elimina una chiave da PropertiesService.
+     * 
+     * @param {string} key - Chiave da eliminare
+     * @returns {void}
+     */
     clear: (key) => P.deleteProperty(key),
+    /**
+     * Legge e parsa JSON da PropertiesService.
+     * 
+     * @param {string} key - Chiave da leggere
+     * @param {*} [fallback=null] - Valore di default se chiave non esiste o JSON invalido
+     * @returns {*} Oggetto parsato o fallback
+     */
     getJSON(key, fallback = null) {
       const raw = P.getProperty(key);
       if (!raw) return fallback;
@@ -821,6 +1001,14 @@ const STATE = (function () {
           return fallback;
       }
     },
+    /**
+     * Serializza e salva un oggetto come JSON in PropertiesService.
+     * 
+     * @param {string} key - Chiave dove salvare
+     * @param {*} obj - Oggetto da serializzare
+     * @returns {void}
+     * @throws {Error} Se JSON serializzato supera 500KB
+     */
     setJSON(key, obj) {
       try {
         const serialized = JSON.stringify(obj);
@@ -837,6 +1025,15 @@ const STATE = (function () {
   };
 
   const cache = {
+    /**
+     * Salva un array JSON di grandi dimensioni in CacheService con chunking automatico.
+     * Supera il limite 100KB di CacheService dividendo in chunk multipli.
+     * TTL: 6 ore (massimo CacheService).
+     * 
+     * @param {string} baseKey - Chiave base per i chunk (es: 'HEADERS_DATA')
+     * @param {Array<*>} dataArray - Array di oggetti da salvare
+     * @returns {number} Numero di chunk creati
+     */
     setLargeJSONArray(baseKey, dataArray) {
       if (!dataArray) return 0;
       if (dataArray.length === 0) {
@@ -902,6 +1099,13 @@ const STATE = (function () {
       }
     },
 
+    /**
+     * Recupera un array JSON da CacheService precedentemente salvato con setLargeJSONArray.
+     * 
+     * @param {string} baseKey - Chiave base usata per salvare
+     * @param {number} numChunks - Numero di chunk da recuperare
+     * @returns {Array<*>} Array ricostruito o array vuoto se dati mancanti/scaduti
+     */
     getLargeJSONArray(baseKey, numChunks) {
       if (!Number.isInteger(numChunks) || numChunks <= 0) return [];
 
@@ -941,6 +1145,13 @@ const STATE = (function () {
       }
     },
 
+    /**
+     * Rimuove i chunk di un array JSON da CacheService.
+     * 
+     * @param {string} baseKey - Chiave base dei chunk da rimuovere
+     * @param {number} [numChunks] - Numero chunk conosciuti (se non specificato rimuove fino a 100)
+     * @returns {void}
+     */
     clearLargeJSON(baseKey, numChunks) {
       const chunksToTry = (Number.isInteger(numChunks) && numChunks > 0) ? numChunks + 50 : 100;
       const keys = Array.from({ length: chunksToTry }, (_, i) => `${baseKey}_${i}`);
