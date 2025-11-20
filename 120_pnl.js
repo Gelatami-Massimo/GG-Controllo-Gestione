@@ -1,10 +1,13 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 120_pnl.js
-// VERSIONE: 27.0 (P&L Engine - ERROR_HANDLER Integration)
+// VERSIONE: 28.0 (P&L Engine - Column Validation Refactoring)
 // DESCRIZIONE: Crea un P&L dinamico Multi-Anno per GLOBALE e per SEDE.
 //              Uses UTIL.date.getShortMonthName() for month name generation.
 //              REFACTORED: 3 try/catch blocks replaced with ERROR_HANDLER.safely()
+//              REFACTORED: Column validation loop replaced with UTIL.checkColumns()
+// Novità v28:
+// - Validazione colonne con UTIL.checkColumns() (più conciso e chiaro)
 // Novità v27:
 // - Integrazione ERROR_HANDLER.safely() per operazioni formatting non-critiche
 // - Eliminati 3 blocchi try/catch duplicati (-18 righe boilerplate)
@@ -501,11 +504,10 @@ function _getAggregatedCostsBySede(famiglieFornitori) {
   try {
     const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
     const required = ['Sede', 'Data', 'TotImponibile', 'FornitoreID'];
-    for (const k of required) {
-      if (idx[k] === undefined) {
-        LOG.error('PNL_FATT', `Colonna ${k} mancante in Fatture.`);
-        return result;
-      }
+    const missing = UTIL.checkColumns(idx, required);
+    if (missing.length) {
+      LOG.error('PNL_FATT', `Colonne mancanti in Fatture: ${missing.join(', ')}`);
+      return result;
     }
     const lastCol = Math.max(idx.Sede, idx.Data, idx.TotImponibile, idx.FornitoreID) + 1;
     const rows = sh.getRange(headerRow + 1, 1, sh.getLastRow() - headerRow, lastCol).getValues();

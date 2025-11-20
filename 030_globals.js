@@ -1,10 +1,11 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 30_globals.js
-// VERSIONE: 26.0 (Global Utilities - ERROR_HANDLER Integration)
+// VERSIONE: 27.0 (Global Utilities - Column Validation Helper)
 // DESCRIZIONE: Utility globali (LOG, UTIL, XMLSAFE, STATE) — fix critico
 //               su XmlService: niente getTextTrim(), gestione namespace FPA.
 //               REFACTORED: Lock release uses ERROR_HANDLER.safely()
+//               NEW: UTIL.checkColumns() micro-helper for optional validation
 // =============================================================
 
 /** Namespace FatturaPA (default v1.2 con fallback v1.0) */
@@ -687,6 +688,23 @@ const UTIL = (function () {
   };
 
   // ============================================================================
+  // COLUMN VALIDATION HELPER (Optional micro-utility)
+  // ============================================================================
+  /**
+   * Validates required columns exist in header index.
+   * Returns missing columns array, or empty array if all present.
+   * Usage: const missing = UTIL.checkColumns(idx, ['Col1', 'Col2']);
+   *        if (missing.length) { LOG.error(...); return; }
+   * 
+   * @param {Object} idx - Header index from SHEETS.headerIndex()
+   * @param {string[]} required - Required column names
+   * @returns {string[]} Array of missing column names
+   */
+  function checkColumns(idx, required) {
+    return required.filter(col => idx[col] === undefined);
+  }
+
+  // ============================================================================
   // RETURN PUBLIC API
   // ============================================================================
   return {
@@ -712,6 +730,7 @@ const UTIL = (function () {
     acquireLock,
     releaseLock,
     getColumnLetter,
+    checkColumns,  // Column validation helper
     // DATE_UTILS namespace
     date: DATE_UTILS
   };

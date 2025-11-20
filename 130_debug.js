@@ -1,12 +1,13 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 130_debug.js
-// VERSIONE: 28.0 (Debug & Maintenance - ERROR_HANDLER Integration)
+// VERSIONE: 29.0 (Debug & Maintenance - Column Validation Refactoring)
 // DESCRIZIONE: Suite di strumenti di manutenzione e diagnostica.
 //              REFACTORED: 4 duplicate management functions now use 032_duplicate_manager.js
 //              REFACTORED: 4 manual loops replaced with SHEET_ITERATOR.forEachChunk()
 //              REFACTORED: 6 try/catch blocks replaced with ERROR_HANDLER.safely()
-//              Eliminated 333+180+65 = 578 duplicate lines total (-33% reduction).
+//              REFACTORED: Column validation loop replaced with UTIL.checkColumns()
+//              Eliminated 333+180+65+3 = 581 duplicate lines total (-33.5% reduction).
 // =============================================================
 
 const DEBUG = (function () {
@@ -284,7 +285,8 @@ const DEBUG = (function () {
 
     const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
     const requiredF = ['FornitoreID', 'DenominazioneFornitore', 'RegimeFiscale'];
-    for (const k of requiredF) { if (idxF[k] === undefined) { UTIL.showToast(`Colonna mancante in Fatture: ${k}`, 'Errore'); return; } }
+    const missingF = UTIL.checkColumns(idxF, requiredF);
+    if (missingF.length) { UTIL.showToast(`Colonne mancanti in Fatture: ${missingF.join(', ')}`, 'Errore'); return; }
 
     const existingIds = new Set();
     try {
