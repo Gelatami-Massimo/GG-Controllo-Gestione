@@ -2,8 +2,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: Sidebar.html
-// VERSIONE: 28.0 (UI Cleanup - Simplified Sidebar)
-// DESCRIZIONE: Sidebar pulita e riorganizzata.
+// VERSIONE: 29.0 (UI Complete Redesign - Compact & Clean)
+// DESCRIZIONE: Sidebar completamente ridisegnata con layout a griglia e testi brevi.
 // =============================================================
 -->
 <!DOCTYPE html>
@@ -13,57 +13,196 @@
     <meta charset="utf-8" />
     <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
     <style>
-      :root { --primary: #1a73e8; --primary-dark: #185abc; --warn: #fbbc04; --ok: #1e8e3e; --err: #d93025; --bg-light: #f8f9fa; }
-      body { padding: 12px; font-family: 'Roboto', Arial, sans-serif; }
-      h4 { font-size: 1.2em; color: #202124; margin-bottom: 12px; }
-      h5 { font-size: 1.1em; color: var(--primary); border-bottom: 1px solid #ddd; padding-bottom: 5px; margin: 18px 0 10px; }
-      .block { margin-bottom: 10px; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-      .row button, .block button { width: 100%; }
-      button { background-color: #f8f9fa; color: #202124; border: 1px solid #dadce0; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-      button:hover { background-color: #e8eaed; }
-      button.btn-primary, button[style*="background-color: #1a73e8"] { background-color: #1a73e8 !important; color: white !important; border: none !important; }
-      button.btn-success, button[style*="background-color: #34a853"] { background-color: #34a853 !important; color: white !important; border: none !important; }
-      button:hover.btn-primary, button[style*="background-color: #1a73e8"]:hover { background-color: #185abc !important; }
-      button:hover.btn-success, button[style*="background-color: #34a853"]:hover { background-color: #2d8e47 !important; }
-
-      .info-panel { background-color: var(--bg-light); border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; margin-bottom: 16px; font-size: 13px; }
-      .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+      :root { 
+        --primary: #1a73e8; --primary-dark: #185abc; 
+        --success: #34a853; --success-dark: #2d8e47;
+        --warn: #fbbc04; --warn-dark: #f9ab00;
+        --error: #d93025; 
+        --bg-light: #f8f9fa; --bg-section: #ffffff;
+        --text-primary: #202124; --text-secondary: #5f6368;
+        --border: #dadce0;
+      }
+      
+      body { 
+        padding: 10px; 
+        font-family: 'Roboto', Arial, sans-serif; 
+        font-size: 13px;
+        color: var(--text-primary);
+        background: #fff;
+      }
+      
+      h4 { 
+        font-size: 1.1em; 
+        color: var(--text-primary); 
+        margin: 0 0 10px 0; 
+        font-weight: 500;
+      }
+      
+      /* Info Panel */
+      .info-panel { 
+        background: var(--bg-light); 
+        border: 1px solid var(--border); 
+        border-radius: 6px; 
+        padding: 8px; 
+        margin-bottom: 10px; 
+        font-size: 12px; 
+      }
+      .info-row { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        margin-bottom: 4px; 
+      }
       .info-row:last-child { margin-bottom: 0; }
-      .info-value { font-weight: bold; text-align: right; }
-      #last-run-info { font-size: 11px; color: #5f6368; text-align: right; margin-top: -4px; }
+      .info-value { font-weight: 600; text-align: right; }
+      #last-run-info { font-size: 10px; color: var(--text-secondary); text-align: right; margin-top: -2px; }
       #last-run-row { display: none; }
-
-      .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-      .dot-active { background-color: var(--ok); }
+      
+      .status-dot { 
+        display: inline-block; 
+        width: 8px; height: 8px; 
+        border-radius: 50%; 
+        margin-right: 5px; 
+        vertical-align: middle; 
+      }
+      .dot-active { background-color: var(--success); }
       .dot-inactive { background-color: #80868b; }
-
-      .progress-bar-container { display: none; margin-top: 8px; }
-      progress { width: 100%; height: 8px; }
-
-      .status { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 4px; background: #f1f3f4; font-size: 13px; margin-bottom: 12px; }
-      .spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.1); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; display: none; }
+      
+      /* Progress Bar */
+      .progress-bar-container { display: none; margin-top: 6px; }
+      progress { width: 100%; height: 6px; border-radius: 3px; }
+      
+      /* Status Bar */
+      .status { 
+        display: flex; 
+        align-items: center; 
+        gap: 6px; 
+        padding: 6px 8px; 
+        border-radius: 4px; 
+        background: var(--bg-light); 
+        font-size: 12px; 
+        margin-bottom: 10px; 
+      }
+      .spinner { 
+        width: 12px; height: 12px; 
+        border: 2px solid rgba(0,0,0,0.1); 
+        border-top-color: var(--primary); 
+        border-radius: 50%; 
+        animation: spin .8s linear infinite; 
+        display: none; 
+      }
       .status.busy .spinner { display: inline-block; }
       .status.ok { background-color: #e6f4ea; color: #137333; }
       .status.err { background-color: #fce8e6; color: #a50e0e; }
       @keyframes spin { to { transform: rotate(360deg); } }
-      .hint { font-size: 11px; color: #666; margin-top: 8px; padding-left: 2px; }
-
-      #continue-btn.highlight { background-color: var(--warn); color: #202124; font-weight: bold; animation: pulse 2s infinite; border: none; }
-      @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(251, 188, 4, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(251, 188, 4, 0); } 100% { box-shadow: 0 0 0 0 rgba(251, 188, 4, 0); } }
+      
+      /* Section Structure */
+      .gg-section { 
+        margin-bottom: 12px; 
+        padding: 10px; 
+        border-radius: 6px; 
+        background: var(--bg-section);
+        border: 1px solid var(--border);
+      }
+      .gg-section h5 { 
+        font-size: 0.95em; 
+        font-weight: 600;
+        color: var(--primary); 
+        margin: 0 0 4px 0; 
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .gg-section-desc { 
+        font-size: 11px; 
+        color: var(--text-secondary); 
+        margin: 0 0 8px 0; 
+        line-height: 1.3;
+      }
+      
+      /* Buttons Grid */
+      .gg-buttons-grid { 
+        display: grid; 
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); 
+        gap: 6px; 
+      }
+      .gg-buttons-grid.full { 
+        grid-template-columns: 1fr; 
+      }
+      
+      button { 
+        background: #fff;
+        color: var(--text-primary); 
+        border: 1px solid var(--border); 
+        padding: 8px 10px; 
+        border-radius: 4px; 
+        cursor: pointer; 
+        font-size: 13px; 
+        font-weight: 500;
+        text-align: center;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      button:hover { 
+        background: var(--bg-light);
+        border-color: var(--primary);
+      }
+      button:active {
+        transform: scale(0.98);
+      }
+      
+      /* Button Variants */
+      button.btn-primary { 
+        background: var(--primary); 
+        color: white; 
+        border: none;
+      }
+      button.btn-primary:hover { 
+        background: var(--primary-dark);
+      }
+      
+      button.btn-success { 
+        background: var(--success); 
+        color: white; 
+        border: none;
+      }
+      button.btn-success:hover { 
+        background: var(--success-dark);
+      }
+      
+      button.btn-warn { 
+        background: var(--warn); 
+        color: var(--text-primary); 
+        border: none;
+        font-weight: 600;
+      }
+      button.btn-warn:hover { 
+        background: var(--warn-dark);
+      }
+      
+      #continue-btn.highlight { 
+        animation: pulse 2s infinite; 
+      }
+      @keyframes pulse { 
+        0% { box-shadow: 0 0 0 0 rgba(251, 188, 4, 0.7); } 
+        70% { box-shadow: 0 0 0 8px rgba(251, 188, 4, 0); } 
+        100% { box-shadow: 0 0 0 0 rgba(251, 188, 4, 0); } 
+      }
     </style>
   </head>
   <body>
-    <h4>🧊 GELATAMI - Controllo Gestione</h4>
+    <h4>🧊 GELATAMI</h4>
 
     <div class="info-panel">
       <div class="info-row">
-        <span>📁 File Elaborati / Totali:</span>
+        <span>📁 File:</span>
         <span class="info-value" id="file-counter">-- / --</span>
       </div>
       <div class="info-row">
-        <span>⏰ Import Automatico:</span>
-        <span class="info-value" id="trigger-status">Verifica...</span>
+        <span>⏰ Auto:</span>
+        <span class="info-value" id="trigger-status">...</span>
       </div>
       <div class="info-row" id="last-run-row">
         <span></span>
@@ -79,53 +218,62 @@
       <span id="statusText">Pronto</span>
     </div>
 
-    <div class="block">
-      <h5>📥 Importazione</h5>
-      <button id="continue-btn" class="action" onclick="runServerFunction('<?!= App.ui.fn.runContinue ?>')">▶️ Continua Import</button>
-      <div class="row">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runImportHeaders ?>')">1️⃣ Intestazioni</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runImportRows ?>')">2️⃣ Righe</button>
+    <!-- 📥 IMPORT -->
+    <section class="gg-section gg-import">
+      <h5>📥 Import</h5>
+      <p class="gg-section-desc">Importazione fatture XML e generazione PDF</p>
+      <div class="gg-buttons-grid full">
+        <button id="continue-btn" class="btn-warn" onclick="runServerFunction('<?!= App.ui.fn.runContinue ?>')" title="Riprendi import interrotto">▶ Continua</button>
       </div>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePdfs ?>')" style="margin-top: 8px;">📄 Genera PDF Mancanti</button>
-    </div>
+      <div class="gg-buttons-grid">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runImportHeaders ?>')" title="Importa solo intestazioni fatture">Intestazioni</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runImportRows ?>')" title="Importa righe prodotti">Righe</button>
+      </div>
+      <div class="gg-buttons-grid full">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePdfs ?>')" title="Genera PDF mancanti">📄 PDF mancanti</button>
+      </div>
+    </section>
 
-    <div class="block">
-      <h5>📊 Report e Analisi</h5>
-      <div class="row">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateDashboard ?>')">📈 Dashboard</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePnlSheet ?>')">📑 P&L</button>
+    <!-- 📊 ANALISI -->
+    <section class="gg-section gg-analytics">
+      <h5>📊 Analisi</h5>
+      <p class="gg-section-desc">Report, dashboard e analisi dati</p>
+      <div class="gg-buttons-grid">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateDashboard ?>')" title="Genera dashboard riepilogativa">Dashboard</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePnlSheet ?>')" title="Conto economico">P&L</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateWarehouse ?>')" title="Report magazzino">Magazzino</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runReconciliationReport ?>')" title="Report di audit e integrità">Audit</button>
       </div>
-      <div class="row">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateWarehouse ?>')">📦 Magazzino</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runReconciliationReport ?>')">🔍 Audit</button>
-      </div>
-    </div>
+    </section>
 
-    <div class="block">
+    <!-- 🔧 MANUTENZIONE -->
+    <section class="gg-section gg-maintenance">
       <h5>🔧 Manutenzione</h5>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runCompleteMaintenance ?>')" style="background-color: #1a73e8; color: white;">✨ Manutenzione Completa</button>
-      <p class="hint" style="margin-top: 4px; margin-bottom: 8px;">↑ Filtri, formati, duplicati, integrità</p>
-      <div class="row">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runSyncSuppliers ?>')">🖨️ Sincronizza Fornitori</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runSyncCategoriesRetroactive ?>')">🔄 Riallinea Categorie</button>
+      <p class="gg-section-desc">Ottimizzazione e pulizia dati</p>
+      <div class="gg-buttons-grid">
+        <button class="btn-primary" onclick="runServerFunction('<?!= App.ui.fn.runCompleteMaintenance ?>')" title="Esegue tutte le operazioni di manutenzione">Man. completa</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runSyncSuppliers ?>')" title="Sincronizza fornitori">Fornitori</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runSyncCategoriesRetroactive ?>')" title="Riallinea categorie prodotti">Categorie</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runMarkDuplicateInvoices ?>')" title="Gestisci fatture duplicate">Duplicati</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runClearCache ?>')" title="Pulisci cache di sistema">Cache</button>
       </div>
-      <div class="row">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runMarkDuplicateInvoices ?>')">🟡 Gestisci Duplicati</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runClearCache ?>')">🧹 Pulisci Cache</button>
-      </div>
-    </div>
+    </section>
 
-    <div class="block">
-      <h5>⚙️ Configurazione</h5>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runInitialSetup ?>')">🚀 Setup Iniziale</button>
-      <button onclick="openConfigDialog()" style="background-color: #1a73e8; color: white;">⚙️ Impostazioni Sistema</button>
-      <button onclick="runServerFunction('DEV_EnsureSheetsAndFormats')" style="background-color: #34a853; color: white;">📋 Verifica Struttura Fogli</button>
-      <button onclick="openTriggerDashboard()" style="background-color: #34a853; color: white;">📊 Dashboard Trigger</button>
-      <div class="row">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateTrigger ?>')">🕐 Attiva Import</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runDeleteTriggers ?>')">🛑 Disattiva Import</button>
+    <!-- ⚙️ CONFIGURAZIONE -->
+    <section class="gg-section gg-config">
+      <h5>⚙️ Config</h5>
+      <p class="gg-section-desc">Impostazioni e gestione trigger</p>
+      <div class="gg-buttons-grid">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runInitialSetup ?>')" title="Setup iniziale fogli">Setup</button>
+        <button class="btn-primary" onclick="openConfigDialog()" title="Impostazioni sistema">Impostazioni</button>
+        <button class="btn-success" onclick="runServerFunction('DEV_EnsureSheetsAndFormats')" title="Verifica e aggiorna struttura fogli">Struttura</button>
+        <button class="btn-success" onclick="openTriggerDashboard()" title="Dashboard trigger automatici">Trigger dash</button>
       </div>
-    </div>
+      <div class="gg-buttons-grid">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateTrigger ?>')" title="Attiva import automatico ogni 15 min">Attiva import</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runDeleteTriggers ?>')" title="Disattiva tutti i trigger">Stop import</button>
+      </div>
+    </section>
 
     <script>
       // Riferimenti UI
