@@ -138,14 +138,14 @@ const SHEETS = (function () {
       'RigheImportateNum', 'TotRigheNetto',
       'RigheImportate', 'ImportaRigheSrc', 'ImportedAt'
     ],
-    // NB: Reparto ereditato da Fatture, in coda alle righe
+    // NB: Reparto ereditato da Fatture, TipoRiga calcolato in import
     'Righe': [
       'FileID', 'Sede', 'DataDoc', 'Anno', 'Mese', 'NumeroDoc',
       'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
       'NumeroLinea', 'Codice Articolo Fornitore',
       'CodiceTipo', 'CodiceValore', 'Descrizione', 'Quantita',
       'PrezzoUnitario', 'PrezzoTotale', 'AliquotaIVA',
-      'Reparto'
+      'Reparto', 'TipoRiga'
     ],
     'Fornitori': ['FornitoreID', 'Denominazione', 'Famiglia', 'Categoria', 'Reparto', 'ImportaRighe'],
     'Aziende': ['P_IVA_Azienda', 'Nome_Sede', 'Note'],
@@ -516,7 +516,7 @@ const SHEETS = (function () {
           cols: [
             'FileID', 'Sede', 'Anno', 'Mese', 'NumeroDoc', 'FornitoreID', 'DenominazioneFornitore',
             'Famiglia', 'Categoria', 'NumeroLinea', 'Codice Articolo Fornitore',
-            'CodiceTipo', 'CodiceValore', 'Descrizione', 'Reparto'
+            'CodiceTipo', 'CodiceValore', 'Descrizione', 'Reparto', 'TipoRiga'
           ]
         }
       ],

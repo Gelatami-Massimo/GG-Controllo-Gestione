@@ -385,8 +385,21 @@ const IMPORT_ROWS = (function () {
             continue; // ✅ Salta questa riga (già importata in precedenza)
           }
 
-          // Gestione Prodotti (SOLO se non è spazzatura)
-          if (!isJunk) {
+          // ✅ CALCOLO TIPORIGA
+          // ARTICOLO: Quantità > 0 e PrezzoTotale ≠ 0
+          // SCONTO: Quantità = 0 e PrezzoTotale < 0
+          // TESTO: Quantità = 0 e PrezzoTotale = 0
+          let tipoRiga = 'TESTO'; // default
+          if (qta > 0 && prezzoTotaleRiga !== 0) {
+            tipoRiga = 'ARTICOLO';
+          } else if (qta === 0 && prezzoTotaleRiga < 0) {
+            tipoRiga = 'SCONTO';
+          } else if (qta === 0 && prezzoTotaleRiga === 0) {
+            tipoRiga = 'TESTO';
+          }
+
+          // ✅ Gestione Prodotti (SOLO per ARTICOLO e se non è spazzatura)
+          if (!isJunk && tipoRiga === 'ARTICOLO') {
             PRODUCTS.ensureProduct(
               invData[idxF.FornitoreID], invData[idxF.DenominazioneFornitore],
               codiceValoreRaw, descrizione, um, productCache, categoriaFornitore
@@ -406,7 +419,7 @@ const IMPORT_ROWS = (function () {
             'Famiglia': famigliaFornitore,
             'Categoria': categoriaFornitore,
             'Reparto': invData[idxF.Reparto],
-            'NumeroLinea': numeroLinea,  // ✅ Usa la variabile già dichiarata
+            'NumeroLinea': numeroLinea,
             'Codice Articolo Fornitore': codiceValoreForzato,
             'CodiceTipo': codiceTipo,
             'CodiceValore': codiceValoreForzato,
@@ -414,7 +427,8 @@ const IMPORT_ROWS = (function () {
             'Quantita': qta,
             'PrezzoUnitario': prezzoUnit,
             'PrezzoTotale': prezzoTotaleRiga,
-            'AliquotaIVA': String(aliquota)
+            'AliquotaIVA': String(aliquota),
+            'TipoRiga': tipoRiga
           };
 
           const row = righeHeaders.map(header => {

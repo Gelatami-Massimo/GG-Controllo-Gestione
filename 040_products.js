@@ -186,23 +186,31 @@ const PRODUCTS = (() => {
 
   /**
    * Propone un codice interno leggibile e conciso.
+   * Logica:
+   * - Se Codice Articolo Fornitore presente → FornitoreID-CodiceFornitore
+   * - Se vuoto → FornitoreID-slug(Descrizione)
    */
   function _proposeInternalCode(fornitoreId, codiceForn, descr) {
     const baseFor = UTIL.normKey(fornitoreId).replace(/\s+/g, '');
     const cleanCodiceForn = String(codiceForn ?? '')
       .trim()
-      .replace(/^'+/, '')
+      .replace(/^'+/, '') // Rimuove apostrofi iniziali di Sheets
       .replace(/[^a-zA-Z0-9-]/g, '');
 
+    // ✅ CASO 1: Codice Articolo Fornitore presente
     if (cleanCodiceForn) {
       return `${baseFor}-${cleanCodiceForn}`.slice(0, 60);
     }
 
+    // ✅ CASO 2: Codice vuoto → usa slug(Descrizione)
+    // Normalizza descrizione: maiuscolo, solo [A-Z0-9-], max 50 caratteri
     const slug = String(descr ?? '')
+      .normalize('NFD') // Decompose accenti
+      .replace(/[\u0300-\u036f]/g, '') // Rimuove diacritici
       .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 20);
+      .replace(/[^A-Z0-9]+/g, '-') // Sostituisce non-alfanumerici con -
+      .replace(/^-+|-+$/g, '') // Rimuove - iniziali/finali
+      .slice(0, 50); // Limita lunghezza
 
     return `${baseFor}-${slug || 'ITEM'}`;
   }
