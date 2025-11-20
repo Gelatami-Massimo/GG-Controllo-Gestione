@@ -1,13 +1,13 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 10_main.js
-// VERSIONE: 26.0 (Main Menu + Complete Maintenance Orchestration)
-// DESCRIZIONE: Menu, sidebar, trigger dispatcher + manutenzione completa automatizzata.
+// VERSIONE: 28.0 (UI Cleanup - Simplified Menu & Sidebar)
+// DESCRIZIONE: Menu principale pulito e sidebar riorganizzata.
 // =============================================================
 
 /**
  * onOpen()
- * Crea il menu principale "FATTURE XML" nella UI del foglio.
+ * Crea il menu principale "GELATAMI" nella UI del foglio.
  */
 function onOpen() {
   // --- VALIDAZIONE DIPENDENZE MODULI ---
@@ -26,50 +26,47 @@ function onOpen() {
   // --- FINE DIAGNOSTICA ---
 
   const ui = SpreadsheetApp.getUi();
-  const menu = ui.createMenu('FATTURE XML') // Puoi rinominare "FATTURE XML" se vuoi
-    .addItem('➡️ Apri Pannello di Controllo', App.ui.fn.openSidebar)
+  const menu = ui.createMenu('🧊 GELATAMI')
+    .addItem('➡️ Pannello di Controllo', App.ui.fn.openSidebar)
     .addSeparator();
 
-  // --- Menu Importazione Dati ---
-  menu.addSubMenu(ui.createMenu('Importazione Dati')
-    .addItem('▶️ Continua Import Interrotto', App.ui.fn.runContinue)
-    .addItem('1. Importa Intestazioni Fatture', App.ui.fn.runImportHeaders)
-    .addItem('2. Importa Righe Prodotti', App.ui.fn.runImportRows)
+  // --- Importazione ---
+  menu.addSubMenu(ui.createMenu('📥 Importazione')
+    .addItem('▶️ Continua Import', App.ui.fn.runContinue)
+    .addSeparator()
+    .addItem('1️⃣ Importa Intestazioni', App.ui.fn.runImportHeaders)
+    .addItem('2️⃣ Importa Righe', App.ui.fn.runImportRows)
+    .addSeparator()
+    .addItem('📄 Genera PDF Mancanti', App.ui.fn.runCreatePdfs)
   );
 
-  // --- Menu Report e Utility ---
-  menu.addSubMenu(ui.createMenu('Report e Utility')
-    .addItem('📊 Esegui Report di Audit', App.ui.fn.runReconciliationReport)
-    .addItem('📈 Crea/Aggiorna Dashboard', App.ui.fn.runCreateDashboard)
-    .addItem('📑 Crea/Aggiorna P&L', App.ui.fn.runCreatePnlSheet)
-    .addItem('📄 Crea PDF Mancanti', App.ui.fn.runCreatePdfs)
+  // --- Report e Analisi ---
+  menu.addSubMenu(ui.createMenu('📊 Report e Analisi')
+    .addItem('📈 Dashboard', App.ui.fn.runCreateDashboard)
+    .addItem('📑 Conto Economico (P&L)', App.ui.fn.runCreatePnlSheet)
+    .addItem('📦 Magazzino', App.ui.fn.runCreateWarehouse)
     .addSeparator()
-    .addItem('📦 Crea/Aggiorna Magazzino', App.ui.fn.runCreateWarehouse)
+    .addItem('🔍 Report di Audit', App.ui.fn.runReconciliationReport)
   );
 
-  // --- Menu Strumenti Avanzati ---
-  menu.addSubMenu(ui.createMenu('Strumenti Avanzati')
-    .addItem('⚙️ Esegui Setup Guidato', App.ui.fn.runInitialSetup)
-    .addItem('⚙️ Configurazione Sistema', runConfigDialog)
-    .addSeparator()
-    .addItem('🖨️ Sincronizza Anagrafica Fornitori (Nuovi)', App.ui.fn.runSyncSuppliers)
-    .addItem('🔄 Riallinea Categorie Storiche', App.ui.fn.runSyncCategoriesRetroactive)
-    .addSeparator()
-    .addItem('🟡 Marca Fatture Duplicate', App.ui.fn.runMarkDuplicateInvoices)
-    .addItem('📸 Crea Snapshot Duplicati', App.ui.fn.createDuplicateSnapshot)
-    .addItem('⚪ Pulisci Marcatura Duplicati', App.ui.fn.runClearDuplicateMarkings)
-    .addSeparator()
-    .addItem('� Conta Righe Duplicate', App.ui.fn.runCountDuplicates)
-    .addItem('�🔍 Trova Righe Duplicate', App.ui.fn.runFindRigheDuplicate)
-    .addItem('🗑️ Elimina Righe Duplicate', App.ui.fn.runDeleteRigheDuplicate)
-    .addItem('🔄 Reset Flag Import (Tutte)', App.ui.fn.runResetAllImportFlags)
-    .addSeparator()
-    .addSeparator()
-    .addItem('🕜 Installa Import Automatico', App.ui.fn.runCreateTrigger)
-    .addItem('🛑 Rimuovi Import Automatico', App.ui.fn.runDeleteTriggers)
-    .addSeparator()
+  // --- Manutenzione ---
+  menu.addSubMenu(ui.createMenu('🔧 Manutenzione')
     .addItem('✨ Manutenzione Completa', App.ui.fn.runCompleteMaintenance)
-    .addItem('🧹 Pulisci Cache e Cursori', App.ui.fn.runClearCache)
+    .addSeparator()
+    .addItem('🖨️ Sincronizza Fornitori', App.ui.fn.runSyncSuppliers)
+    .addItem('🔄 Riallinea Categorie', App.ui.fn.runSyncCategoriesRetroactive)
+    .addSeparator()
+    .addItem('🟡 Gestisci Duplicati', App.ui.fn.runMarkDuplicateInvoices)
+    .addItem('🧹 Pulisci Cache', App.ui.fn.runClearCache)
+  );
+
+  // --- Configurazione ---
+  menu.addSubMenu(ui.createMenu('⚙️ Configurazione')
+    .addItem('🚀 Setup Iniziale', App.ui.fn.runInitialSetup)
+    .addItem('⚙️ Impostazioni Sistema', runConfigDialog)
+    .addSeparator()
+    .addItem('🕐 Attiva Import Automatico', App.ui.fn.runCreateTrigger)
+    .addItem('🛑 Disattiva Import Automatico', App.ui.fn.runDeleteTriggers)
   );
 
   menu.addToUi();
@@ -187,10 +184,7 @@ function runCompleteMaintenance() {
   }, 'Maintenance', 'Manutenzione completa in corso...', 'Manutenzione completata! Fogli verificati, codici formattati, duplicati marcati, integrità controllata.');
 }
 
-// Funzione legacy mantenuta per compatibilità (ora richiama runCompleteMaintenance)
-function runSheetCheckAndSetup() { runCompleteMaintenance(); }
 function runClearCache() { _runSafely(() => DEBUG.clearCache(), 'Debug', 'Pulizia cache e cursori...', 'Cache e cursori azzerati.'); }
-function runSanityCheck() { _runSafely(() => DEBUG.sanityCheck(), 'Debug', 'Controllo integrità sistema...', 'Controllo completato.'); }
 function runCreateDashboard() { _runSafely(() => DASHBOARD.create(), 'Dashboard', 'Aggiornamento dashboard...', 'Dashboard aggiornata.'); }
 function runCreateWarehouse() { _runSafely(() => WAREHOUSE.create(), 'Warehouse', 'Creazione/Aggiornamento magazzino...', 'Magazzino aggiornato!'); }
 function runCreateTrigger() { _runSafely(() => createTimeBasedTrigger(), 'Trigger', 'Installazione import automatico...', 'Operazione trigger completata.'); }
@@ -198,21 +192,11 @@ function runDeleteTriggers() { _runSafely(() => deleteTriggers(), 'Trigger', 'Ri
 function runCreatePnlSheet() { _runSafely(() => createPnlSheet(), 'PNL', 'Creazione/Aggiornamento P&L...', 'P&L aggiornato.'); }
 
 // --- WRAPPER FUNCTIONS FOR DEBUG MODULE ---
-function createDuplicateSnapshot() {
-   _runSafely(() => DEBUG.createDuplicateSnapshot(), 'Debug', 'Creazione Snapshot Duplicati...', 'Snapshot creato!');
-}
-
 function runMarkDuplicateInvoices() {
     _runSafely(() => DEBUG.markDuplicateInvoices(), 'Debug', 'Marcatura Duplicati in corso...', 'Marcatura completata!');
 }
-function runClearDuplicateMarkings() { _runSafely(() => DEBUG.clearDuplicateMarkings(), 'Debug', 'Pulizia Marcatura Duplicati...', 'Marcatura rimossa!'); }
-function runForceTextFormatOnCodes() { _runSafely(() => DEBUG.forceTextFormatOnCodes(), 'Debug', 'Forzo formato testo codici...', 'Formato testo applicato!'); }
 function runSyncSuppliers() { _runSafely(() => DEBUG.syncSuppliersFromInvoices(), 'Debug', 'Sincronizzazione fornitori (nuovi)...', 'Anagrafica fornitori sincronizzata!'); }
 function runSyncCategoriesRetroactive() { _runSafely(() => DEBUG.syncCategoriesRetroactive(), 'Debug', 'Riallineamento categorie storiche...', 'Categorie storiche riallineate!'); }
-function runFindRigheDuplicate() { _runSafely(() => DEBUG.DEV_FindRigheDuplicate(), 'Debug', 'Ricerca righe duplicate...', 'Ricerca completata!'); }
-function runDeleteRigheDuplicate() { _runSafely(() => DEBUG.DEV_DeleteRigheDuplicate(), 'Debug', 'Eliminazione righe duplicate...', 'Eliminazione completata!'); }
-function runCountDuplicates() { _runSafely(() => DEBUG.DEV_CountDuplicates(), 'Debug', 'Conteggio duplicati...', 'Conteggio completato!'); }
-function runResetAllImportFlags() { _runSafely(() => DEBUG.DEV_ResetAllImportFlags(), 'Debug', 'Reset flag import...', 'Reset completato!'); }
 function runConfigDialog() { _runSafely(() => CONFIG_UI.openDialog(), 'Config', 'Apertura dialog configurazione...', 'Dialog chiuso.'); }
 function openTriggerStatusSheet() {
   try {

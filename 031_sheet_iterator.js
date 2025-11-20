@@ -453,11 +453,151 @@ const SHEET_ITERATOR = (function() {
   }
 
   // ============================================================================
+  // PUBLIC API: forEachChunk (Advanced iteration with timeout and cursor)
+  // ============================================================================
+
+  /**
+   * Itera su righe con gestione avanzata: timeout, cursor, progress tracking.
+   * Usato per operazioni lunghe che potrebbero superare il limite di esecuzione.
+   * 
+   * @param {Object} options - Configurazione avanzata
+   * @param {GoogleAppsScript.Spreadsheet.Sheet} options.sheet - Oggetto Sheet
+   * @param {string} options.sheetName - Nome foglio (per logging)
+   * @param {number} options.startRow - Riga iniziale (1-based, dopo header)
+   * @param {number} options.endRow - Riga finale (1-based)
+   * @param {number} [options.batchSize] - Dimensione chunk (default: 100)
+   * @param {number} [options.maxColumns] - Numero max colonne da leggere
+   * @param {string} [options.cursorKey] - Chiave STATE per salvare progresso
+   * @param {number} [options.maxRuntimeSec] - Timeout in secondi (default: 240)
+   * @param {Function} options.onTimeout - Callback eseguito prima di timeout
+   * @param {Function} options.processChunk - Callback: (chunk, chunkStartRow) => {}
+   * 
+   * @returns {{processed: number, interrupted: boolean, lastRow: number}}
+   * 
+   * @example
+   * const result = SHEET_ITERATOR.forEachChunk({
+   *   sheet: shFatture,
+   *   sheetName: 'Fatture',
+   *   startRow: 2,
+   *   endRow: 1000,
+   *   batchSize: 100,
+   *   maxColumns: 25,
+   *   cursorKey: 'import_cursor',
+   *   maxRuntimeSec: 240,
+   *   onTimeout: () => { saveState(); },
+   *   processChunk: (chunk, startRow) => {
+   *     chunk.forEach((row, i) => processRow(row, startRow + i));
+   *   }
+   * });
+   * if (result.interrupted) return; // Handle timeout
+   */
+  function forEachChunk(options = {}) {
+    const {
+      sheet,
+      sheetName,
+      startRow,
+      endRow,
+      batchSize = 100,
+      maxColumns,
+      cursorKey = null,
+      maxRuntimeSec = 240,
+      onTimeout = null,
+      processChunk
+    } = options;
+
+    // Validazione
+    if (!sheet || !processChunk) {
+      throw new Error('SHEET_ITERATOR.forEachChunk: sheet and processChunk are required');
+    }
+
+    const startTime = Date.now();
+    const maxRuntimeMs = maxRuntimeSec * 1000;
+    let currentRow = startRow;
+    let processed = 0;
+    let interrupted = false;
+
+    while (currentRow <= endRow) {
+      // Check timeout
+      const elapsed = Date.now() - startTime;
+      if (elapsed > maxRuntimeMs - 10000) { // Safety margin: 10s before timeout
+        interrupted = true;
+        
+        // Save cursor if provided
+        if (cursorKey && typeof STATE !== 'undefined') {
+          STATE.setJSON(cursorKey, { nextRow: currentRow });
+          LOG?.info('SHEET_ITERATOR', `Timeout: salvato cursor a riga ${currentRow}`, {
+            sheet: sheetName,
+            elapsed: (elapsed / 1000).toFixed(1) + 's'
+          });
+        }
+        
+        // Execute timeout callback
+        if (onTimeout) {
+          try {
+            onTimeout();
+          } catch (e) {
+            LOG?.error('SHEET_ITERATOR', 'Errore in onTimeout callback', {
+              error: e.message
+            });
+          }
+        }
+        
+        break;
+      }
+
+      // Calculate chunk size
+      const chunkRows = Math.min(batchSize, endRow - currentRow + 1);
+      const cols = maxColumns || sheet.getLastColumn();
+
+      // Read chunk
+      let chunk;
+      try {
+        chunk = sheet.getRange(currentRow, 1, chunkRows, cols).getValues();
+      } catch (e) {
+        LOG?.error('SHEET_ITERATOR', `Errore lettura chunk riga ${currentRow}`, {
+          sheet: sheetName,
+          error: e.message
+        });
+        // Skip chunk and continue
+        currentRow += chunkRows;
+        continue;
+      }
+
+      // Process chunk
+      try {
+        processChunk(chunk, currentRow);
+        processed += chunk.length;
+      } catch (e) {
+        LOG?.error('SHEET_ITERATOR', `Errore processChunk riga ${currentRow}`, {
+          sheet: sheetName,
+          error: e.message,
+          stack: e.stack
+        });
+        // Continue with next chunk
+      }
+
+      currentRow += chunkRows;
+    }
+
+    // Clear cursor if completed
+    if (!interrupted && cursorKey && typeof STATE !== 'undefined') {
+      STATE.clear(cursorKey);
+    }
+
+    return {
+      processed: processed,
+      interrupted: interrupted,
+      lastRow: currentRow - 1
+    };
+  }
+
+  // ============================================================================
   // PUBLIC API OBJECT
   // ============================================================================
 
   return {
     forEach: forEach,
+    forEachChunk: forEachChunk,
     map: map,
     filter: filter,
     reduce: reduce,

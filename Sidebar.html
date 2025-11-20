@@ -2,8 +2,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: Sidebar.html
-// VERSIONE: 25.1 (Fixed 'google is not defined' error)
-// DESCRIZIONE: Interfaccia utente (UI) per il Pannello di Controllo.
+// VERSIONE: 28.0 (UI Cleanup - Simplified Sidebar)
+// DESCRIZIONE: Sidebar pulita e riorganizzata.
 // =============================================================
 -->
 <!DOCTYPE html>
@@ -48,11 +48,11 @@
     </style>
   </head>
   <body>
-    <h4>GG GESTIONE GELATAMI V1</h4>
+    <h4>🧊 GELATAMI - Controllo Gestione</h4>
 
     <div class="info-panel">
       <div class="info-row">
-        <span>📊 File Elaborati / Totali:</span>
+        <span>📁 File Elaborati / Totali:</span>
         <span class="info-value" id="file-counter">-- / --</span>
       </div>
       <div class="info-row">
@@ -74,63 +74,49 @@
     </div>
 
     <div class="block">
-      <h5>Azioni Principali</h5>
-      <button id="continue-btn" class="action" onclick="runServerFunction('<?!= App.ui.fn.runContinue ?>')">▶️ Continua Processo Interrotto</button>
+      <h5>📥 Importazione</h5>
+      <button id="continue-btn" class="action" onclick="runServerFunction('<?!= App.ui.fn.runContinue ?>')">▶️ Continua Import</button>
       <div class="row">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runImportHeaders ?>')">1. Importa Intestazioni</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runImportRows ?>')">2. Importa Righe</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runImportHeaders ?>')">1️⃣ Intestazioni</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runImportRows ?>')">2️⃣ Righe</button>
+      </div>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePdfs ?>')" style="margin-top: 8px;">📄 Genera PDF Mancanti</button>
+    </div>
+
+    <div class="block">
+      <h5>📊 Report e Analisi</h5>
+      <div class="row">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateDashboard ?>')">📈 Dashboard</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePnlSheet ?>')">📑 P&L</button>
+      </div>
+      <div class="row">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateWarehouse ?>')">📦 Magazzino</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runReconciliationReport ?>')">🔍 Audit</button>
       </div>
     </div>
 
     <div class="block">
-      <h5>Report e Utility</h5>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runCreateWarehouse ?>')">📦 Crea/Aggiorna Magazzino</button>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runCreateDashboard ?>')">📈 Crea/Aggiorna Dashboard</button>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePnlSheet ?>')">📑 Crea/Aggiorna P&L</button>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runReconciliationReport ?>')">📊 Esegui Report di Audit</button>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePdfs ?>')">📄 Crea PDF Mancanti</button>
-    </div>
-
-    <div class="block">
-      <h5>Manutenzione</h5>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runSyncSuppliers ?>')">🖨️ Sincronizza Fornitori (Nuovi)</button>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runSyncCategoriesRetroactive ?>')">🔄 Riallinea Categorie (Storico)</button>
-
-      <div class="row" style="margin-top: 15px;">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runMarkDuplicateInvoices ?>')">🟡 Marca Duplicati</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.createDuplicateSnapshot ?>')">📸 Crea Snapshot Duplicati</button>
-        </div>
+      <h5>🔧 Manutenzione</h5>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runCompleteMaintenance ?>')" style="background-color: #1a73e8; color: white;">✨ Manutenzione Completa</button>
+      <p class="hint" style="margin-top: 4px; margin-bottom: 8px;">↑ Filtri, formati, duplicati, integrità</p>
       <div class="row">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runCompleteMaintenance ?>')" style="background-color: #1a73e8; color: white;">✨ Manutenzione Completa</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runSyncSuppliers ?>')">🖨️ Sincronizza Fornitori</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runSyncCategoriesRetroactive ?>')">🔄 Riallinea Categorie</button>
+      </div>
+      <div class="row">
+        <button onclick="runServerFunction('<?!= App.ui.fn.runMarkDuplicateInvoices ?>')">🟡 Gestisci Duplicati</button>
         <button onclick="runServerFunction('<?!= App.ui.fn.runClearCache ?>')">🧹 Pulisci Cache</button>
       </div>
-      <p class="hint" style="margin-top: 4px;">↑ Manutenzione: filtri, formati codici, verifica integrità</p>
     </div>
 
     <div class="block">
-      <h5>🔍 Gestione Righe Duplicate</h5>
-      <p class="hint">⚠️ Usa questi strumenti se hai righe duplicate nel foglio "Righe"</p>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runCountDuplicates ?>')" style="background-color: #1a73e8; color: white;">📊 Conta Righe Duplicate</button>
-      <p class="hint" style="margin-top: 4px; margin-bottom: 8px;">↑ Diagnostica veloce: mostra quante righe duplicate hai</p>
-      
-      <div class="row">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runFindRigheDuplicate ?>')">🔍 Trova Duplicati</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runDeleteRigheDuplicate ?>')" style="background-color: #d93025; color: white;">🗑️ Elimina Duplicati</button>
-      </div>
-      <p class="hint" style="margin-top: 4px;">↑ Trova crea lista dettagliata | Elimina rimuove fisicamente</p>
-      
-      <button onclick="runServerFunction('<?!= App.ui.fn.runResetAllImportFlags ?>')" style="background-color: #f9ab00; color: white;">🔄 Reset Flag Import (Tutte)</button>
-      <p class="hint" style="margin-top: 4px;">↑ Prepara reimport completo (dopo aver eliminato righe)</p>
-    </div>
-
-    <div class="block">
-      <h5>Sistema</h5>
-      <button onclick="runServerFunction('<?!= App.ui.fn.runInitialSetup ?>')">⚙️ Esegui Setup Guidato</button>
-      <button onclick="openConfigDialog()" style="background-color: #1a73e8; color: white;">⚙️ Configurazione Sistema</button>
+      <h5>⚙️ Configurazione</h5>
+      <button onclick="runServerFunction('<?!= App.ui.fn.runInitialSetup ?>')">🚀 Setup Iniziale</button>
+      <button onclick="openConfigDialog()" style="background-color: #1a73e8; color: white;">⚙️ Impostazioni Sistema</button>
       <button onclick="openTriggerDashboard()" style="background-color: #34a853; color: white;">📊 Dashboard Trigger</button>
       <div class="row">
-        <button onclick="runServerFunction('<?!= App.ui.fn.runSheetCheckAndSetup ?>')">🔍 Verifica Fogli</button>
-        <button onclick="runServerFunction('<?!= App.ui.fn.runSanityCheck ?>')">⚠️ Controllo Integrità</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runCreateTrigger ?>')">🕐 Attiva Import</button>
+        <button onclick="runServerFunction('<?!= App.ui.fn.runDeleteTriggers ?>')">🛑 Disattiva Import</button>
       </div>
     </div>
 
@@ -148,14 +134,8 @@
 
       let progressInterval = null;
 
-      // --- CORREZIONE "google is not defined" ---
-      // Usiamo window.onload per assicurarci che l'API google.script.run sia
-      // caricata prima di essere chiamata da updateStaticStatus.
       window.onload = updateStaticStatus;
-      // --- FINE CORREZIONE ---
 
-
-      // Funzione updateStaticStatus in <script>
       function updateStaticStatus() {
         setStatus('busy', 'Verifica stato...');
         google.script.run
@@ -166,11 +146,9 @@
               return;
             }
 
-            // File (gestisce caso in cui totalFiles non sia numero)
             const totalFilesDisplay = (typeof status.totalFiles === 'number' && status.totalFiles > 0) ? status.totalFiles : '?';
             fileCounterEl.textContent = `${status.processedFiles} / ${totalFilesDisplay}`;
 
-            // Trigger (legge 'triggerEveryMinutes' da m97_status.gs)
             if (status.triggerActive) {
               const mins = status.triggerEveryMinutes || 15;
               triggerStatusEl.innerHTML = `<span class="status-dot dot-active"></span>Attivo (ogni ${mins} min)`;
@@ -178,7 +156,6 @@
               triggerStatusEl.innerHTML = `<span class="status-dot dot-inactive"></span>Non Attivo`;
             }
 
-            // Ultima esecuzione (se disponibile)
             if (status.lastRun && status.lastRun !== "Mai eseguito") {
               lastRunInfoEl.textContent = `(Ultima esecuzione: ${status.lastRun})`;
               lastRunRowEl.style.display = 'flex';
@@ -186,7 +163,6 @@
               lastRunRowEl.style.display = 'none';
             }
 
-            // Pulsante Continua
             if (status.needsContinue) {
               continueBtn.classList.add('highlight');
               setStatus('ok', 'Ripresa disponibile!');
@@ -203,7 +179,6 @@
           .getSystemStatus();
       }
 
-
       function setStatus(mode, text) {
         statusBar.className = 'status';
         if (mode) statusBar.classList.add(mode);
@@ -214,12 +189,11 @@
         document.querySelectorAll('button').forEach(b => b.disabled = disabled);
       }
 
-      // Polling avanzamento
       function updateProgress() {
         google.script.run
           .withSuccessHandler(status => {
             if (status && (status.total > 0 || status.message)) {
-              if (status.total > 0 && status.current !== undefined) { // Aggiunto check status.current
+              if (status.total > 0 && status.current !== undefined) {
                 progressContainer.style.display = 'block';
                 progressBar.value = status.current;
                 progressBar.max = status.total;
@@ -240,44 +214,39 @@
       function runServerFunction(fnName) {
         setDisabled(true);
         setStatus('busy', 'Avvio in corso...');
-        continueBtn.classList.remove('highlight'); // Rimuove highlight all'avvio
+        continueBtn.classList.remove('highlight');
 
-        // Pulisce la progress bar precedente
         progressContainer.style.display = 'none';
         progressBar.value = 0;
         progressBar.max = 100;
 
-        // Avvia il polling solo se non è già attivo
         if (progressInterval === null) {
           progressInterval = setInterval(updateProgress, 1500);
-          updateProgress(); // Chiamata immediata per feedback rapido
+          updateProgress();
         }
-
 
         google.script.run
           .withSuccessHandler(() => {
             clearInterval(progressInterval);
-            progressInterval = null; // Resetta l'ID dell'intervallo
+            progressInterval = null;
             progressContainer.style.display = 'none';
             setStatus('ok', 'Operazione completata');
             setDisabled(false);
-            setTimeout(() => updateStaticStatus(), 500); // Aggiorna stato statico dopo successo
+            setTimeout(() => updateStaticStatus(), 500);
           })
           .withFailureHandler(err => {
             clearInterval(progressInterval);
-            progressInterval = null; // Resetta l'ID dell'intervallo
+            progressInterval = null;
             progressContainer.style.display = 'none';
             console.error('Errore dall\'esecuzione server:', err);
             const msg = (err && err.message) ? err.message : 'Operazione fallita.';
-            // Mostra solo la prima riga dell'errore nella status bar
             setStatus('err', 'Errore: ' + msg.split('\n')[0]);
             setDisabled(false);
-            setTimeout(() => updateStaticStatus(), 500); // Aggiorna stato statico anche dopo errore
+            setTimeout(() => updateStaticStatus(), 500);
           })
-          [fnName](); // Esegue la funzione backend dinamicamente
+          [fnName]();
       }
 
-      // Funzioni per aprire dialogs e fogli
       function openConfigDialog() {
         setStatus('busy', 'Apertura configurazione...');
         google.script.run
@@ -293,7 +262,6 @@
 
       function openTriggerDashboard() {
         setStatus('busy', 'Apertura dashboard trigger...');
-        // Apri direttamente il foglio "Trigger Status"
         google.script.run
           .withSuccessHandler(() => {
             setStatus('ok', 'Dashboard aperta');
