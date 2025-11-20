@@ -19,9 +19,6 @@
 // - Letture ottimizzate e maggiore resilienza
 // =============================================================
 
-// Dependencies (legacy style - no ModuleRegistry)
-const ERROR_HANDLER = GG.get('ERROR_HANDLER');
-
 /**
  * Crea o aggiorna il foglio 'Conto Economico Riclassificato'
  */
@@ -162,7 +159,7 @@ function createPnlSheet() {
         return Math.max(max, 2 + mesiDellAnno.length); // Voce + Totale + Mesi
       }, 1);
       if (maxColsUsed > 1) {
-        ERROR_HANDLER.safely(
+        GG.get('ERROR_HANDLER').safely(
           () => sh.autoResizeColumns(1, Math.min(sh.getMaxColumns(), maxColsUsed)),
           { scope: 'PNL_RESIZE', message: 'Impossibile ridimensionare automaticamente le colonne.' }
         );
@@ -286,13 +283,13 @@ function _writePnlSection(sheet, currentRow, title, pnlData, famiglieOrdinate, m
   const firstDataRow = headerDataRow + 1; // Prima riga con dati (Fatturato)
   const lastFormatRow = rigaMOL; // Ultima riga con valori monetari
   if (firstDataRow <= lastFormatRow && numCols > 1) {
-    ERROR_HANDLER.safely(
+    GG.get('ERROR_HANDLER').safely(
       () => sheet.getRange(firstDataRow, 2, (lastFormatRow - firstDataRow + 1), numCols - 1).setNumberFormat(currencyFormat),
       { scope: 'PNL_FORMAT', message: `Errore formato valuta sezione ${title}` }
     );
   }
    if (numCols > 1) {
-      ERROR_HANDLER.safely(
+      GG.get('ERROR_HANDLER').safely(
         () => sheet.getRange(rigaMOLPerc, 2, 1, numCols - 1).setNumberFormat(percentFormat),
         { scope: 'PNL_FORMAT', message: `Errore formato percentuale sezione ${title}` }
       );
