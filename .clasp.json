@@ -28,6 +28,7 @@
     "090_dashboard.js",
     "100_reporting.js",
     "110_warehouse.js",
+    "115_magazzino_ingredienti.js",
     "120_pnl.js",
     "130_debug.js",
     "140_status.js",
