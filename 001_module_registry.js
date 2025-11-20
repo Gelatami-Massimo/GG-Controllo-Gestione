@@ -97,28 +97,3 @@ const ModuleRegistry = (() => {
     }
   };
 })();
-
-// =============================================================
-// Mappa di dipendenze per riferimento e validazione
-// AGGIORNARE se aggiungi/modifichi moduli!
-// =============================================================
-const MODULE_DEPENDENCIES = {
-  "App": [],
-  "main": ["App"],
-  "CONFIG": ["App"],
-  "SHEETS": ["App"],
-  "LOG": ["App"],
-  "UTIL": ["App"],
-  "XMLSAFE": ["LOG", "UTIL"],
-  "STATE": ["LOG"],
-  "PRODUCTS": ["SHEETS", "LOG", "UTIL"],
-  "FILTERS": ["SHEETS"],
-  "IMPORT_HEADERS": ["SHEETS", "LOG", "UTIL", "XMLSAFE", "STATE", "CONFIG"],
-  "IMPORT_ROWS": ["SHEETS", "LOG", "UTIL", "PRODUCTS", "STATE", "CONFIG"],
-  "PDF": ["SHEETS", "LOG", "UTIL", "STATE", "CONFIG"],
-  "DASHBOARD": ["SHEETS", "LOG", "UTIL"],
-  "REPORTING": ["SHEETS", "LOG", "UTIL", "STATE", "CONFIG"],
-  "WAREHOUSE": ["SHEETS", "LOG", "UTIL", "CONFIG"],
-  "DEBUG": ["SHEETS", "LOG", "UTIL", "STATE", "CONFIG"],
-  "SETUP": ["SHEETS", "UTIL", "CONFIG", "LOG", "DEBUG"]
-};
