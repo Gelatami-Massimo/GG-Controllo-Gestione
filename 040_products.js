@@ -1,8 +1,9 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 40_products.js
-// VERSIONE: 25.0 (Product Manager)
+// VERSIONE: 31.0 (Product Manager + Unit Cost Calculation)
 // DESCRIZIONE: Gestore del catalogo prodotti (cache, creazione univoca).
+//              Supporto conversioni UM e calcolo €/KG, €/PZ.
 // =============================================================
 
 const PRODUCTS = (() => {
@@ -97,7 +98,15 @@ const PRODUCTS = (() => {
       CreatoIl: now,
       UltimoAgg: now,
       Ingrediente: '',
-      NonInUso: true  // ✅ Nuovo prodotto parte bloccato (richiede attivazione manuale)
+      NonInUso: true,  // ✅ Nuovo prodotto parte bloccato (richiede attivazione manuale)
+      UMBase: '',      // ✅ KG o PZ - da configurare manualmente
+      PZxCT: '',       // ✅ Pezzi per cartone - da configurare se UM fattura è CT
+      KGxPZ: '',       // ✅ KG per pezzo - da configurare per conversioni
+      PZxFila: '',     // ✅ Logistica - opzionale
+      FilePerCT: '',   // ✅ Logistica - opzionale
+      RichiedeSetup: true,  // ✅ TRUE finché non sono configurati UMBase e conversioni
+      CostoUnitario: '',    // ✅ Calcolato in fase di import
+      UMCosto: ''           // ✅ KG o PZ - indica l'unità del CostoUnitario
     };
 
     // Allinea all'ordine colonne del foglio
@@ -257,8 +266,156 @@ const PRODUCTS = (() => {
            String(nonInUsoValue).toLowerCase() !== 'vero';
   }
 
+  /**
+   * Calcola il costo unitario di un prodotto in base alle conversioni UM.
+   * 
+   * REGOLE CONVERSIONE:
+   * 1. Fattura in KG + UMBase=KG → €/KG = PrezzoTotale / QuantitaKG
+   * 2. Fattura in PZ + UMBase=PZ → €/PZ = PrezzoTotale / QuantitaPZ
+   * 3. Fattura in CT:
+   *    a. PZ_TOT = QuantitaCT * PZxCT
+   *    b. Se UMBase=KG: KG_TOT = PZ_TOT * KGxPZ → €/KG = PrezzoTotale / KG_TOT
+   *    c. Se UMBase=PZ: €/PZ = PrezzoTotale / PZ_TOT
+   * 
+   * VINCOLI:
+   * - Nessuna conversione "indovinata"
+   * - Se mancano dati necessari → RichiedeSetup=TRUE, CostoUnitario non calcolato
+   * 
+   * @param {string} codiceInterno - Codice interno prodotto
+   * @param {number} quantitaFattura - Quantità dalla fattura
+   * @param {string} umFattura - UM dalla fattura (KG, PZ, CT, ecc.)
+   * @param {number} prezzoTotale - Prezzo totale della riga fattura
+   * @returns {{costoUnitario: number|null, umCosto: string|null, richiedeSetup: boolean}}
+   */
+  function calculateUnitCost(codiceInterno, quantitaFattura, umFattura, prezzoTotale) {
+    const result = {
+      costoUnitario: null,
+      umCosto: null,
+      richiedeSetup: false
+    };
+
+    // Validazione input base
+    if (!codiceInterno || !quantitaFattura || !umFattura || prezzoTotale === undefined || prezzoTotale === null) {
+      result.richiedeSetup = true;
+      return result;
+    }
+
+    const qta = Number(quantitaFattura);
+    const prezzo = Number(prezzoTotale);
+    
+    if (qta <= 0 || isNaN(qta) || isNaN(prezzo)) {
+      result.richiedeSetup = true;
+      return result;
+    }
+
+    // Legge dati prodotto
+    const productData = _getProductData(codiceInterno);
+    if (!productData) {
+      result.richiedeSetup = true;
+      return result;
+    }
+
+    const umBase = String(productData.UMBase || '').toUpperCase().trim();
+    const pzxct = Number(productData.PZxCT) || null;
+    const kgxpz = Number(productData.KGxPZ) || null;
+    const umFatturaUpper = umFattura.toUpperCase().trim();
+
+    // Caso 1: Fattura in KG, UMBase = KG
+    if (umFatturaUpper === 'KG' && umBase === 'KG') {
+      result.costoUnitario = prezzo / qta;
+      result.umCosto = 'KG';
+      result.richiedeSetup = false;
+      return result;
+    }
+
+    // Caso 2: Fattura in PZ, UMBase = PZ
+    if (umFatturaUpper === 'PZ' && umBase === 'PZ') {
+      result.costoUnitario = prezzo / qta;
+      result.umCosto = 'PZ';
+      result.richiedeSetup = false;
+      return result;
+    }
+
+    // Caso 3: Fattura in CT (cartoni)
+    if (umFatturaUpper === 'CT') {
+      // Serve PZxCT
+      if (!pzxct || pzxct <= 0) {
+        result.richiedeSetup = true;
+        return result;
+      }
+
+      const pzTot = qta * pzxct;
+
+      // Caso 3a: UMBase = KG → serve anche KGxPZ
+      if (umBase === 'KG') {
+        if (!kgxpz || kgxpz <= 0) {
+          result.richiedeSetup = true;
+          return result;
+        }
+        const kgTot = pzTot * kgxpz;
+        result.costoUnitario = prezzo / kgTot;
+        result.umCosto = 'KG';
+        result.richiedeSetup = false;
+        return result;
+      }
+
+      // Caso 3b: UMBase = PZ
+      if (umBase === 'PZ') {
+        result.costoUnitario = prezzo / pzTot;
+        result.umCosto = 'PZ';
+        result.richiedeSetup = false;
+        return result;
+      }
+
+      // UMBase non configurato o non riconosciuto
+      result.richiedeSetup = true;
+      return result;
+    }
+
+    // Caso default: configurazione incompleta o UM non gestita
+    result.richiedeSetup = true;
+    return result;
+  }
+
+  /**
+   * Legge i dati di un prodotto dal foglio Prodotti.
+   * @param {string} codiceInterno
+   * @returns {{UMBase: string, PZxCT: number, KGxPZ: number}|null}
+   * @private
+   */
+  function _getProductData(codiceInterno) {
+    const sh = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+    if (!sh) return null;
+
+    const headerRow = SHEETS._findHeaderRow(sh, SHEETS.SHEET_NAMES.Prodotti);
+    if (sh.getLastRow() <= headerRow) return null;
+
+    try {
+      const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+      if (idx.CodiceInterno === undefined) return null;
+
+      const lastRow = sh.getLastRow();
+      const lastCol = sh.getLastColumn();
+      const values = sh.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol).getValues();
+
+      for (const r of values) {
+        if (String(r[idx.CodiceInterno] || '').trim() === codiceInterno) {
+          return {
+            UMBase: r[idx.UMBase] || '',
+            PZxCT: r[idx.PZxCT] || '',
+            KGxPZ: r[idx.KGxPZ] || ''
+          };
+        }
+      }
+    } catch (e) {
+      LOG?.error('PRODUCTS_GET_DATA', 'Errore lettura dati prodotto.', { codiceInterno, error: e.message });
+    }
+
+    return null;
+  }
+
   // API pubblica
-  return { primeCache, ensureProduct, flushNewRows, isProductActive };
+  return { primeCache, ensureProduct, flushNewRows, isProductActive, calculateUnitCost };
 })();
 
 // Registra PRODUCTS nel ModuleRegistry

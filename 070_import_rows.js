@@ -1,11 +1,12 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 70_import_rows.js
-// VERSIONE: 30.0 (Row Import + TipoRiga Robust Classification)
+// VERSIONE: 31.0 (Row Import + TipoRiga + Unit Cost Calculation)
 // DESCRIZIONE: Importa le righe. Filtro righe "spazzatura" dinamico
 //              • Logica di skip corretta (non blocca import futuri)
 //              • RigheImportate = TRUE solo se le righe sono state scritte
 //              • TipoRiga robusto: ARTICOLO, SCONTO, OMAGGIO, TESTO
+//              • Calcolo costi unitari (€/KG, €/PZ) con conversioni UM
 //              REFACTORED: Manual loop replaced with SHEET_ITERATOR.forEachChunk()
 // =============================================================
 
@@ -139,6 +140,92 @@ const IMPORT_ROWS = (function () {
 
   // ============================================================
   // FINE HELPER TipoRiga
+  // ============================================================
+
+  /**
+   * Aggiorna il costo unitario di un prodotto nel foglio Prodotti.
+   * Utilizza PRODUCTS.calculateUnitCost() per calcolare €/KG o €/PZ.
+   * Aggiorna anche RichiedeSetup se la configurazione è incompleta.
+   * 
+   * @param {string} codiceInterno - Codice interno del prodotto
+   * @param {number} quantita - Quantità dalla fattura
+   * @param {string} um - UM dalla fattura
+   * @param {number} prezzoTotale - Prezzo totale riga fattura
+   * @private
+   */
+  function _updateProductUnitCost(codiceInterno, quantita, um, prezzoTotale) {
+    if (!codiceInterno || !quantita || !um || prezzoTotale === undefined) {
+      return;
+    }
+
+    try {
+      const costData = PRODUCTS.calculateUnitCost(codiceInterno, quantita, um, prezzoTotale);
+      if (!costData) return;
+
+      const sh = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+      if (!sh) return;
+
+      const headerRow = SHEETS._findHeaderRow(sh, SHEETS.SHEET_NAMES.Prodotti);
+      if (sh.getLastRow() <= headerRow) return;
+
+      const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+      if (idx.CodiceInterno === undefined) return;
+
+      const lastRow = sh.getLastRow();
+      const lastCol = sh.getLastColumn();
+      const values = sh.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol).getValues();
+
+      for (let i = 0; i < values.length; i++) {
+        const row = values[i];
+        if (String(row[idx.CodiceInterno] || '').trim() === codiceInterno) {
+          const targetRow = headerRow + 1 + i;
+          const updates = [];
+
+          // Aggiorna CostoUnitario
+          if (costData.costoUnitario !== null && idx.CostoUnitario !== undefined) {
+            updates.push({ col: idx.CostoUnitario + 1, value: costData.costoUnitario });
+          }
+
+          // Aggiorna UMCosto
+          if (costData.umCosto && idx.UMCosto !== undefined) {
+            updates.push({ col: idx.UMCosto + 1, value: costData.umCosto });
+          }
+
+          // Aggiorna RichiedeSetup
+          if (idx.RichiedeSetup !== undefined) {
+            updates.push({ col: idx.RichiedeSetup + 1, value: costData.richiedeSetup });
+          }
+
+          // Aggiorna UltimoAgg
+          if (idx.UltimoAgg !== undefined) {
+            updates.push({ col: idx.UltimoAgg + 1, value: new Date() });
+          }
+
+          // Scrivi tutti gli aggiornamenti
+          updates.forEach(update => {
+            sh.getRange(targetRow, update.col).setValue(update.value);
+          });
+
+          LOG?.debug('ROWS_UNIT_COST', `Aggiornato costo unitario per ${codiceInterno}`, {
+            costoUnitario: costData.costoUnitario,
+            umCosto: costData.umCosto,
+            richiedeSetup: costData.richiedeSetup
+          });
+
+          break;
+        }
+      }
+    } catch (e) {
+      LOG?.error('ROWS_UNIT_COST', 'Errore aggiornamento costo unitario.', {
+        codiceInterno,
+        error: e.message,
+        stack: e.stack
+      });
+    }
+  }
+
+  // ============================================================
+  // MAIN LOGIC
   // ============================================================
 
   function run(isSilent = false) {
@@ -517,11 +604,17 @@ const IMPORT_ROWS = (function () {
           const tipoRiga = _classifyRowType(qta, prezzoTotaleRiga, descrizione, codiceTipo);
 
           // ✅ Gestione Prodotti (SOLO per ARTICOLO/OMAGGIO e se non è spazzatura)
+          let codiceInterno = null;
           if (!isJunk && (tipoRiga === 'ARTICOLO' || tipoRiga === 'OMAGGIO')) {
-            PRODUCTS.ensureProduct(
+            codiceInterno = PRODUCTS.ensureProduct(
               invData[idxF.FornitoreID], invData[idxF.DenominazioneFornitore],
               codiceValoreRaw, descrizione, um, productCache, categoriaFornitore
             );
+          }
+
+          // ✅ CALCOLO COSTO UNITARIO (solo per ARTICOLO con prezzo positivo)
+          if (tipoRiga === 'ARTICOLO' && prezzoTotaleRiga > 0 && qta > 0 && codiceInterno) {
+            _updateProductUnitCost(codiceInterno, qta, um, prezzoTotaleRiga);
           }
 
           // Mappa i dati secondo lo schema

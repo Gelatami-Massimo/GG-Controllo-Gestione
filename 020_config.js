@@ -1,9 +1,10 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 020_config.js
-// VERSIONE: 25.3 (Configuration Manager + Universal Filters)
+// VERSIONE: 31.0 (Unit Cost Calculation + UM Conversions)
 // DESCRIZIONE: Gestore centrale schemi, indici e formati.
 //              Applicazione automatica filtri su tutti i fogli gestiti.
+//              Supporto calcolo €/KG e €/PZ con conversioni UM.
 // =============================================================
 
 const CONFIG = (function () {
@@ -152,7 +153,9 @@ const SHEETS = (function () {
     'Prodotti': [
       'CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM',
       'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto',
-      'Note', 'CreatoIl', 'UltimoAgg', 'Ingrediente', 'NonInUso'
+      'Note', 'CreatoIl', 'UltimoAgg', 'Ingrediente', 'NonInUso',
+      'UMBase', 'PZxCT', 'KGxPZ', 'PZxFila', 'FilePerCT', 'RichiedeSetup',
+      'CostoUnitario', 'UMCosto'
     ],
     'Log': ['Timestamp', 'Level', 'Scope', 'Message', 'Context'],
     'Regole_UM': ['CodiceInterno', 'Pezzi per Unità', 'Peso per Pezzo (KG)', 'UM Finale', 'Note'],
@@ -524,11 +527,13 @@ const SHEETS = (function () {
         {
           format: '@',
           cols: [
-            'CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM',
+            'CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM', 'UMBase', 'UMCosto',
             'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto', 'Note', 'Ingrediente'
           ]
         },
-        { format: 'dd/mm/yyyy hh:mm:ss', cols: ['CreatoIl', 'UltimoAgg'] }
+        { format: 'dd/mm/yyyy hh:mm:ss', cols: ['CreatoIl', 'UltimoAgg'] },
+        { format: '#,##0.####', cols: ['PZxCT', 'KGxPZ', 'PZxFila', 'FilePerCT'] },
+        { format: '€ #,##0.0000;[Red]-€ #,##0.0000;€ 0.0000', cols: ['CostoUnitario'] }
       ],
       [SHEET_NAMES.Fornitori]: [
         {
