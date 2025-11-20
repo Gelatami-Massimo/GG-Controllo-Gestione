@@ -118,10 +118,7 @@ const CONSTANTS = (function() {
      * Usare con DATE_UTILS.parseXmlDate(), etc.
      */
     DATE_PATTERNS: {
-      // Date ISO 8601: YYYY-MM-DD o YYYY-MM-DDTHH:MM:SS
       ISO_DATE: /^(\d{4})-(\d{2})-(\d{2})/,
-      
-      // Date italiane: DD/MM/YYYY
       ITALIAN_DATE: /^(\d{2})\/(\d{2})\/(\d{4})/,
       
       // Anno-Mese: YYYY-MM
@@ -136,29 +133,21 @@ const CONSTANTS = (function() {
      * Evita magic numbers come match[1], match[2]
      */
     DATE_REGEX_GROUPS: {
-      ISO: { 
-        YEAR: 1,    // Primo gruppo: anno
-        MONTH: 2,   // Secondo gruppo: mese
-        DAY: 3      // Terzo gruppo: giorno
-      },
-      ITALIAN: { 
-        DAY: 1,     // Primo gruppo: giorno
-        MONTH: 2,   // Secondo gruppo: mese
-        YEAR: 3     // Terzo gruppo: anno
-      }
+      ISO: { YEAR: 1, MONTH: 2, DAY: 3 },
+      ITALIAN: { DAY: 1, MONTH: 2, YEAR: 3 }
     },
 
     /**
      * Formati date per Utilities.formatDate()
      */
     DATE_FORMATS: {
-      ISO: 'yyyy-MM-dd',                    // 2025-11-19
-      ITALIAN: 'dd/MM/yyyy',                // 19/11/2025
-      LONG_ITALIAN: 'd MMMM yyyy',          // 19 novembre 2025
-      MONTH_NAME: 'MMMM',                   // novembre
-      SHORT_MONTH: 'MMM',                   // nov
-      YEAR_MONTH: 'yyyy-MM',                // 2025-11
-      TIMESTAMP: 'yyyy-MM-dd HH:mm:ss'      // 2025-11-19 15:30:45
+      ISO: 'yyyy-MM-dd',
+      ITALIAN: 'dd/MM/yyyy',
+      LONG_ITALIAN: 'd MMMM yyyy',
+      MONTH_NAME: 'MMMM',
+      SHORT_MONTH: 'MMM',
+      YEAR_MONTH: 'yyyy-MM',
+      TIMESTAMP: 'yyyy-MM-dd HH:mm:ss'
     },
 
     // ========================================================================

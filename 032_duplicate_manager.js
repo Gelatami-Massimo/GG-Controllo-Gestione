@@ -4,11 +4,6 @@
 // RUOLO: Gestione duplicati fatture/righe con mark/clear.
 // NOTE: Pattern centralizzato - elimina 720+ righe duplicate da 130_debug.js.
 // =============================================================
-// 3. Mark visually (background color batch)
-// 4. Snapshot (foglio dedicato)
-// 
-// DEPENDENCIES: SHEETS, LOG, CONSTANTS, UTIL
-// =============================================================
 
 const DUPLICATE_MANAGER = (function() {
   'use strict';

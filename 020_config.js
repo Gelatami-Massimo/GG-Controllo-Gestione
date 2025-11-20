@@ -308,7 +308,6 @@ const SHEETS = (function () {
     const lastRow = sh.getLastRow();
     const lastCol = sh.getLastColumn() || 1;
 
-    // Foglio nuovo
     if (lastRow < 1 && lastCol <= 1 && sh.getRange('A1').getValue() === '') {
       try {
         const headerRange = sh.getRange(1, 1, 1, schemaHeaders.length);
@@ -397,8 +396,7 @@ const SHEETS = (function () {
       }
     }
 
-    // ✅ Applica filtri sistematicamente a TUTTI i fogli (eccetto fogli di servizio)
-    const excludeFromFilters = ['Config', 'Log']; // Escludi fogli di configurazione/servizio
+    const excludeFromFilters = ['Config', 'Log'];
     
     if (!excludeFromFilters.includes(sheetName)) {
       try {

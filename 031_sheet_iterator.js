@@ -75,7 +75,6 @@ const SHEET_ITERATOR = (function() {
    * // => { processed: 850, skipped: 12, errors: 3 }
    */
   function forEach(sheetName, options = {}) {
-    // Validazione input
     _validateForEachOptions(sheetName, options);
 
     const {
@@ -88,7 +87,6 @@ const SHEET_ITERATOR = (function() {
       stopOnError = false
     } = options;
 
-    // Setup foglio e indici
     const context = _setupSheetContext(sheetName, columns);
     if (!context) {
       // Foglio vuoto o non trovato, già loggato
@@ -98,7 +96,6 @@ const SHEET_ITERATOR = (function() {
     const { sheet, headerRow, idx, lastRow, maxCol } = context;
     const result = { processed: 0, skipped: 0, errors: 0, errorDetails: [] };
 
-    // Itera in chunk per memoria efficiente
     let currentRow = headerRow + 1;
     const totalRows = lastRow - headerRow;
 
