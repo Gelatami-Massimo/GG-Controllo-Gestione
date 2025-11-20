@@ -152,7 +152,7 @@ const SHEETS = (function () {
     'Prodotti': [
       'CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM',
       'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto',
-      'Note', 'CreatoIl', 'UltimoAgg'
+      'Note', 'CreatoIl', 'UltimoAgg', 'Ingrediente', 'NonInUso'
     ],
     'Log': ['Timestamp', 'Level', 'Scope', 'Message', 'Context'],
     'Regole_UM': ['CodiceInterno', 'Pezzi per Unità', 'Peso per Pezzo (KG)', 'UM Finale', 'Note'],
@@ -514,7 +514,7 @@ const SHEETS = (function () {
         {
           format: '@',
           cols: [
-            'FileID', 'Sede', 'NumeroDoc', 'FornitoreID', 'DenominazioneFornitore',
+            'FileID', 'Sede', 'Anno', 'Mese', 'NumeroDoc', 'FornitoreID', 'DenominazioneFornitore',
             'Famiglia', 'Categoria', 'NumeroLinea', 'Codice Articolo Fornitore',
             'CodiceTipo', 'CodiceValore', 'Descrizione', 'Reparto'
           ]
@@ -525,7 +525,7 @@ const SHEETS = (function () {
           format: '@',
           cols: [
             'CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM',
-            'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto', 'Note'
+            'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto', 'Note', 'Ingrediente'
           ]
         },
         { format: 'dd/mm/yyyy hh:mm:ss', cols: ['CreatoIl', 'UltimoAgg'] }

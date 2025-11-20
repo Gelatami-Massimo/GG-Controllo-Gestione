@@ -66,9 +66,10 @@ const PRODUCTS = (() => {
    * @param {string} descrizione
    * @param {string} um
    * @param {{keyToData: Map, internalCodes: Set, newRows: any[]}} cache
+   * @param {string} categoriaFornitore - Categoria del fornitore da copiare in CategoriaProdotto
    * @returns {string} codice interno creato o esistente
    */
-  function ensureProduct(fornitoreId, fornitoreName, codiceFornRaw, descrizione, um, cache) {
+  function ensureProduct(fornitoreId, fornitoreName, codiceFornRaw, descrizione, um, cache, categoriaFornitore = '') {
     const key = _getProductKey(fornitoreId, codiceFornRaw, descrizione, um);
     const existingProduct = cache.keyToData.get(key);
 
@@ -91,10 +92,12 @@ const PRODUCTS = (() => {
       UM: um || '',
       FornitoreID: fornitoreId || '',
       DenominazioneFornitore: fornitoreName || '',
-      CategoriaProdotto: '',
+      CategoriaProdotto: categoriaFornitore || '',
       Note: '',
       CreatoIl: now,
-      UltimoAgg: now
+      UltimoAgg: now,
+      Ingrediente: '',
+      NonInUso: true  // ✅ Nuovo prodotto parte bloccato (richiede attivazione manuale)
     };
 
     // Allinea all'ordine colonne del foglio
@@ -217,8 +220,37 @@ const PRODUCTS = (() => {
     return code;
   }
 
+  /**
+   * Verifica se un prodotto è attivo.
+   * Un prodotto è considerato attivo se:
+   * - NonInUso === FALSE (esplicitamente attivo)
+   * - NonInUso === undefined/null/'' (compatibilità retroattiva con prodotti esistenti)
+   * @param {any} productRow - Riga prodotto (array o oggetto con indice NonInUso)
+   * @param {number} nonInUsoIndex - Indice della colonna NonInUso (se productRow è array)
+   * @returns {boolean} TRUE se il prodotto è attivo
+   */
+  function isProductActive(productRow, nonInUsoIndex) {
+    if (!productRow) return false;
+    
+    // Se productRow è un array (da getValues())
+    if (Array.isArray(productRow)) {
+      if (nonInUsoIndex === undefined) return true; // colonna non presente = attivo per compatibilità
+      const nonInUsoValue = productRow[nonInUsoIndex];
+      // Attivo se: FALSE, null, undefined, stringa vuota
+      return nonInUsoValue !== true && 
+             String(nonInUsoValue).toLowerCase() !== 'true' && 
+             String(nonInUsoValue).toLowerCase() !== 'vero';
+    }
+    
+    // Se productRow è un oggetto
+    const nonInUsoValue = productRow.NonInUso;
+    return nonInUsoValue !== true && 
+           String(nonInUsoValue).toLowerCase() !== 'true' && 
+           String(nonInUsoValue).toLowerCase() !== 'vero';
+  }
+
   // API pubblica
-  return { primeCache, ensureProduct, flushNewRows };
+  return { primeCache, ensureProduct, flushNewRows, isProductActive };
 })();
 
 // Registra PRODUCTS nel ModuleRegistry

@@ -140,7 +140,7 @@ const IMPORT_ROWS = (function () {
     // Validazione indici critici
     const requiredKeys = [
       'FileID', 'FornitoreID', 'RigheImportate', 'ImportaRigheSrc',
-      'TotImponibile', 'Famiglia', 'Categoria', 'Sede', 'Data',
+      'TotImponibile', 'Famiglia', 'Categoria', 'Reparto', 'Sede', 'Data',
       'Anno', 'Mese', 'NumeroDoc', 'DenominazioneFornitore', 'TipoDoc'
     ];
     const missing = requiredKeys.filter(k => idxF[k] === undefined);
@@ -389,7 +389,7 @@ const IMPORT_ROWS = (function () {
           if (!isJunk) {
             PRODUCTS.ensureProduct(
               invData[idxF.FornitoreID], invData[idxF.DenominazioneFornitore],
-              codiceValoreRaw, descrizione, um, productCache
+              codiceValoreRaw, descrizione, um, productCache, categoriaFornitore
             );
           }
 
@@ -405,6 +405,7 @@ const IMPORT_ROWS = (function () {
             'DenominazioneFornitore': invData[idxF.DenominazioneFornitore],
             'Famiglia': famigliaFornitore,
             'Categoria': categoriaFornitore,
+            'Reparto': invData[idxF.Reparto],
             'NumeroLinea': numeroLinea,  // ✅ Usa la variabile già dichiarata
             'Codice Articolo Fornitore': codiceValoreForzato,
             'CodiceTipo': codiceTipo,

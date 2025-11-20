@@ -208,18 +208,28 @@ const WAREHOUSE = (function () {
       return new Map();
     }
 
-    // --- 1) Mappa prodotti validi (non esclusi per categoria) ---
+    // --- 1) Mappa prodotti validi (non esclusi per categoria E attivi) ---
     const productKeyMap = new Map(); // K: fornID|codForn (o descr) -> info prodotto
     const idxProd = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
     const requiredProdCols = ['CodiceInterno', 'FornitoreID', 'CodiceFornitore', 'Descrizione', 'DenominazioneFornitore', 'UM', 'CategoriaProdotto'];
     for (const c of requiredProdCols) {
       if (idxProd[c] === undefined) throw new Error(`Colonna ${c} mancante in Prodotti, necessaria per Magazzino.`);
     }
-    const lastColProd = Math.max(...requiredProdCols.map(c => idxProd[c])) + 1;
+    // ✅ NonInUso è opzionale (compatibilità retroattiva)
+    const hasNonInUsoCol = idxProd.NonInUso !== undefined;
+    const lastColProd = hasNonInUsoCol 
+      ? Math.max(...requiredProdCols.map(c => idxProd[c]), idxProd.NonInUso) + 1
+      : Math.max(...requiredProdCols.map(c => idxProd[c])) + 1;
 
     try {
       const productData = shProd.getRange(headerProd + 1, 1, shProd.getLastRow() - headerProd, lastColProd).getValues();
       productData.forEach(r => {
+        // ✅ FILTRO 1: Escludi prodotti non attivi (NonInUso = TRUE)
+        if (hasNonInUsoCol && !PRODUCTS.isProductActive(r, idxProd.NonInUso)) {
+          return; // Salta prodotto disattivato
+        }
+        
+        // ✅ FILTRO 2: Escludi categorie specifiche
         const categoria = String(r[idxProd.CategoriaProdotto] ?? '').trim().toLowerCase();
         if (excludedCategories.has(categoria)) return;
 

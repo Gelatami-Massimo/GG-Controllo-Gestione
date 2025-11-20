@@ -2,8 +2,8 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: Sidebar.html
-// VERSIONE: 28.0 (UI Cleanup - Simplified Sidebar)
-// DESCRIZIONE: Sidebar pulita e riorganizzata.
+// VERSIONE: 25.1 (Fixed 'google is not defined' error)
+// DESCRIZIONE: Interfaccia utente (UI) per il Pannello di Controllo.
 // =============================================================
 -->
 <!DOCTYPE html>
@@ -20,12 +20,6 @@
       .block { margin-bottom: 10px; }
       .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
       .row button, .block button { width: 100%; }
-      button { background-color: #f8f9fa; color: #202124; border: 1px solid #dadce0; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-      button:hover { background-color: #e8eaed; }
-      button.btn-primary, button[style*="background-color: #1a73e8"] { background-color: #1a73e8 !important; color: white !important; border: none !important; }
-      button.btn-success, button[style*="background-color: #34a853"] { background-color: #34a853 !important; color: white !important; border: none !important; }
-      button:hover.btn-primary, button[style*="background-color: #1a73e8"]:hover { background-color: #185abc !important; }
-      button:hover.btn-success, button[style*="background-color: #34a853"]:hover { background-color: #2d8e47 !important; }
 
       .info-panel { background-color: var(--bg-light); border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; margin-bottom: 16px; font-size: 13px; }
       .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
@@ -140,8 +134,14 @@
 
       let progressInterval = null;
 
+      // --- CORREZIONE "google is not defined" ---
+      // Usiamo window.onload per assicurarci che l'API google.script.run sia
+      // caricata prima di essere chiamata da updateStaticStatus.
       window.onload = updateStaticStatus;
+      // --- FINE CORREZIONE ---
 
+
+      // Funzione updateStaticStatus in <script>
       function updateStaticStatus() {
         setStatus('busy', 'Verifica stato...');
         google.script.run
@@ -152,9 +152,11 @@
               return;
             }
 
+            // File (gestisce caso in cui totalFiles non sia numero)
             const totalFilesDisplay = (typeof status.totalFiles === 'number' && status.totalFiles > 0) ? status.totalFiles : '?';
             fileCounterEl.textContent = `${status.processedFiles} / ${totalFilesDisplay}`;
 
+            // Trigger (legge 'triggerEveryMinutes' da m97_status.gs)
             if (status.triggerActive) {
               const mins = status.triggerEveryMinutes || 15;
               triggerStatusEl.innerHTML = `<span class="status-dot dot-active"></span>Attivo (ogni ${mins} min)`;
@@ -162,6 +164,7 @@
               triggerStatusEl.innerHTML = `<span class="status-dot dot-inactive"></span>Non Attivo`;
             }
 
+            // Ultima esecuzione (se disponibile)
             if (status.lastRun && status.lastRun !== "Mai eseguito") {
               lastRunInfoEl.textContent = `(Ultima esecuzione: ${status.lastRun})`;
               lastRunRowEl.style.display = 'flex';
@@ -169,6 +172,7 @@
               lastRunRowEl.style.display = 'none';
             }
 
+            // Pulsante Continua
             if (status.needsContinue) {
               continueBtn.classList.add('highlight');
               setStatus('ok', 'Ripresa disponibile!');
@@ -185,6 +189,7 @@
           .getSystemStatus();
       }
 
+
       function setStatus(mode, text) {
         statusBar.className = 'status';
         if (mode) statusBar.classList.add(mode);
@@ -195,11 +200,12 @@
         document.querySelectorAll('button').forEach(b => b.disabled = disabled);
       }
 
+      // Polling avanzamento
       function updateProgress() {
         google.script.run
           .withSuccessHandler(status => {
             if (status && (status.total > 0 || status.message)) {
-              if (status.total > 0 && status.current !== undefined) {
+              if (status.total > 0 && status.current !== undefined) { // Aggiunto check status.current
                 progressContainer.style.display = 'block';
                 progressBar.value = status.current;
                 progressBar.max = status.total;
@@ -220,39 +226,44 @@
       function runServerFunction(fnName) {
         setDisabled(true);
         setStatus('busy', 'Avvio in corso...');
-        continueBtn.classList.remove('highlight');
+        continueBtn.classList.remove('highlight'); // Rimuove highlight all'avvio
 
+        // Pulisce la progress bar precedente
         progressContainer.style.display = 'none';
         progressBar.value = 0;
         progressBar.max = 100;
 
+        // Avvia il polling solo se non è già attivo
         if (progressInterval === null) {
           progressInterval = setInterval(updateProgress, 1500);
-          updateProgress();
+          updateProgress(); // Chiamata immediata per feedback rapido
         }
+
 
         google.script.run
           .withSuccessHandler(() => {
             clearInterval(progressInterval);
-            progressInterval = null;
+            progressInterval = null; // Resetta l'ID dell'intervallo
             progressContainer.style.display = 'none';
             setStatus('ok', 'Operazione completata');
             setDisabled(false);
-            setTimeout(() => updateStaticStatus(), 500);
+            setTimeout(() => updateStaticStatus(), 500); // Aggiorna stato statico dopo successo
           })
           .withFailureHandler(err => {
             clearInterval(progressInterval);
-            progressInterval = null;
+            progressInterval = null; // Resetta l'ID dell'intervallo
             progressContainer.style.display = 'none';
             console.error('Errore dall\'esecuzione server:', err);
             const msg = (err && err.message) ? err.message : 'Operazione fallita.';
+            // Mostra solo la prima riga dell'errore nella status bar
             setStatus('err', 'Errore: ' + msg.split('\n')[0]);
             setDisabled(false);
-            setTimeout(() => updateStaticStatus(), 500);
+            setTimeout(() => updateStaticStatus(), 500); // Aggiorna stato statico anche dopo errore
           })
-          [fnName]();
+          [fnName](); // Esegue la funzione backend dinamicamente
       }
 
+      // Funzioni per aprire dialogs e fogli
       function openConfigDialog() {
         setStatus('busy', 'Apertura configurazione...');
         google.script.run
@@ -268,6 +279,7 @@
 
       function openTriggerDashboard() {
         setStatus('busy', 'Apertura dashboard trigger...');
+        // Apri direttamente il foglio "Trigger Status"
         google.script.run
           .withSuccessHandler(() => {
             setStatus('ok', 'Dashboard aperta');
