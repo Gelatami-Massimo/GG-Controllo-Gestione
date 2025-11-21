@@ -140,13 +140,16 @@ const MAGAZZINO_CORE = (() => {
     // Verifica colonne necessarie
     const requiredCols = [
       'Anno', 'FornitoreID', 'DenominazioneFornitore', 'NumeroDoc',
-      'Codice Articolo Fornitore', 'Descrizione', 'UM',
+      'Codice Articolo Fornitore', 'Descrizione',
       'Quantita', 'PrezzoTotale', 'Reparto'
     ];
     const missingCols = requiredCols.filter(col => idx[col] === undefined);
     if (missingCols.length > 0) {
       throw new Error(`Colonne mancanti in Righe: ${missingCols.join(', ')}`);
     }
+
+    // Colonna UM è opzionale (potrebbe non esistere in Righe)
+    const hasUM = idx['UM'] !== undefined;
 
     const data = shRighe.getRange(2, 1, lastRow - 1, headers.length).getValues();
     const rowsBase = [];
@@ -160,7 +163,7 @@ const MAGAZZINO_CORE = (() => {
       const fornitoreID = String(row[idx.FornitoreID] || '').trim();
       const codiceArticolo = String(row[idx['Codice Articolo Fornitore']] || '').trim();
       const descrizione = String(row[idx.Descrizione] || '').trim();
-      const um = String(row[idx.UM] || '').trim();
+      const um = hasUM ? String(row[idx.UM] || '').trim() : '';
       const quantita = Number(row[idx.Quantita]) || 0;
       const prezzoTotale = Number(row[idx.PrezzoTotale]) || 0;
       const reparto = String(row[idx.Reparto] || '').trim();
