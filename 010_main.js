@@ -41,6 +41,7 @@ function onOpen() {
     .addItem('Righe', App.ui.fn.runImportRows)
     .addSeparator()
     .addItem('PDF', App.ui.fn.runCreatePdfs)
+    .addItem('Riprendi PDF', 'runResumePdfs')
   );
 
   // --- Report e Analisi ---
@@ -190,6 +191,9 @@ function runImportRows() { _runSafely(() => IMPORT_ROWS.run(), 'Import', 'Avvio 
 
 /** Genera i PDF delle fatture mancanti. @returns {void} */
 function runCreatePdfs() { _runSafely(() => PDF.run(), 'PDF', 'Creazione PDF in corso...', 'Creazione PDF completata.'); }
+
+/** Riprende creazione PDF solo per fatture TODO/SKIPPED. @returns {void} */
+function runResumePdfs() { _runSafely(() => PDF.runPdfOnly(), 'PDF', 'Ripresa creazione PDF...', 'PDF ripresi completati.'); }
 
 /** Genera il report di audit e riconciliazione. @returns {void} */
 function runReconciliationReport() { _runSafely(() => REPORTING.run(), 'Reporting', 'Generazione Report di Audit...', 'Report generato.'); }

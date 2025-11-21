@@ -13,27 +13,32 @@ const PDF = (function () {
    * Genera file PDF da file XML fatture e salva in cartella output.
    * 
    * Workflow:
-   * 1. Legge foglio Fatture, filtra righe con LinkPDF vuoto
-   * 2. Per ogni fattura:
+   * 1. Verifica PDF_ENABLED: se FALSE, salta creazione e imposta StatoPDF=SKIPPED
+   * 2. Legge foglio Fatture, filtra righe con Link PDF vuoto o StatoPDF=TODO/SKIPPED
+   * 3. Per ogni fattura:
    *    a. Verifica se PDF già esistente in cartella output (nome match)
-   *    b. Se esistente: aggiorna LinkPDF con URL esistente
+   *    b. Se esistente: aggiorna LinkPDF con URL esistente, StatoPDF=DONE
    *    c. Se non esistente:
    *       - Genera PDF da XML con HtmlService (template PdfTemplate.html)
    *       - Naming: "DenominazioneFornitore - NumeroDoc.pdf" (sanificato)
    *       - Salva in CARTELLA_OUTPUT_ID configurata
-   *       - Aggiorna LinkPDF con URL nuovo file
-   * 3. Scrittura batch: flush aggiornamenti ogni PDF_FLUSH_EVERY righe
-   * 4. Colonna opzionale PDFStato: SUCCESS/ERROR per tracciamento
-   * 5. Gestione timeout: salva stato, riprendibile
+   *       - Aggiorna LinkPDF con URL nuovo file, StatoPDF=DONE
+   * 4. Scrittura batch: flush aggiornamenti ogni PDF_FLUSH_EVERY righe
+   * 5. Gestione errori:
+   *    - Quota giornaliera raggiunta: disabilita PDF_ENABLED, imposta StatoPDF=ERROR
+   *    - Altri errori: imposta StatoPDF=ERROR, continua
+   * 6. Gestione timeout: salva stato, riprendibile
    * 
    * @param {boolean} [isSilent=false] - Se true, disabilita aggiornamenti UI progress
+   * @param {boolean} [forceProcessAll=false] - Se true, processa tutte le fatture (ignora PDF_ENABLED)
    * @returns {void}
    * @throws {Error} Se CARTELLA_OUTPUT_ID non configurata o inaccessibile
    * 
    * @example
-   * PDF.run();
+   * PDF.run(); // Rispetta PDF_ENABLED
+   * PDF.run(false, true); // Forza creazione PDF (ignora PDF_ENABLED)
    */
-  function run(isSilent = false) {
+  function run(isSilent = false, forceProcessAll = false) {
     const outputFolderId = CONFIG.get('CARTELLA_OUTPUT_ID');
     if (!outputFolderId) {
       LOG?.error('PDF_RUN', 'CARTELLA_OUTPUT_ID non definita.');
@@ -48,15 +53,51 @@ const PDF = (function () {
       throw new Error(`Impossibile accedere alla CARTELLA_OUTPUT_ID.`);
     }
 
-    _mainLoop(outputFolder, isSilent);
+    _mainLoop(outputFolder, isSilent, forceProcessAll);
+  }
+
+  /**
+   * Processa solo fatture con StatoPDF=TODO o SKIPPED.
+   * Utile per riprendere creazione PDF dopo disabilitazione temporanea.
+   * 
+   * @param {boolean} [isSilent=false] - Se true, disabilita aggiornamenti UI progress
+   * @returns {void}
+   * 
+   * @example
+   * PDF.runPdfOnly(); // Processa solo TODO/SKIPPED
+   */
+  function runPdfOnly(isSilent = false) {
+    const outputFolderId = CONFIG.get('CARTELLA_OUTPUT_ID');
+    if (!outputFolderId) {
+      LOG?.error('PDF_RUN_ONLY', 'CARTELLA_OUTPUT_ID non definita.');
+      throw new Error("CARTELLA_OUTPUT_ID non definita in 'Config'.");
+    }
+
+    let outputFolder;
+    try {
+      outputFolder = DriveApp.getFolderById(outputFolderId);
+    } catch (e) {
+      LOG?.error('PDF_RUN_ONLY', `Impossibile accedere alla cartella di output: ${outputFolderId}`, { error: e.message });
+      throw new Error(`Impossibile accedere alla CARTELLA_OUTPUT_ID.`);
+    }
+
+    _mainLoopPdfOnly(outputFolder, isSilent);
   }
 
   /**
    * Ciclo principale (resumibile e chunked).
    */
-  function _mainLoop(outputFolder, isSilent) {
+  function _mainLoop(outputFolder, isSilent, forceProcessAll = false) {
     const startTime = new Date();
     const maxSec = Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) || 240;
+
+    // Check PDF_ENABLED
+    const pdfEnabled = CONFIG.get('PDF_ENABLED', true);
+    if (!pdfEnabled && !forceProcessAll) {
+      LOG?.info('PDF', 'PDF_ENABLED=FALSE. Impostazione StatoPDF=SKIPPED per fatture senza PDF.');
+      _markAllAsSkipped(isSilent);
+      return;
+    }
 
     const sh = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
     if (!sh) {
@@ -70,18 +111,25 @@ const PDF = (function () {
       return;
     }
 
-    // ---- Indici necessari (minimi): FileID, FileName, LinkPDF, DenominazioneFornitore, NumeroDoc
+    // ---- Indici necessari (minimi): FileID, FileName, LinkPDF, StatoPDF, DenominazioneFornitore, NumeroDoc
     const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
     const requiredKeys = ['FileID', 'FileName', 'LinkPDF', 'DenominazioneFornitore', 'NumeroDoc'];
     const missing = requiredKeys.filter(k => idx[k] === undefined);
     if (missing.length > 0) {
       throw new Error("Colonne mancanti nel foglio Fatture: " + missing.join(', '));
     }
-    // Opzionale: colonna PDFStato per tracciare successo/errore
+    // Opzionale: colonna PDFStato per tracciare successo/errore (legacy)
     const hasPDFStato = idx.PDFStato !== undefined;
+    // Nuova colonna obbligatoria: StatoPDF
+    const hasStatoPDF = idx.StatoPDF !== undefined;
+    if (!hasStatoPDF) {
+      LOG?.warn('PDF', 'Colonna StatoPDF non trovata. Funzionalità limitata.');
+    }
+    
     // Lettura ottimizzata: solo fino all'ultima colonna richiesta
     const colsToCheck = [idx.FileID, idx.FileName, idx.LinkPDF, idx.DenominazioneFornitore, idx.NumeroDoc];
     if (hasPDFStato) colsToCheck.push(idx.PDFStato);
+    if (hasStatoPDF) colsToCheck.push(idx.StatoPDF);
     const maxColNeeded = Math.max(...colsToCheck) + 1;
 
     // Stato ripresa
@@ -143,22 +191,27 @@ const PDF = (function () {
         const fileId = rowData[idx.FileID];
         const fileName = rowData[idx.FileName];
         const existingPdfLink = rowData[idx.LinkPDF];
+        const currentStatoPDF = hasStatoPDF ? String(rowData[idx.StatoPDF] || '').trim().toUpperCase() : '';
         const denominazioneFornitore = String(rowData[idx.DenominazioneFornitore] || '').trim();
         const numeroDoc = String(rowData[idx.NumeroDoc] || '').trim();
 
-        // Skip se mancano dati essenziali o link già presente (già risolto)
-        if (!fileId || !fileName || existingPdfLink) continue;
+        // Skip se mancano dati essenziali o PDF già completato
+        if (!fileId || !fileName) continue;
+        if (existingPdfLink && currentStatoPDF === 'DONE') continue; // Già fatto
         if (!denominazioneFornitore || !numeroDoc) {
           LOG?.warn('PDF', `Saltata fattura riga ${rowNum}: manca DenominazioneFornitore o NumeroDoc`);
+          if (hasStatoPDF) _addUpdate(linkUpdates, rowNum, idx.StatoPDF, 'ERROR');
+          pendingUpdates++;
           continue;
         }
 
         const pdfName = _toPdfName(denominazioneFornitore, numeroDoc);
 
-        // Se PDF già in cartella: aggiorna LinkPDF con URL noto dall’indice
+        // Se PDF già in cartella: aggiorna LinkPDF con URL noto dall'indice
         const knownUrl = existingPdfs.get(pdfName);
         if (knownUrl) {
           _addUpdate(linkUpdates, rowNum, idx.LinkPDF, knownUrl);
+          if (hasStatoPDF) _addUpdate(linkUpdates, rowNum, idx.StatoPDF, 'DONE');
           pendingUpdates++;
           // flush parziale
           if (pendingUpdates >= FLUSH_UPDATES_EVERY) {
@@ -193,6 +246,7 @@ const PDF = (function () {
           existingPdfs.set(pdfName, pdfUrl);
           _addUpdate(linkUpdates, rowNum, idx.LinkPDF, pdfUrl);
           if (hasPDFStato) _addUpdate(linkUpdates, rowNum, idx.PDFStato, 'OK');
+          if (hasStatoPDF) _addUpdate(linkUpdates, rowNum, idx.StatoPDF, 'DONE');
           pendingUpdates++;
           createdCount++;
           LOG?.info('PDF', `PDF creato: "${pdfName}" (riga ${rowNum})`);
@@ -209,6 +263,12 @@ const PDF = (function () {
               errorMsg.includes('quota') || 
               errorMsg.includes('conversion')) {
             
+            // Imposta StatoPDF=ERROR per questa fattura
+            if (hasStatoPDF) _addUpdate(linkUpdates, rowNum, idx.StatoPDF, 'ERROR');
+            if (hasPDFStato) _addUpdate(linkUpdates, rowNum, idx.PDFStato, 'QUOTA_EXCEEDED');
+            _addUpdate(linkUpdates, rowNum, idx.LinkPDF, '⚠️ QUOTA PDF ESAURITA');
+            pendingUpdates++;
+            
             // Flush aggiornamenti prima di uscire
             if (pendingUpdates > 0) {
               UTIL.updateSheetInPlace(sh, linkUpdates, headerRow);
@@ -218,18 +278,26 @@ const PDF = (function () {
             // Salva stato per ripresa futura
             STATE.setJSON(CURSOR_KEY, { nextRow: rowNum });
             
+            // ✅ DISABILITA PDF_ENABLED AUTOMATICAMENTE
+            try {
+              CONFIG.set('PDF_ENABLED', false);
+              LOG?.warn('PDF_QUOTA_EXCEEDED', `⚠️ PDF_ENABLED disabilitato automaticamente dopo quota esaurita.`);
+            } catch (configError) {
+              LOG?.error('PDF_CONFIG_UPDATE', 'Impossibile disabilitare PDF_ENABLED', { error: configError.message });
+            }
+            
             LOG?.warn('PDF_QUOTA_EXCEEDED', `⚠️ QUOTA GIORNALIERA RAGGIUNTA. Stop esecuzione alla riga ${rowNum}. Creati finora: ${createdCount} PDF.`);
             
             if (!isSilent) {
               UTIL.showToast(
-                '⚠️ Quota giornaliera PDF raggiunta. Riprova domani o contatta l\'amministratore.', 
+                '⚠️ Quota giornaliera PDF raggiunta. PDF_ENABLED disabilitato. Riprova domani o usa "Riprendi PDF".', 
                 'Quota Esaurita', 
                 15
               );
               STATE.setJSON(App.config.keys.progress, {
                 current: rowNum, 
                 total: lastRow, 
-                message: 'Quota PDF esaurita. Processo sospeso.'
+                message: 'Quota PDF esaurita. PDF_ENABLED disabilitato.'
               });
             }
             
@@ -243,6 +311,7 @@ const PDF = (function () {
           });
           _addUpdate(linkUpdates, rowNum, idx.LinkPDF, 'ERRORE CREAZIONE PDF');
           if (hasPDFStato) _addUpdate(linkUpdates, rowNum, idx.PDFStato, 'ERRORE');
+          if (hasStatoPDF) _addUpdate(linkUpdates, rowNum, idx.StatoPDF, 'ERROR');
           pendingUpdates++;
         }
       }
@@ -436,7 +505,96 @@ const PDF = (function () {
     return num.toFixed(digits);
   }
 
-  return { run };
+  /**
+   * Marca tutte le fatture senza PDF come SKIPPED quando PDF_ENABLED=FALSE
+   * @private
+   */
+  function _markAllAsSkipped(isSilent) {
+    const sh = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+    if (!sh) return;
+
+    const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
+    if (!idx.StatoPDF || !idx.LinkPDF) return;
+
+    const headerRow = SHEETS._findHeaderRow(sh, SHEETS.SHEET_NAMES.Fatture);
+    const lastRow = sh.getLastRow();
+    if (lastRow <= headerRow) return;
+
+    const data = sh.getRange(headerRow + 1, 1, lastRow - headerRow, Math.max(...Object.values(idx)) + 1).getValues();
+    const updates = {};
+    let skippedCount = 0;
+
+    data.forEach((row, i) => {
+      const rowNum = headerRow + 1 + i;
+      const linkPDF = row[idx.LinkPDF];
+      const statoPDF = String(row[idx.StatoPDF] || '').trim().toUpperCase();
+
+      // Solo fatture senza PDF che non sono già SKIPPED o DONE
+      if (!linkPDF && statoPDF !== 'SKIPPED' && statoPDF !== 'DONE') {
+        _addUpdate(updates, rowNum, idx.StatoPDF, 'SKIPPED');
+        skippedCount++;
+      }
+    });
+
+    if (skippedCount > 0) {
+      UTIL.updateSheetInPlace(sh, updates, headerRow);
+      LOG?.info('PDF_SKIP', `Marcate ${skippedCount} fatture come SKIPPED (PDF_ENABLED=FALSE).`);
+      if (!isSilent) {
+        UTIL.showToast(`PDF disabilitato: ${skippedCount} fatture marcate SKIPPED.`, 'PDF Disabilitato', 5);
+      }
+    }
+  }
+
+  /**
+   * Ciclo principale solo per fatture con StatoPDF=TODO o SKIPPED
+   * @private
+   */
+  function _mainLoopPdfOnly(outputFolder, isSilent) {
+    const sh = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+    if (!sh) {
+      LOG?.warn('PDF_ONLY', "Foglio 'Fatture' non trovato.");
+      return;
+    }
+
+    const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
+    if (!idx.StatoPDF) {
+      LOG?.error('PDF_ONLY', 'Colonna StatoPDF non trovata. Impossibile procedere.');
+      if (!isSilent) UTIL.showToast('Colonna StatoPDF mancante.', 'Errore', 5);
+      return;
+    }
+
+    const headerRow = SHEETS._findHeaderRow(sh, SHEETS.SHEET_NAMES.Fatture);
+    const lastRow = sh.getLastRow();
+    if (lastRow <= headerRow) {
+      LOG?.info('PDF_ONLY', 'Nessuna fattura da processare.');
+      return;
+    }
+
+    const data = sh.getRange(headerRow + 1, 1, lastRow - headerRow, Math.max(...Object.values(idx)) + 1).getValues();
+    
+    // Filtra solo TODO e SKIPPED
+    const rowsTodo = [];
+    data.forEach((row, i) => {
+      const statoPDF = String(row[idx.StatoPDF] || '').trim().toUpperCase();
+      if (statoPDF === 'TODO' || statoPDF === 'SKIPPED') {
+        rowsTodo.push(headerRow + 1 + i);
+      }
+    });
+
+    if (rowsTodo.length === 0) {
+      LOG?.info('PDF_ONLY', 'Nessuna fattura TODO o SKIPPED da processare.');
+      if (!isSilent) UTIL.showToast('Nessun PDF da riprendere.', 'Info', 3);
+      return;
+    }
+
+    LOG?.info('PDF_ONLY', `Ripresa creazione PDF: ${rowsTodo.length} fatture TODO/SKIPPED.`);
+    if (!isSilent) UTIL.showToast(`Ripresa ${rowsTodo.length} PDF...`, 'Avvio', 5);
+
+    // Forza processamento di tutte queste fatture
+    _mainLoop(outputFolder, isSilent, true);
+  }
+
+  return { run, runPdfOnly };
 })();
 
 // Registra PDF nel ModuleRegistry

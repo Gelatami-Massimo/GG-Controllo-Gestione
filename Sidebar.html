@@ -229,8 +229,9 @@
         <button onclick="runServerFunction('<?!= App.ui.fn.runImportHeaders ?>')" title="Importa intestazioni fatture">Intestazioni</button>
         <button onclick="runServerFunction('<?!= App.ui.fn.runImportRows ?>')" title="Importa righe prodotti">Righe</button>
       </div>
-      <div class="gg-buttons-grid full">
+      <div class="gg-buttons-grid">
         <button onclick="runServerFunction('<?!= App.ui.fn.runCreatePdfs ?>')" title="Genera PDF mancanti">📄 PDF</button>
+        <button onclick="runServerFunction('runResumePdfs')" title="Riprendi solo PDF TODO/SKIPPED">🔄 Riprendi PDF</button>
       </div>
     </section>
 

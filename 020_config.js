@@ -148,7 +148,7 @@ const SHEETS = (function () {
 
     // NB: Reparto subito dopo Categoria, Destinazione dopo Reparto, Data resta tra RegimeFiscale e Anno
     'Fatture': [
-      'FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF', 'PDFStato',
+      'FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF', 'PDFStato', 'StatoPDF',
       'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
       'Reparto', 'Destinazione',
       'RegimeFiscale', 'Data', 'Anno', 'Mese', 'NumeroDoc', 'TipoDoc',
@@ -548,7 +548,7 @@ const SHEETS = (function () {
         {
           format: '@',
           cols: [
-            'FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF', 'PDFStato',
+            'FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF', 'PDFStato', 'StatoPDF',
             'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
             'Reparto',
             'RegimeFiscale', 'Anno', 'Mese', 'NumeroDoc', 'TipoDoc',

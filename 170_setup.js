@@ -161,6 +161,7 @@ const SETUP = (function () {
       ['MODALITA_DEBUG', false, 'Abilita log dettagliati? (true/false)'],
       ['ROWS_CHUNK_SIZE', 100, 'Numero fatture da leggere in blocco (Import Righe).'],
       ['ROWS_FLUSH_EVERY', 2000, 'Ogni quante righe salvare sul foglio (Import Righe).'],
+      ['PDF_ENABLED', true, 'Abilita creazione PDF durante import automatico? (true/false)'],
       ['PDF_CHUNK_SIZE', 80, 'Numero fatture da leggere in blocco (Crea PDF).'],
       ['PDF_FLUSH_EVERY', 200, 'Ogni quanti link PDF aggiornare sul foglio (Crea PDF).'],
       ['ROWS_TOLLERANZA_EURO', 1.00, 'Tolleranza (in €) per mismatch Totale Fattura vs Somma Righe (Import Righe).'],
