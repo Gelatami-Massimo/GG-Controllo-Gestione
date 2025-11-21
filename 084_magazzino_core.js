@@ -228,22 +228,6 @@ const MAGAZZINO_CORE = (() => {
   }
 
   /**
-   * Converte indice di colonna (0-based) in lettera (A, B, C, ..., Z, AA, AB, ...)
-   * @private
-   * @param {number} colIndex - Indice colonna 0-based
-   * @returns {string} Lettera di colonna (A, B, C, ...)
-   */
-  function _columnToLetter(colIndex) {
-    let temp = colIndex;
-    let letter = '';
-    while (temp >= 0) {
-      letter = String.fromCharCode((temp % 26) + 65) + letter;
-      temp = Math.floor(temp / 26) - 1;
-    }
-    return letter;
-  }
-
-  /**
    * Verifica che una colonna esista nell'header, altrimenti la crea
    * @private
    * @param {GoogleAppsScript.Spreadsheet.Sheet} sh - Foglio
@@ -275,7 +259,7 @@ const MAGAZZINO_CORE = (() => {
   }
 
   /**
-   * Imposta ARRAYFORMULA per calcolare prezzi medi su tutto il foglio
+   * Calcola e imposta i prezzi medi direttamente come valori
    * @private
    * @param {GoogleAppsScript.Spreadsheet.Sheet} sh - Foglio magazzino
    * @param {Array} headers - Array degli header corrente
@@ -289,36 +273,50 @@ const MAGAZZINO_CORE = (() => {
       const idxEuroKg = _ensureColumn(sh, headers, '€/KG medio');
       const idxEuroPz = _ensureColumn(sh, headers, '€/PZ medio');
 
-      // Converti indici in lettere colonna
-      const colKgTot = _columnToLetter(idxKgTot);
-      const colPzTot = _columnToLetter(idxPzTot);
-      const colTotEuro = _columnToLetter(idxTotEuro);
-
       const lastRow = sh.getLastRow();
       if (lastRow <= 1) {
-        LOG?.info('MAG_CORE', `Foglio ${sh.getName()} vuoto, skip formule prezzi medi.`);
+        LOG?.info('MAG_CORE', `Foglio ${sh.getName()} vuoto, skip prezzi medi.`);
         return;
       }
 
-      // Pulisci colonne prima di inserire formule
-      sh.getRange(2, idxEuroKg + 1, lastRow - 1, 1).clearContent();
-      sh.getRange(2, idxEuroPz + 1, lastRow - 1, 1).clearContent();
+      // Leggi dati esistenti
+      const numDataRows = lastRow - 1;
+      const dataRange = sh.getRange(2, 1, numDataRows, headers.length);
+      const data = dataRange.getValues();
 
-      // Formula per €/KG medio (dalla riga 2 fino alla fine dei dati)
-      const formulaEuroKg = `=ARRAYFORMULA(SE(LEN(${colKgTot}2:${colKgTot})=0;"";SE.ERRORE(${colTotEuro}2:${colTotEuro}/${colKgTot}2:${colKgTot};"")))`;
-      
-      // Formula per €/PZ medio (dalla riga 2 fino alla fine dei dati)
-      const formulaEuroPz = `=ARRAYFORMULA(SE(LEN(${colPzTot}2:${colPzTot})=0;"";SE.ERRORE(${colTotEuro}2:${colTotEuro}/${colPzTot}2:${colPzTot};"")))`;
+      // Calcola prezzi medi
+      const valuesEuroKg = [];
+      const valuesEuroPz = [];
 
-      // Inserisci ARRAYFORMULA nella riga 2 (prima riga dati)
-      sh.getRange(2, idxEuroKg + 1).setFormula(formulaEuroKg);
-      sh.getRange(2, idxEuroPz + 1).setFormula(formulaEuroPz);
+      data.forEach(row => {
+        const kgTot = Number(row[idxKgTot]) || 0;
+        const pzTot = Number(row[idxPzTot]) || 0;
+        const totEuro = Number(row[idxTotEuro]) || 0;
+
+        // €/KG medio
+        if (kgTot > 0) {
+          valuesEuroKg.push([totEuro / kgTot]);
+        } else {
+          valuesEuroKg.push(['']);
+        }
+
+        // €/PZ medio
+        if (pzTot > 0) {
+          valuesEuroPz.push([totEuro / pzTot]);
+        } else {
+          valuesEuroPz.push(['']);
+        }
+      });
+
+      // Scrivi valori calcolati
+      sh.getRange(2, idxEuroKg + 1, numDataRows, 1).setValues(valuesEuroKg);
+      sh.getRange(2, idxEuroPz + 1, numDataRows, 1).setValues(valuesEuroPz);
 
       // Imposta formattazione numerica per le colonne dei prezzi medi
-      sh.getRange(2, idxEuroKg + 1, lastRow - 1, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
-      sh.getRange(2, idxEuroPz + 1, lastRow - 1, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
+      sh.getRange(2, idxEuroKg + 1, numDataRows, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
+      sh.getRange(2, idxEuroPz + 1, numDataRows, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
 
-      LOG?.info('MAG_CORE', `ARRAYFORMULA prezzi medi impostate nel foglio ${sh.getName()}`);
+      LOG?.info('MAG_CORE', `Prezzi medi calcolati nel foglio ${sh.getName()}: ${numDataRows} righe.`);
 
     } catch (e) {
       LOG?.error('MAG_CORE', `Errore in _setupPrezziMediFormulas per foglio ${sh.getName()}`, {
