@@ -293,31 +293,30 @@ const MAGAZZINO_CORE = (() => {
       const colKgTot = _columnToLetter(idxKgTot);
       const colPzTot = _columnToLetter(idxPzTot);
       const colTotEuro = _columnToLetter(idxTotEuro);
-      const colEuroKg = _columnToLetter(idxEuroKg);
-      const colEuroPz = _columnToLetter(idxEuroPz);
 
-      // Formula per €/KG medio
-      const formulaEuroKg = `=ARRAYFORMULA(SE(RIGA(A:A)=1;"€/KG medio";SE(LEN(${colKgTot}:${colKgTot})=0;"";SE.ERRORE(${colTotEuro}:${colTotEuro}/${colKgTot}:${colKgTot};""))))`;
-      
-      // Formula per €/PZ medio
-      const formulaEuroPz = `=ARRAYFORMULA(SE(RIGA(A:A)=1;"€/PZ medio";SE(LEN(${colPzTot}:${colPzTot})=0;"";SE.ERRORE(${colTotEuro}:${colTotEuro}/${colPzTot}:${colPzTot};""))))`;
+      const lastRow = sh.getLastRow();
+      if (lastRow <= 1) {
+        LOG?.info('MAG_CORE', `Foglio ${sh.getName()} vuoto, skip formule prezzi medi.`);
+        return;
+      }
 
       // Pulisci colonne prima di inserire formule
-      const lastRow = sh.getLastRow();
-      if (lastRow > 1) {
-        sh.getRange(2, idxEuroKg + 1, lastRow - 1, 1).clearContent();
-        sh.getRange(2, idxEuroPz + 1, lastRow - 1, 1).clearContent();
-      }
+      sh.getRange(2, idxEuroKg + 1, lastRow - 1, 1).clearContent();
+      sh.getRange(2, idxEuroPz + 1, lastRow - 1, 1).clearContent();
 
-      // Inserisci ARRAYFORMULA nella cella della colonna (riga 1)
-      sh.getRange(1, idxEuroKg + 1).setFormula(formulaEuroKg);
-      sh.getRange(1, idxEuroPz + 1).setFormula(formulaEuroPz);
+      // Formula per €/KG medio (dalla riga 2 fino alla fine dei dati)
+      const formulaEuroKg = `=ARRAYFORMULA(SE(LEN(${colKgTot}2:${colKgTot})=0;"";SE.ERRORE(${colTotEuro}2:${colTotEuro}/${colKgTot}2:${colKgTot};"")))`;
+      
+      // Formula per €/PZ medio (dalla riga 2 fino alla fine dei dati)
+      const formulaEuroPz = `=ARRAYFORMULA(SE(LEN(${colPzTot}2:${colPzTot})=0;"";SE.ERRORE(${colTotEuro}2:${colTotEuro}/${colPzTot}2:${colPzTot};"")))`;
+
+      // Inserisci ARRAYFORMULA nella riga 2 (prima riga dati)
+      sh.getRange(2, idxEuroKg + 1).setFormula(formulaEuroKg);
+      sh.getRange(2, idxEuroPz + 1).setFormula(formulaEuroPz);
 
       // Imposta formattazione numerica per le colonne dei prezzi medi
-      if (lastRow > 1) {
-        sh.getRange(2, idxEuroKg + 1, lastRow - 1, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
-        sh.getRange(2, idxEuroPz + 1, lastRow - 1, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
-      }
+      sh.getRange(2, idxEuroKg + 1, lastRow - 1, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
+      sh.getRange(2, idxEuroPz + 1, lastRow - 1, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
 
       LOG?.info('MAG_CORE', `ARRAYFORMULA prezzi medi impostate nel foglio ${sh.getName()}`);
 
