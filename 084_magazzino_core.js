@@ -38,11 +38,11 @@ const MAGAZZINO_CORE = (() => {
     }
 
     // 3. Costruisci mappa prodotti
-    const prodottiByKey = _buildProdottiMap(shProdotti, lastRowProd);
-    LOG?.info('MAG_CORE', `Mappa prodotti costruita: ${prodottiByKey.size} prodotti.`);
+    const { prodottiByKey, prodottiByKeyNoCode } = _buildProdottiMap(shProdotti, lastRowProd);
+    LOG?.info('MAG_CORE', `Mappa prodotti costruita: ${prodottiByKey.size} con codice, ${prodottiByKeyNoCode.size} senza codice.`);
 
     // 4. Processa righe fattura
-    const rowsBase = _processRighe(shRighe, lastRowRighe, prodottiByKey);
+    const rowsBase = _processRighe(shRighe, lastRowRighe, prodottiByKey, prodottiByKeyNoCode);
     LOG?.info('MAG_CORE', `Righe base generate: ${rowsBase.length} righe.`);
 
     return rowsBase;
@@ -51,6 +51,7 @@ const MAGAZZINO_CORE = (() => {
   /**
    * Costruisce mappa prodotti da foglio Prodotti
    * @private
+   * @returns {Object} { prodottiByKey: Map, prodottiByKeyNoCode: Map }
    */
   function _buildProdottiMap(shProdotti, lastRow) {
     const headers = shProdotti.getRange(1, 1, 1, shProdotti.getLastColumn()).getValues()[0];
@@ -73,31 +74,32 @@ const MAGAZZINO_CORE = (() => {
 
     const data = shProdotti.getRange(2, 1, lastRow - 1, headers.length).getValues();
     const prodottiByKey = new Map();
+    const prodottiByKeyNoCode = new Map();
 
     data.forEach(row => {
       const fornitoreID = String(row[idx.FornitoreID] || '').trim();
       const codiceFornitore = String(row[idx.CodiceFornitore] || '').trim();
       const codiceInterno = String(row[idx.CodiceInterno] || '').trim();
+      const descrizione = String(row[idx.Descrizione] || '').trim();
+      const um = String(row[idx.UM] || '').trim();
       const ingrediente = String(row[idx.Ingrediente] || '').trim();
       const nonInUso = row[idx.NonInUso];
 
       // Filtri base
-      if (!fornitoreID || !codiceFornitore) return;
+      if (!fornitoreID) return;
       if (!ingrediente) return;
       if (nonInUso === true || String(nonInUso).toLowerCase() === 'true' || String(nonInUso).toLowerCase() === 'vero') return;
 
-      const key = `${fornitoreID}||${codiceFornitore}`;
-      
       // Normalizza UMBase
       let umBaseNorm = String(row[idx.UMBase] || 'PZ').trim().toUpperCase();
       if (umBaseNorm !== 'PZ' && umBaseNorm !== 'KG') {
         umBaseNorm = 'PZ'; // Default
       }
 
-      prodottiByKey.set(key, {
+      const prodData = {
         codiceInterno,
         codiceFornitore,
-        descrizione: String(row[idx.Descrizione] || '').trim(),
+        descrizione,
         denominazioneFornitore: String(row[idx.DenominazioneFornitore] || '').trim(),
         categoriaProdotto: String(row[idx.CategoriaProdotto] || '').trim(),
         ingrediente,
@@ -105,17 +107,29 @@ const MAGAZZINO_CORE = (() => {
         umBaseNorm,
         pzPerCt: Number(row[idx.PZxCT]) || 0,
         kgPerPz: Number(row[idx.KGxPZ]) || 0
-      });
+      };
+
+      // Mappa con codice fornitore
+      if (codiceFornitore) {
+        const key = `${fornitoreID}||${codiceFornitore}`;
+        prodottiByKey.set(key, prodData);
+      }
+
+      // Mappa alternativa per prodotti senza codice (KeyNoCode)
+      if (descrizione && um) {
+        const keyNoCode = `${fornitoreID}||${descrizione.toUpperCase()}||${um.toUpperCase()}`;
+        prodottiByKeyNoCode.set(keyNoCode, prodData);
+      }
     });
 
-    return prodottiByKey;
+    return { prodottiByKey, prodottiByKeyNoCode };
   }
 
   /**
    * Processa righe fattura e genera array base
    * @private
    */
-  function _processRighe(shRighe, lastRow, prodottiByKey) {
+  function _processRighe(shRighe, lastRow, prodottiByKey, prodottiByKeyNoCode) {
     const headers = shRighe.getRange(1, 1, 1, shRighe.getLastColumn()).getValues()[0];
     const idx = {};
     headers.forEach((h, i) => {
@@ -126,7 +140,7 @@ const MAGAZZINO_CORE = (() => {
     // Verifica colonne necessarie
     const requiredCols = [
       'Anno', 'FornitoreID', 'DenominazioneFornitore', 'NumeroDoc',
-      'Codice Articolo Fornitore', 'Descrizione',
+      'Codice Articolo Fornitore', 'Descrizione', 'UM',
       'Quantita', 'PrezzoTotale', 'Reparto'
     ];
     const missingCols = requiredCols.filter(col => idx[col] === undefined);
@@ -139,16 +153,18 @@ const MAGAZZINO_CORE = (() => {
 
     let skippedNoMatch = 0;
     let skippedInvalidData = 0;
+    let matchedByNoCode = 0;
 
     data.forEach(row => {
       const anno = row[idx.Anno];
       const fornitoreID = String(row[idx.FornitoreID] || '').trim();
       const codiceArticolo = String(row[idx['Codice Articolo Fornitore']] || '').trim();
+      const descrizione = String(row[idx.Descrizione] || '').trim();
+      const um = String(row[idx.UM] || '').trim();
       const quantita = Number(row[idx.Quantita]) || 0;
       const prezzoTotale = Number(row[idx.PrezzoTotale]) || 0;
       const reparto = String(row[idx.Reparto] || '').trim();
       const denominazioneFornitore = String(row[idx.DenominazioneFornitore] || '').trim();
-      const descrizione = String(row[idx.Descrizione] || '').trim();
 
       // Filtri
       if (!anno || quantita <= 0 || prezzoTotale === 0) {
@@ -157,8 +173,21 @@ const MAGAZZINO_CORE = (() => {
       }
 
       // JOIN con prodotti
-      const keyRiga = `${fornitoreID}||${codiceArticolo}`;
-      const prod = prodottiByKey.get(keyRiga);
+      let prod = null;
+
+      if (codiceArticolo) {
+        // Cerca con codice fornitore
+        const keyRiga = `${fornitoreID}||${codiceArticolo}`;
+        prod = prodottiByKey.get(keyRiga);
+      } else if (descrizione && um) {
+        // Cerca con KeyNoCode (FornitoreID + Descrizione + UM)
+        const keyNoCode = `${fornitoreID}||${descrizione.toUpperCase()}||${um.toUpperCase()}`;
+        prod = prodottiByKeyNoCode.get(keyNoCode);
+        if (prod) {
+          matchedByNoCode++;
+        }
+      }
+
       if (!prod) {
         skippedNoMatch++;
         return;
@@ -188,6 +217,7 @@ const MAGAZZINO_CORE = (() => {
       totalRows: data.length,
       skippedNoMatch,
       skippedInvalidData,
+      matchedByNoCode,
       validRows: rowsBase.length
     });
 
