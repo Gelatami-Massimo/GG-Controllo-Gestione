@@ -228,6 +228,109 @@ const MAGAZZINO_CORE = (() => {
   }
 
   /**
+   * Converte indice di colonna (0-based) in lettera (A, B, C, ..., Z, AA, AB, ...)
+   * @private
+   * @param {number} colIndex - Indice colonna 0-based
+   * @returns {string} Lettera di colonna (A, B, C, ...)
+   */
+  function _columnToLetter(colIndex) {
+    let temp = colIndex;
+    let letter = '';
+    while (temp >= 0) {
+      letter = String.fromCharCode((temp % 26) + 65) + letter;
+      temp = Math.floor(temp / 26) - 1;
+    }
+    return letter;
+  }
+
+  /**
+   * Verifica che una colonna esista nell'header, altrimenti la crea
+   * @private
+   * @param {GoogleAppsScript.Spreadsheet.Sheet} sh - Foglio
+   * @param {Array} headers - Array degli header (riga 1)
+   * @param {string} colName - Nome della colonna da verificare/creare
+   * @returns {number} Indice (0-based) della colonna
+   */
+  function _ensureColumn(sh, headers, colName) {
+    let colIndex = headers.indexOf(colName);
+    
+    if (colIndex === -1) {
+      // Colonna non esiste: aggiungila
+      colIndex = headers.length;
+      headers.push(colName);
+      
+      // Inserisci nuova colonna se necessario
+      if (colIndex >= sh.getMaxColumns()) {
+        sh.insertColumnsAfter(sh.getMaxColumns(), 1);
+      }
+      
+      // Scrivi header
+      sh.getRange(1, colIndex + 1).setValue(colName);
+      sh.getRange(1, colIndex + 1).setFontWeight('bold');
+      
+      LOG?.info('MAG_CORE', `Colonna "${colName}" creata nel foglio ${sh.getName()} alla posizione ${colIndex + 1}`);
+    }
+    
+    return colIndex;
+  }
+
+  /**
+   * Imposta ARRAYFORMULA per calcolare prezzi medi su tutto il foglio
+   * @private
+   * @param {GoogleAppsScript.Spreadsheet.Sheet} sh - Foglio magazzino
+   * @param {Array} headers - Array degli header corrente
+   */
+  function _setupPrezziMediFormulas(sh, headers) {
+    try {
+      // Assicura che le colonne necessarie esistano
+      const idxKgTot = _ensureColumn(sh, headers, 'KG TOT');
+      const idxPzTot = _ensureColumn(sh, headers, 'PZ TOT');
+      const idxTotEuro = _ensureColumn(sh, headers, 'Tot €');
+      const idxEuroKg = _ensureColumn(sh, headers, '€/KG medio');
+      const idxEuroPz = _ensureColumn(sh, headers, '€/PZ medio');
+
+      // Converti indici in lettere colonna
+      const colKgTot = _columnToLetter(idxKgTot);
+      const colPzTot = _columnToLetter(idxPzTot);
+      const colTotEuro = _columnToLetter(idxTotEuro);
+      const colEuroKg = _columnToLetter(idxEuroKg);
+      const colEuroPz = _columnToLetter(idxEuroPz);
+
+      // Formula per €/KG medio
+      const formulaEuroKg = `=ARRAYFORMULA(SE(RIGA(A:A)=1;"€/KG medio";SE(LEN(${colKgTot}:${colKgTot})=0;"";SE.ERRORE(${colTotEuro}:${colTotEuro}/${colKgTot}:${colKgTot};""))))`;
+      
+      // Formula per €/PZ medio
+      const formulaEuroPz = `=ARRAYFORMULA(SE(RIGA(A:A)=1;"€/PZ medio";SE(LEN(${colPzTot}:${colPzTot})=0;"";SE.ERRORE(${colTotEuro}:${colTotEuro}/${colPzTot}:${colPzTot};""))))`;
+
+      // Pulisci colonne prima di inserire formule
+      const lastRow = sh.getLastRow();
+      if (lastRow > 1) {
+        sh.getRange(2, idxEuroKg + 1, lastRow - 1, 1).clearContent();
+        sh.getRange(2, idxEuroPz + 1, lastRow - 1, 1).clearContent();
+      }
+
+      // Inserisci ARRAYFORMULA nella cella della colonna (riga 1)
+      sh.getRange(1, idxEuroKg + 1).setFormula(formulaEuroKg);
+      sh.getRange(1, idxEuroPz + 1).setFormula(formulaEuroPz);
+
+      // Imposta formattazione numerica per le colonne dei prezzi medi
+      if (lastRow > 1) {
+        sh.getRange(2, idxEuroKg + 1, lastRow - 1, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
+        sh.getRange(2, idxEuroPz + 1, lastRow - 1, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
+      }
+
+      LOG?.info('MAG_CORE', `ARRAYFORMULA prezzi medi impostate nel foglio ${sh.getName()}`);
+
+    } catch (e) {
+      LOG?.error('MAG_CORE', `Errore in _setupPrezziMediFormulas per foglio ${sh.getName()}`, {
+        error: e.message,
+        stack: e.stack
+      });
+      throw e;
+    }
+  }
+
+  /**
    * Genera report Magazzino per PRODOTTO (Anno+Prodotto+Reparto)
    * @public
    */
@@ -395,6 +498,9 @@ const MAGAZZINO_CORE = (() => {
       sh.getRange(2, 12, rows.length, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00'); // Tot €
     }
 
+    // Imposta ARRAYFORMULA per prezzi medi
+    _setupPrezziMediFormulas(sh, headers);
+
     sh.setFrozenRows(1);
     ss.setActiveSheet(sh);
   }
@@ -545,14 +651,66 @@ const MAGAZZINO_CORE = (() => {
       sh.getRange(2, 7, rows.length, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00'); // Tot €
     }
 
+    // Imposta ARRAYFORMULA per prezzi medi
+    _setupPrezziMediFormulas(sh, headers);
+
     sh.setFrozenRows(1);
     ss.setActiveSheet(sh);
+  }
+
+  /**
+   * Aggiorna le formule dei prezzi medi su tutti i fogli magazzino esistenti
+   * @public
+   * @returns {void}
+   */
+  function updatePrezziMediMagazzino() {
+    try {
+      UTIL.showToast('Aggiornamento prezzi medi magazzini...', 'Magazzino', 5);
+      
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const sheetNames = ['Magazzino', 'Magazzino_Ingredienti'];
+      let updated = 0;
+
+      sheetNames.forEach(name => {
+        const sh = ss.getSheetByName(name);
+        if (!sh) {
+          LOG?.warn('MAG_CORE', `Foglio ${name} non trovato, skip.`);
+          return;
+        }
+
+        const lastRow = sh.getLastRow();
+        if (lastRow <= 1) {
+          LOG?.warn('MAG_CORE', `Foglio ${name} vuoto, skip.`);
+          return;
+        }
+
+        // Leggi header esistenti
+        const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+        
+        // Imposta formule
+        _setupPrezziMediFormulas(sh, headers);
+        updated++;
+        
+        LOG?.info('MAG_CORE', `Prezzi medi aggiornati per foglio ${name}`);
+      });
+
+      UTIL.showToast(`Prezzi medi aggiornati per ${updated} fogli.`, 'Completato', 5);
+      LOG?.info('MAG_CORE', `updatePrezziMediMagazzino completato: ${updated} fogli aggiornati.`);
+
+    } catch (e) {
+      UTIL.showToast('Errore durante aggiornamento prezzi medi.', 'Errore', 10);
+      LOG?.error('MAG_CORE', 'Errore in updatePrezziMediMagazzino.', {
+        error: e.message,
+        stack: e.stack
+      });
+    }
   }
 
   // API pubblica
   return {
     buildMagazzinoByYear,
-    buildMagazzinoIngredientiByYear
+    buildMagazzinoIngredientiByYear,
+    updatePrezziMediMagazzino
   };
 
 })();
@@ -593,4 +751,17 @@ function buildMagazzinoByYear() {
  */
 function buildMagazzinoIngredientiByYear() {
   MAGAZZINO_CORE.buildMagazzinoIngredientiByYear();
+}
+
+/**
+ * Aggiorna le formule dei prezzi medi (€/KG medio, €/PZ medio) sui fogli magazzino.
+ * Wrapper pubblico chiamato dal menu GELATAMI.
+ * 
+ * @returns {void}
+ * 
+ * @example
+ * updatePrezziMediMagazzino(); // Chiamato dal menu
+ */
+function updatePrezziMediMagazzino() {
+  MAGAZZINO_CORE.updatePrezziMediMagazzino();
 }

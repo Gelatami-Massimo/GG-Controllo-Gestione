@@ -50,6 +50,8 @@ function onOpen() {
     .addItem('Magazzino', 'buildMagazzinoByYear')
     .addItem('Mag. Ingredienti', 'buildMagazzinoIngredientiByYear')
     .addSeparator()
+    .addItem('Aggiorna Prezzi Medi', 'updatePrezziMediMagazzino')
+    .addSeparator()
     .addItem('Audit', App.ui.fn.runReconciliationReport)
   );
 
