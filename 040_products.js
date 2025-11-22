@@ -735,34 +735,59 @@ const PRODUCTS = (() => {
       const lastColR = shRighe.getLastColumn();
       const valuesR = shRighe.getRange(headerRowR + 1, 1, lastRowR - headerRowR, lastColR).getValues();
       
-      // Mappa: "FornitoreID||Descrizione||UM" → CodiceArticolo (primo trovato)
-      const codeMap = new Map();
+      // Mappa doppia:
+      // 1. Chiave esatta: "FornitoreID||Descrizione||UM" → CodiceArticolo
+      // 2. Chiave normalizzata: "FornitoreID||DescrizioneNormalizzata||UM" → CodiceArticolo
+      const codeMapExact = new Map();
+      const codeMapNormalized = new Map();
       
       valuesR.forEach(row => {
         const fornId = String(row[idxR.FornitoreID] || '').trim();
-        const desc = String(row[idxR.Descrizione] || '').trim().toUpperCase();
+        const descRaw = String(row[idxR.Descrizione] || '').trim().toUpperCase();
         const codArt = String(row[idxR['Codice Articolo Fornitore']] || '').trim().replace(/^'+/, '');
         
         // Colonna UM potrebbe non esistere in vecchie versioni
         const umIdx = idxR.UM !== undefined ? idxR.UM : idxR.UnitaMisura;
         const um = umIdx !== undefined ? String(row[umIdx] || '').trim().toUpperCase() : '';
         
-        if (fornId && desc && codArt) {
-          const key = `${fornId}||${desc}||${um}`;
-          if (!codeMap.has(key)) {
-            codeMap.set(key, codArt);
+        if (fornId && descRaw && codArt) {
+          // Chiave esatta
+          const keyExact = `${fornId}||${descRaw}||${um}`;
+          if (!codeMapExact.has(keyExact)) {
+            codeMapExact.set(keyExact, codArt);
+          }
+          
+          // Chiave normalizzata: rimuove numeri iniziali, trattini, slash
+          // Es: "18023 GAUFFRE WAFFEL" → "GAUFFRE WAFFEL"
+          const descNorm = descRaw
+            .replace(/^\d+[-\/\s]+/g, '')  // Rimuove numeri iniziali seguiti da separatori
+            .replace(/^[-\/\s]+/g, '')     // Rimuove separatori iniziali rimasti
+            .trim();
+          
+          if (descNorm && descNorm !== descRaw) {
+            const keyNorm = `${fornId}||${descNorm}||${um}`;
+            if (!codeMapNormalized.has(keyNorm)) {
+              codeMapNormalized.set(keyNorm, codArt);
+            }
           }
         }
       });
 
-      LOG.info('PRODUCTS_BACKFILL', `Mappa codici creata: ${codeMap.size} combinazioni univoche.`);
+      LOG.info('PRODUCTS_BACKFILL', `Mappa codici creata: ${codeMapExact.size} esatte + ${codeMapNormalized.size} normalizzate.`);
 
       // Match e aggiorna
       const updates = {};
       productsWithoutCode.forEach(prod => {
         stats.scanned++;
-        const key = `${prod.fornitoreId}||${prod.descrizione}||${prod.um}`;
-        const foundCode = codeMap.get(key);
+        const keyExact = `${prod.fornitoreId}||${prod.descrizione}||${prod.um}`;
+        
+        // Prova match esatto
+        let foundCode = codeMapExact.get(keyExact);
+        
+        // Se non trova match esatto, prova match normalizzato
+        if (!foundCode) {
+          foundCode = codeMapNormalized.get(keyExact);
+        }
         
         if (foundCode) {
           const codiceForzato = UTIL.forceText(foundCode);
