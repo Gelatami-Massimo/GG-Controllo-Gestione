@@ -64,6 +64,7 @@ const PRODUCTS = (() => {
   /**
    * Assicura che un prodotto esista nel catalogo, creandolo se necessario.
    * Se il prodotto non esiste, genera automaticamente CodiceInterno univoco.
+   * Se il prodotto esiste ma ha CodiceFornitore vuoto e ora arriva un codice valido, lo aggiorna.
    * 
    * @param {string} fornitoreId - P.IVA fornitore
    * @param {string} fornitoreName - Denominazione fornitore
@@ -79,6 +80,12 @@ const PRODUCTS = (() => {
     const existingProduct = cache.keyToData.get(key);
 
     if (existingProduct && existingProduct.codiceInterno) {
+      // ✅ Aggiorna CodiceFornitore se era vuoto e ora è disponibile
+      const newCodiceFornitore = String(codiceFornRaw || '').trim().replace(/^'+/, '');
+      if (newCodiceFornitore && !existingProduct.codiceFornitore) {
+        _updateProductCodiceFornitore(existingProduct.codiceInterno, newCodiceFornitore);
+        existingProduct.codiceFornitore = newCodiceFornitore; // Aggiorna cache
+      }
       return existingProduct.codiceInterno;
     }
 
@@ -419,6 +426,61 @@ const PRODUCTS = (() => {
     }
 
     return null;
+  }
+
+  /**
+   * Aggiorna il campo CodiceFornitore di un prodotto esistente.
+   * Usato quando un prodotto creato senza codice riceve successivamente un codice valido.
+   * 
+   * @param {string} codiceInterno - Codice interno del prodotto da aggiornare
+   * @param {string} newCodiceFornitore - Nuovo codice fornitore da assegnare
+   * @private
+   */
+  function _updateProductCodiceFornitore(codiceInterno, newCodiceFornitore) {
+    if (!codiceInterno || !newCodiceFornitore) return;
+
+    try {
+      const sh = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+      if (!sh) return;
+
+      const headerRow = SHEETS._findHeaderRow(sh, SHEETS.SHEET_NAMES.Prodotti);
+      if (sh.getLastRow() <= headerRow) return;
+
+      const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+      if (idx.CodiceInterno === undefined || idx.CodiceFornitore === undefined) return;
+
+      const lastRow = sh.getLastRow();
+      const lastCol = sh.getLastColumn();
+      const values = sh.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol).getValues();
+
+      for (let i = 0; i < values.length; i++) {
+        const row = values[i];
+        if (String(row[idx.CodiceInterno] || '').trim() === codiceInterno) {
+          const targetRow = headerRow + 1 + i;
+          const codiceFornCol = idx.CodiceFornitore + 1;
+          const ultimoAggCol = idx.UltimoAgg !== undefined ? idx.UltimoAgg + 1 : null;
+
+          // Forza formato TEXT per evitare reinterpretazioni
+          const codiceForzato = UTIL.forceText(newCodiceFornitore);
+          sh.getRange(targetRow, codiceFornCol).setValue(codiceForzato);
+
+          // Aggiorna timestamp UltimoAgg
+          if (ultimoAggCol) {
+            sh.getRange(targetRow, ultimoAggCol).setValue(new Date());
+          }
+
+          LOG?.info('PRODUCTS_UPDATE_CODE', `Aggiornato CodiceFornitore per ${codiceInterno}: "${codiceForzato}"`);
+          break;
+        }
+      }
+    } catch (e) {
+      LOG?.error('PRODUCTS_UPDATE_CODE', 'Errore aggiornamento CodiceFornitore.', {
+        codiceInterno,
+        newCodiceFornitore,
+        error: e.message,
+        stack: e.stack
+      });
+    }
   }
 
   // API pubblica
