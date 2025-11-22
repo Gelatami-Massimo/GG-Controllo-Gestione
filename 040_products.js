@@ -794,8 +794,124 @@ const PRODUCTS = (() => {
     return stats;
   }
 
+  /**
+   * Pulisce retroattivamente le descrizioni dei prodotti rimuovendo i codici articolo ridondanti.
+   * Alcuni fornitori includono il codice nella descrizione (es: "80761761-KINDER BUENO...").
+   * Questa funzione rimuove il codice se presente all'inizio della descrizione.
+   * 
+   * UTILIZZO: Eseguire dopo backfillMissingCodes() per pulire descrizioni sporche.
+   * 
+   * @returns {{scanned: number, cleaned: number, errors: number}} Statistiche operazione
+   * 
+   * @example
+   * const result = PRODUCTS.cleanDescriptions();
+   * // → { scanned: 1523, cleaned: 87, errors: 0 }
+   */
+  function cleanDescriptions() {
+    const stats = { scanned: 0, cleaned: 0, errors: 0 };
+
+    try {
+      const shProd = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+      
+      if (!shProd) {
+        LOG.error('PRODUCTS_CLEAN_DESC', 'Foglio Prodotti non trovato.');
+        return stats;
+      }
+
+      const headerRowP = SHEETS._findHeaderRow(shProd, SHEETS.SHEET_NAMES.Prodotti);
+      
+      if (shProd.getLastRow() <= headerRowP) {
+        LOG.info('PRODUCTS_CLEAN_DESC', 'Foglio Prodotti vuoto.');
+        return stats;
+      }
+
+      const idxP = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+      
+      const required = ['CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UltimoAgg'];
+      const missing = required.filter(k => idxP[k] === undefined);
+      
+      if (missing.length) {
+        LOG.error('PRODUCTS_CLEAN_DESC', `Colonne mancanti: ${missing.join(', ')}`);
+        return stats;
+      }
+
+      const lastRowP = shProd.getLastRow();
+      const lastColP = shProd.getLastColumn();
+      const valuesP = shProd.getRange(headerRowP + 1, 1, lastRowP - headerRowP, lastColP).getValues();
+      
+      const updates = {};
+      
+      valuesP.forEach((row, i) => {
+        stats.scanned++;
+        const codForn = String(row[idxP.CodiceFornitore] || '').trim().replace(/^'+/, '');
+        const descRaw = String(row[idxP.Descrizione] || '').trim();
+        const codiceInterno = String(row[idxP.CodiceInterno] || '').trim();
+        
+        if (!codForn || !descRaw) return; // Skip se manca codice o descrizione
+        
+        // Pulisce descrizione
+        const descCleaned = _cleanDescriptionProduct(descRaw, codForn);
+        
+        if (descCleaned !== descRaw) {
+          const rowNum = headerRowP + 1 + i;
+          if (!updates[rowNum]) updates[rowNum] = {};
+          updates[rowNum][idxP.Descrizione] = descCleaned;
+          updates[rowNum][idxP.UltimoAgg] = new Date();
+          stats.cleaned++;
+          
+          LOG.info('PRODUCTS_CLEAN_DESC_MATCH', `Pulita: "${descRaw}" → "${descCleaned}" [${codiceInterno}]`);
+        }
+      });
+
+      // Scrittura batch
+      if (Object.keys(updates).length > 0) {
+        const updatedCount = UTIL.updateSheetInPlace(shProd, updates, headerRowP);
+        LOG.info('PRODUCTS_CLEAN_DESC', `Pulizia completata: ${stats.cleaned} descrizioni pulite su ${stats.scanned} prodotti.`);
+      } else {
+        LOG.info('PRODUCTS_CLEAN_DESC', `Nessuna descrizione da pulire su ${stats.scanned} prodotti.`);
+      }
+
+    } catch (e) {
+      stats.errors++;
+      LOG.error('PRODUCTS_CLEAN_DESC', 'Errore durante pulizia descrizioni.', {
+        error: e.message,
+        stack: e.stack
+      });
+    }
+
+    return stats;
+  }
+
+  /**
+   * Helper privato per pulire descrizioni (stessa logica di IMPORT_ROWS).
+   * @private
+   */
+  function _cleanDescriptionProduct(descrizioneRaw, codiceArticolo) {
+    if (!descrizioneRaw) return '';
+    if (!codiceArticolo) return descrizioneRaw.trim();
+
+    let desc = String(descrizioneRaw).trim();
+    const codice = String(codiceArticolo).trim().replace(/^'+/, '');
+    
+    if (!codice) return desc;
+
+    const escapedCode = codice.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    // Pattern 1: Codice all'inizio seguito da separatore
+    const pattern1 = new RegExp(`^${escapedCode}\\s*[-/\\s]+`, 'i');
+    desc = desc.replace(pattern1, '');
+    
+    // Pattern 2: Sequenze multiple di codici
+    const pattern2 = new RegExp(`^.*${escapedCode}\\s*[-/\\s]+`, 'i');
+    if (pattern2.test(desc)) {
+      desc = desc.replace(pattern2, '');
+    }
+    
+    return desc.trim();
+  }
+
   // API pubblica
-  return { primeCache, ensureProduct, flushNewRows, isProductActive, calculateUnitCost, markJunkAsUnused, backfillMissingCodes };
+  return { primeCache, ensureProduct, flushNewRows, isProductActive, calculateUnitCost, markJunkAsUnused, backfillMissingCodes, cleanDescriptions };
 })();
 
 // Registra PRODUCTS nel ModuleRegistry

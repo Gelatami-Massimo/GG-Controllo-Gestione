@@ -66,6 +66,7 @@ function onOpen() {
     .addItem('Sync Prodotti da Righe', 'runSyncProdotti')
     .addItem('Suggerisci UM', 'runSuggestUnitsFromDescription')
     .addItem('🔧 Recupera Codici Mancanti', 'runBackfillProductCodes')
+    .addItem('🧼 Pulisci Descrizioni', 'runCleanProductDescriptions')
     .addSeparator()
     .addItem('🧹 Disattiva Prodotti Spazzatura', 'runMarkJunkProducts')
     .addSeparator()
@@ -287,6 +288,22 @@ function runBackfillProductCodes() {
                    `❌ Errori: ${result.errors}`;
     SpreadsheetApp.getUi().alert('🔧 Recupero Codici Fornitore', message, SpreadsheetApp.getUi().ButtonSet.OK);
   }, 'Products', 'Recupero codici fornitore in corso...', 'Recupero completato!');
+}
+
+/**
+ * Pulisce retroattivamente le descrizioni prodotti rimuovendo codici ridondanti.
+ * Alcuni fornitori includono il codice nella descrizione (es: "80761761-KINDER BUENO...").
+ * @returns {void}
+ */
+function runCleanProductDescriptions() {
+  _runSafely(() => {
+    const result = PRODUCTS.cleanDescriptions();
+    const message = `Pulizia descrizioni completata!\n\n` +
+                   `✅ Prodotti analizzati: ${result.scanned}\n` +
+                   `🧼 Descrizioni pulite: ${result.cleaned}\n` +
+                   `❌ Errori: ${result.errors}`;
+    SpreadsheetApp.getUi().alert('🧼 Pulizia Descrizioni', message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }, 'Products', 'Pulizia descrizioni in corso...', 'Pulizia completata!');
 }
 
 /** Apre il dialog di configurazione delle impostazioni sistema. @returns {void} */
