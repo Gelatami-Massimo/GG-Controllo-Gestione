@@ -324,7 +324,7 @@ const PRODUCTS = (() => {
     // Aggiorna mappe in memoria
     const prodotto = {
       fornitoreId,
-      codiceFornitore,
+      codiceFornitore: codFornitore,
       descrizione,
       um,
       codiceInterno,

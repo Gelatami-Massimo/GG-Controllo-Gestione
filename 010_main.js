@@ -72,6 +72,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Duplicati', App.ui.fn.runMarkDuplicateInvoices)
     .addItem('Cache', App.ui.fn.runClearCache)
+    .addItem('🗑️ Pulisci Log Vecchi', 'runCleanupLogs')
   );
 
   // --- Configurazione ---
@@ -308,6 +309,30 @@ function runCleanProductDescriptions() {
 
 /** Apre il dialog di configurazione delle impostazioni sistema. @returns {void} */
 function runConfigDialog() { _runSafely(() => CONFIG_UI.openDialog(), 'Config', 'Apertura dialog configurazione...', 'Dialog chiuso.'); }
+
+/**
+ * Pulisce i log vecchi mantenendo solo gli ultimi 30 giorni.
+ * Chiede conferma prima di procedere all'eliminazione.
+ * @returns {void}
+ */
+function runCleanupLogs() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    '🗑️ Pulizia Log',
+    'Vuoi eliminare i log più vecchi di 30 giorni?\n\nQuesta operazione non può essere annullata.',
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (response === ui.Button.YES) {
+    _runSafely(() => {
+      const result = LOG.cleanup(30);
+      const message = result.success 
+        ? `✅ ${result.message}\n\nLog eliminati: ${result.deleted}`
+        : `❌ Errore: ${result.message}`;
+      ui.alert('🗑️ Pulizia Log', message, ui.ButtonSet.OK);
+    }, 'Log', 'Pulizia log in corso...', 'Pulizia completata!');
+  }
+}
 
 /**
  * Apre il foglio Trigger Status per visualizzare lo stato dei trigger automatici.

@@ -307,6 +307,24 @@ function runAutomatedImport() {
       phases: executionLog.phases
     });
     
+    // Pulizia automatica log vecchi (una volta a settimana)
+    try {
+      const lastCleanup = STATE.get('LAST_LOG_CLEANUP');
+      const now = new Date().getTime();
+      const oneWeek = 7 * 24 * 60 * 60 * 1000;
+      
+      if (!lastCleanup || (now - parseInt(lastCleanup)) > oneWeek) {
+        LOG.info('TRIGGER', 'Pulizia automatica log vecchi...');
+        const cleanupResult = LOG.cleanup(30);
+        if (cleanupResult.success) {
+          LOG.info('TRIGGER', `Log cleanup: ${cleanupResult.deleted} log eliminati`);
+          STATE.set('LAST_LOG_CLEANUP', now.toString());
+        }
+      }
+    } catch (cleanupError) {
+      LOG.warn('TRIGGER', 'Errore durante pulizia automatica log', { error: cleanupError.message });
+    }
+    
     // Registra esecuzione in dashboard
     if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.recordExecution) {
       TRIGGER_DASHBOARD.recordExecution(executionLog);

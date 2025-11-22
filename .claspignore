@@ -9,6 +9,7 @@ tools/**
 # Backup files
 smoke_test_*.js.bak
 **/*.bak
+*_OLD.js
 
 # Documentation (keep in repo, don't deploy)
 **/*.md

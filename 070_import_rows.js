@@ -140,9 +140,10 @@ const IMPORT_ROWS = (function () {
     }
 
     try {
-      const costData = PRODUCTS.calculateUnitCost(codiceInterno, quantita, um, prezzoTotale);
-      if (!costData) return;
-
+      // Calcola costo unitario inline
+      const costoUnitario = prezzoTotale / quantita;
+      const umCosto = um;
+      
       const sh = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
       if (!sh) return;
 
@@ -163,13 +164,13 @@ const IMPORT_ROWS = (function () {
           const updates = [];
 
           // Aggiorna CostoUnitario
-          if (costData.costoUnitario !== null && idx.CostoUnitario !== undefined) {
-            updates.push({ col: idx.CostoUnitario + 1, value: costData.costoUnitario });
+          if (costoUnitario !== null && idx.CostoUnitario !== undefined) {
+            updates.push({ col: idx.CostoUnitario + 1, value: costoUnitario });
           }
 
           // Aggiorna UMCosto
-          if (costData.umCosto && idx.UMCosto !== undefined) {
-            updates.push({ col: idx.UMCosto + 1, value: costData.umCosto });
+          if (umCosto && idx.UMCosto !== undefined) {
+            updates.push({ col: idx.UMCosto + 1, value: umCosto });
           }
 
           // Aggiorna RichiedeSetup

@@ -114,7 +114,58 @@ const LOG = (function () {
         }
       }
     },
-    flush: _flush
+    flush: _flush,
+    
+    /**
+     * Pulisce i log vecchi mantenendo solo gli ultimi N giorni
+     * @param {number} daysToKeep - Giorni da mantenere (default 30)
+     */
+    cleanup: function(daysToKeep = 30) {
+      try {
+        _flush(); // Svuota prima il buffer
+        
+        const sh = SHEETS.get(SHEETS.SHEET_NAMES.Log);
+        if (!sh) {
+          console.warn('[LOG CLEANUP] Foglio Log non trovato.');
+          return { success: false, message: 'Foglio Log non trovato' };
+        }
+        
+        const headerRow = SHEETS._findHeaderRow(sh, SHEETS.SHEET_NAMES.Log);
+        const lastRow = sh.getLastRow();
+        
+        if (lastRow <= headerRow) {
+          return { success: true, message: 'Nessun log da pulire', deleted: 0 };
+        }
+        
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+        
+        const timestamps = sh.getRange(headerRow + 1, 1, lastRow - headerRow, 1).getValues();
+        
+        let firstRowToKeep = -1;
+        for (let i = 0; i < timestamps.length; i++) {
+          const timestamp = timestamps[i][0];
+          if (timestamp instanceof Date && timestamp >= cutoffDate) {
+            firstRowToKeep = headerRow + 1 + i;
+            break;
+          }
+        }
+        
+        if (firstRowToKeep === -1 || firstRowToKeep === headerRow + 1) {
+          return { success: true, message: 'Nessun log vecchio da eliminare', deleted: 0 };
+        }
+        
+        const rowsToDelete = firstRowToKeep - headerRow - 1;
+        sh.deleteRows(headerRow + 1, rowsToDelete);
+        
+        LOG.info('LOG_CLEANUP', `Puliti ${rowsToDelete} log vecchi (oltre ${daysToKeep} giorni)`);
+        return { success: true, message: `${rowsToDelete} log eliminati`, deleted: rowsToDelete };
+        
+      } catch (e) {
+        console.error('[LOG CLEANUP FAIL]', e.message, e.stack);
+        return { success: false, message: e.message, deleted: 0 };
+      }
+    }
   };
 })();
 
