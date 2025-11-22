@@ -160,7 +160,7 @@ const SHEETS = (function () {
     'Righe': [
       'FileID', 'Sede', 'DataDoc', 'Anno', 'Mese', 'NumeroDoc',
       'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
-      'NumeroLinea', 'Codice Articolo Fornitore',
+      'NumeroLinea', 'CodiceInternoBreve', 'Codice Articolo Fornitore',
       'CodiceTipo', 'CodiceValore', 'Descrizione', 'Quantita',
       'PrezzoUnitario', 'PrezzoTotale', 'AliquotaIVA',
       'Reparto', 'TipoRiga'
@@ -168,7 +168,7 @@ const SHEETS = (function () {
     'Fornitori': ['FornitoreID', 'Denominazione', 'Famiglia', 'Categoria', 'Reparto', 'ImportaRighe'],
     'Aziende': ['P_IVA_Azienda', 'Nome_Sede', 'Note'],
     'Prodotti': [
-      'CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM',
+      'CodiceInterno', 'CodiceInternoBreve', 'ChiaveDescrizione', 'CodiceFornitore', 'Descrizione', 'UM',
       'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto',
       'Note', 'CreatoIl', 'UltimoAgg', 'Ingrediente', 'NonInUso',
       'UMBase', 'PZxCT', 'KGxPZ', 'PZxFila', 'FilePerCT', 'RichiedeSetup',
@@ -568,7 +568,7 @@ const SHEETS = (function () {
           format: '@',
           cols: [
             'FileID', 'Sede', 'Anno', 'Mese', 'NumeroDoc', 'FornitoreID', 'DenominazioneFornitore',
-            'Famiglia', 'Categoria', 'NumeroLinea', 'Codice Articolo Fornitore',
+            'Famiglia', 'Categoria', 'NumeroLinea', 'CodiceInternoBreve', 'Codice Articolo Fornitore',
             'CodiceTipo', 'CodiceValore', 'Descrizione', 'Reparto', 'TipoRiga'
           ]
         }

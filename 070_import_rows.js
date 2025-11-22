@@ -218,7 +218,7 @@ const IMPORT_ROWS = (function () {
    *    a. Parse XML DettaglioLinee (NumeroLinea, Descrizione, Quantita, UnitaMisura, PrezzoTotale, AliquotaIVA)
    *    b. Classifica TipoRiga (_classifyRowType): ARTICOLO, SCONTO, OMAGGIO, TESTO
    *    c. Gestisce prodotti SENZA codice: assegna TipoRiga='ProdottoSenzaCodice'
-   *    d. Chiama PRODUCTS.ensureProduct() per creare/trovare CodiceInterno
+   *    d. Chiama PRODUCTS.findOrCreateProduct() per creare/trovare CodiceInternoBreve
    *    e. Calcola CostoUnitario con PRODUCTS.calculateUnitCost() (conversioni UM)
    *    f. Copia DestReparto/Categoria da Fatture/Prodotti
    *    g. Scrive riga in Righe Fatture
@@ -610,16 +610,19 @@ const IMPORT_ROWS = (function () {
 
           // ✅ Gestione Prodotti (SOLO per ARTICOLO/OMAGGIO e se non è spazzatura)
           let codiceInterno = null;
+          let codiceInternoBreve = null;
           if (!isJunk && (tipoRiga === 'ARTICOLO' || tipoRiga === 'OMAGGIO')) {
-            codiceInterno = PRODUCTS.ensureProduct(
+            const prodResult = PRODUCTS.findOrCreateProduct(
               invData[idxF.FornitoreID], invData[idxF.DenominazioneFornitore],
               codiceValoreRaw, descrizione, um, productCache, categoriaFornitore
             );
+            codiceInterno = prodResult.codiceInterno; // Legacy (per compatibilità)
+            codiceInternoBreve = prodResult.codiceInternoBreve; // Nuovo
           }
 
           // ✅ CALCOLO COSTO UNITARIO (solo per ARTICOLO con prezzo positivo)
-          if (tipoRiga === 'ARTICOLO' && prezzoTotaleRiga > 0 && qta > 0 && codiceInterno) {
-            _updateProductUnitCost(codiceInterno, qta, um, prezzoTotaleRiga);
+          if (tipoRiga === 'ARTICOLO' && prezzoTotaleRiga > 0 && qta > 0 && codiceInternoBreve) {
+            _updateProductUnitCost(codiceInternoBreve, qta, um, prezzoTotaleRiga);
           }
 
           // Mappa i dati secondo lo schema
@@ -636,6 +639,7 @@ const IMPORT_ROWS = (function () {
             'Categoria': categoriaFornitore,
             'Reparto': invData[idxF.Reparto],
             'NumeroLinea': numeroLinea,
+            'CodiceInternoBreve': codiceInternoBreve || '',
             'Codice Articolo Fornitore': codiceValoreForzato,
             'CodiceTipo': codiceTipo,
             'CodiceValore': codiceValoreForzato,
