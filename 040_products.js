@@ -483,8 +483,150 @@ const PRODUCTS = (() => {
     }
   }
 
+  /**
+   * Scansiona tutti i prodotti esistenti e disattiva quelli con descrizioni "spazzatura".
+   * Controlla ogni prodotto contro le parole chiave del foglio "Filtro Righe Spazzatura".
+   * Se trovato match, imposta NonInUso=TRUE per disattivare il prodotto.
+   * 
+   * UTILIZZO: Eseguire periodicamente o dopo aggiornamento filtri spazzatura per pulire il catalogo.
+   * 
+   * @returns {{scanned: number, disabled: number, errors: number}} Statistiche operazione
+   * 
+   * @example
+   * const result = PRODUCTS.markJunkAsUnused();
+   * // → { scanned: 1523, disabled: 47, errors: 0 }
+   */
+  function markJunkAsUnused() {
+    const stats = { scanned: 0, disabled: 0, errors: 0 };
+
+    try {
+      const sh = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+      if (!sh) {
+        LOG.error('PRODUCTS_JUNK_SCAN', 'Foglio Prodotti non trovato.');
+        return stats;
+      }
+
+      const headerRow = SHEETS._findHeaderRow(sh, SHEETS.SHEET_NAMES.Prodotti);
+      if (sh.getLastRow() <= headerRow) {
+        LOG.info('PRODUCTS_JUNK_SCAN', 'Foglio Prodotti vuoto. Nessuna scansione necessaria.');
+        return stats;
+      }
+
+      const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+      const required = ['CodiceInterno', 'Descrizione', 'NonInUso', 'UltimoAgg'];
+      const missing = required.filter(k => idx[k] === undefined);
+      if (missing.length) {
+        LOG.error('PRODUCTS_JUNK_SCAN', `Colonne mancanti in Prodotti: ${missing.join(', ')}`);
+        return stats;
+      }
+
+      // Carica parole chiave spazzatura
+      const junkKeywords = _getJunkKeywords();
+      if (junkKeywords.size === 0) {
+        LOG.warn('PRODUCTS_JUNK_SCAN', 'Nessuna parola chiave spazzatura trovata. Operazione annullata.');
+        return stats;
+      }
+
+      LOG.info('PRODUCTS_JUNK_SCAN', `Caricate ${junkKeywords.size} parole chiave spazzatura per scansione.`);
+
+      const lastRow = sh.getLastRow();
+      const lastCol = sh.getLastColumn();
+      const values = sh.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol).getValues();
+      const junkKeywordsArray = Array.from(junkKeywords);
+
+      const updates = {}; // { rowNum: { colIndex: newValue } }
+
+      values.forEach((row, i) => {
+        stats.scanned++;
+        const codiceInterno = String(row[idx.CodiceInterno] || '').trim();
+        const descrizione = String(row[idx.Descrizione] || '').toLowerCase();
+        const nonInUso = row[idx.NonInUso];
+
+        // Skip se già disattivato
+        if (nonInUso === true || String(nonInUso).toLowerCase() === 'true' || String(nonInUso).toLowerCase() === 'vero') {
+          return;
+        }
+
+        // Controlla se descrizione contiene keyword spazzatura
+        const isJunk = junkKeywordsArray.some(keyword => descrizione.includes(keyword));
+        
+        if (isJunk) {
+          const targetRow = headerRow + 1 + i;
+          if (!updates[targetRow]) updates[targetRow] = {};
+          updates[targetRow][idx.NonInUso] = true;
+          updates[targetRow][idx.UltimoAgg] = new Date();
+          stats.disabled++;
+          
+          LOG.info('PRODUCTS_JUNK_MARK', `Disattivato prodotto spazzatura: ${codiceInterno} - "${row[idx.Descrizione]}"`);
+        }
+      });
+
+      // Scrittura batch degli aggiornamenti
+      if (Object.keys(updates).length > 0) {
+        const updatedCount = UTIL.updateSheetInPlace(sh, updates, headerRow);
+        LOG.info('PRODUCTS_JUNK_SCAN', `Disattivati ${stats.disabled} prodotti spazzatura su ${stats.scanned} scansionati.`);
+      } else {
+        LOG.info('PRODUCTS_JUNK_SCAN', `Nessun prodotto spazzatura trovato su ${stats.scanned} scansionati.`);
+      }
+
+    } catch (e) {
+      stats.errors++;
+      LOG.error('PRODUCTS_JUNK_SCAN', 'Errore durante scansione prodotti spazzatura.', {
+        error: e.message,
+        stack: e.stack
+      });
+    }
+
+    return stats;
+  }
+
+  /**
+   * Carica parole chiave spazzatura dal foglio "Filtro Righe Spazzatura".
+   * @returns {Set<string>} Set di parole chiave in minuscolo
+   * @private
+   */
+  function _getJunkKeywords() {
+    const junkSet = new Set();
+    const sheetName = SHEETS.SHEET_NAMES.Filtro_Righe_Spazzatura;
+    const sh = SHEETS.get(sheetName);
+    
+    if (!sh) {
+      LOG.warn('PRODUCTS_JUNK_KEYWORDS', `Foglio ${sheetName} non trovato.`);
+      return junkSet;
+    }
+    
+    const headerRow = SHEETS._findHeaderRow(sh, sheetName);
+    if (sh.getLastRow() <= headerRow) {
+      LOG.info('PRODUCTS_JUNK_KEYWORDS', `Foglio ${sheetName} vuoto.`);
+      return junkSet;
+    }
+
+    try {
+      const idx = SHEETS.headerIndex(sheetName);
+      const colKey = 'ParolaChiaveDaIgnorare';
+      
+      if (idx[colKey] === undefined) {
+        LOG.error('PRODUCTS_JUNK_KEYWORDS', `Colonna '${colKey}' non trovata in ${sheetName}.`);
+        return junkSet;
+      }
+      
+      const colIndex = idx[colKey];
+      const data = sh.getRange(headerRow + 1, colIndex + 1, sh.getLastRow() - headerRow, 1).getValues();
+      
+      data.forEach(([keyword]) => {
+        const kw = String(keyword || '').trim().toLowerCase();
+        if (kw) junkSet.add(kw);
+      });
+      
+      LOG.info('PRODUCTS_JUNK_KEYWORDS', `Caricate ${junkSet.size} parole chiave.`);
+    } catch (e) {
+      LOG.error('PRODUCTS_JUNK_KEYWORDS', `Errore lettura foglio ${sheetName}.`, { error: e.message });
+    }
+    return junkSet;
+  }
+
   // API pubblica
-  return { primeCache, ensureProduct, flushNewRows, isProductActive, calculateUnitCost };
+  return { primeCache, ensureProduct, flushNewRows, isProductActive, calculateUnitCost, markJunkAsUnused };
 })();
 
 // Registra PRODUCTS nel ModuleRegistry

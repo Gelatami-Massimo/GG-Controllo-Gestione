@@ -66,6 +66,8 @@ function onOpen() {
     .addItem('Sync Prodotti da Righe', 'runSyncProdotti')
     .addItem('Suggerisci UM', 'runSuggestUnitsFromDescription')
     .addSeparator()
+    .addItem('🧹 Disattiva Prodotti Spazzatura', 'runMarkJunkProducts')
+    .addSeparator()
     .addItem('Duplicati', App.ui.fn.runMarkDuplicateInvoices)
     .addItem('Cache', App.ui.fn.runClearCache)
   );
@@ -253,6 +255,22 @@ function runSyncSuppliers() { _runSafely(() => DEBUG.syncSuppliersFromInvoices()
 
 /** Riallinea le categorie prodotti storiche con la configurazione attuale. @returns {void} */
 function runSyncCategoriesRetroactive() { _runSafely(() => DEBUG.syncCategoriesRetroactive(), 'Debug', 'Riallineamento categorie storiche...', 'Categorie storiche riallineate!'); }
+
+/**
+ * Scansiona il catalogo Prodotti e disattiva quelli con descrizioni "spazzatura".
+ * Controlla le descrizioni contro il foglio "Filtro Righe Spazzatura" e imposta NonInUso=TRUE.
+ * @returns {void}
+ */
+function runMarkJunkProducts() {
+  _runSafely(() => {
+    const result = PRODUCTS.markJunkAsUnused();
+    const message = `Scansione completata!\n\n` +
+                   `✅ Prodotti scansionati: ${result.scanned}\n` +
+                   `🧹 Prodotti disattivati: ${result.disabled}\n` +
+                   `❌ Errori: ${result.errors}`;
+    SpreadsheetApp.getUi().alert('🧹 Pulizia Prodotti Spazzatura', message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }, 'Products', 'Scansione prodotti spazzatura in corso...', 'Scansione completata!');
+}
 
 /** Apre il dialog di configurazione delle impostazioni sistema. @returns {void} */
 function runConfigDialog() { _runSafely(() => CONFIG_UI.openDialog(), 'Config', 'Apertura dialog configurazione...', 'Dialog chiuso.'); }
