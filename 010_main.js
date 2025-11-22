@@ -65,6 +65,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Sync Prodotti da Righe', 'runSyncProdotti')
     .addItem('Suggerisci UM', 'runSuggestUnitsFromDescription')
+    .addItem('🔧 Recupera Codici Mancanti', 'runBackfillProductCodes')
     .addSeparator()
     .addItem('🧹 Disattiva Prodotti Spazzatura', 'runMarkJunkProducts')
     .addSeparator()
@@ -270,6 +271,22 @@ function runMarkJunkProducts() {
                    `❌ Errori: ${result.errors}`;
     SpreadsheetApp.getUi().alert('🧹 Pulizia Prodotti Spazzatura', message, SpreadsheetApp.getUi().ButtonSet.OK);
   }, 'Products', 'Scansione prodotti spazzatura in corso...', 'Scansione completata!');
+}
+
+/**
+ * Recupera retroattivamente i codici fornitore mancanti dal foglio Righe.
+ * Per prodotti senza CodiceFornitore, cerca il codice nelle righe già importate.
+ * @returns {void}
+ */
+function runBackfillProductCodes() {
+  _runSafely(() => {
+    const result = PRODUCTS.backfillMissingCodes();
+    const message = `Recupero codici completato!\n\n` +
+                   `✅ Prodotti analizzati: ${result.scanned}\n` +
+                   `🔧 Codici recuperati: ${result.updated}\n` +
+                   `❌ Errori: ${result.errors}`;
+    SpreadsheetApp.getUi().alert('🔧 Recupero Codici Fornitore', message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }, 'Products', 'Recupero codici fornitore in corso...', 'Recupero completato!');
 }
 
 /** Apre il dialog di configurazione delle impostazioni sistema. @returns {void} */

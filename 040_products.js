@@ -66,6 +66,11 @@ const PRODUCTS = (() => {
    * Se il prodotto non esiste, genera automaticamente CodiceInterno univoco.
    * Se il prodotto esiste ma ha CodiceFornitore vuoto e ora arriva un codice valido, lo aggiorna.
    * 
+   * LOGICA RICERCA PRODOTTO:
+   * 1. Se codiceFornRaw presente → cerca con chiave CF:codice
+   * 2. Se non trovato → cerca con chiave DS:descrizione|UM (prodotto creato senza codice)
+   * 3. Se trovato con chiave DS e ora c'è codice → aggiorna CodiceFornitore
+   * 
    * @param {string} fornitoreId - P.IVA fornitore
    * @param {string} fornitoreName - Denominazione fornitore
    * @param {string} codiceFornRaw - Codice articolo fornitore
@@ -77,7 +82,30 @@ const PRODUCTS = (() => {
    */
   function ensureProduct(fornitoreId, fornitoreName, codiceFornRaw, descrizione, um, cache, categoriaFornitore = '') {
     const key = _getProductKey(fornitoreId, codiceFornRaw, descrizione, um);
-    const existingProduct = cache.keyToData.get(key);
+    let existingProduct = cache.keyToData.get(key);
+
+    // ✅ RICERCA FALLBACK: Se abbiamo codice ma non troviamo prodotto, cerca con descrizione+UM
+    // (caso: prodotto creato senza codice in precedenza)
+    if (!existingProduct && codiceFornRaw) {
+      const fallbackKey = _getProductKey(fornitoreId, '', descrizione, um);
+      existingProduct = cache.keyToData.get(fallbackKey);
+      
+      if (existingProduct && existingProduct.codiceInterno) {
+        // ✅ Trovato con chiave descrizione → aggiorna con codice fornitore
+        const newCodiceFornitore = String(codiceFornRaw || '').trim().replace(/^'+/, '');
+        _updateProductCodiceFornitore(existingProduct.codiceInterno, newCodiceFornitore);
+        existingProduct.codiceFornitore = newCodiceFornitore;
+        
+        // ✅ Aggiorna cache con nuova chiave (codice fornitore)
+        cache.keyToData.set(key, existingProduct);
+        
+        LOG?.info('PRODUCTS_CODE_UPDATE', `Aggiornato prodotto da descrizione a codice: ${existingProduct.codiceInterno}`, {
+          fornitoreId, codiceFornRaw: newCodiceFornitore
+        });
+        
+        return existingProduct.codiceInterno;
+      }
+    }
 
     if (existingProduct && existingProduct.codiceInterno) {
       // ✅ Aggiorna CodiceFornitore se era vuoto e ora è disponibile
@@ -625,8 +653,149 @@ const PRODUCTS = (() => {
     return junkSet;
   }
 
+  /**
+   * Aggiorna retroattivamente i CodiceFornitore vuoti cercando nelle Righe Fatture.
+   * Per ogni prodotto senza CodiceFornitore, cerca nelle righe già importate
+   * il codice articolo corrispondente (match per FornitoreID + Descrizione + UM).
+   * 
+   * UTILIZZO: Eseguire dopo aver importato righe per recuperare codici mancanti.
+   * 
+   * @returns {{scanned: number, updated: number, errors: number}} Statistiche operazione
+   * 
+   * @example
+   * const result = PRODUCTS.backfillMissingCodes();
+   * // → { scanned: 456, updated: 123, errors: 0 }
+   */
+  function backfillMissingCodes() {
+    const stats = { scanned: 0, updated: 0, errors: 0 };
+
+    try {
+      const shProd = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+      const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
+      
+      if (!shProd || !shRighe) {
+        LOG.error('PRODUCTS_BACKFILL', 'Fogli Prodotti o Righe non trovati.');
+        return stats;
+      }
+
+      const headerRowP = SHEETS._findHeaderRow(shProd, SHEETS.SHEET_NAMES.Prodotti);
+      const headerRowR = SHEETS._findHeaderRow(shRighe, SHEETS.SHEET_NAMES.Righe);
+      
+      if (shProd.getLastRow() <= headerRowP || shRighe.getLastRow() <= headerRowR) {
+        LOG.info('PRODUCTS_BACKFILL', 'Fogli vuoti. Nessun backfill necessario.');
+        return stats;
+      }
+
+      const idxP = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+      const idxR = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
+      
+      const requiredP = ['CodiceInterno', 'FornitoreID', 'CodiceFornitore', 'Descrizione', 'UM', 'UltimoAgg'];
+      const requiredR = ['FornitoreID', 'Descrizione', 'Codice Articolo Fornitore'];
+      
+      const missingP = requiredP.filter(k => idxP[k] === undefined);
+      const missingR = requiredR.filter(k => idxR[k] === undefined);
+      
+      if (missingP.length || missingR.length) {
+        LOG.error('PRODUCTS_BACKFILL', 'Colonne mancanti.', { 
+          Prodotti: missingP, 
+          Righe: missingR 
+        });
+        return stats;
+      }
+
+      // Carica tutti i prodotti senza codice
+      const lastRowP = shProd.getLastRow();
+      const lastColP = shProd.getLastColumn();
+      const valuesP = shProd.getRange(headerRowP + 1, 1, lastRowP - headerRowP, lastColP).getValues();
+      
+      const productsWithoutCode = [];
+      valuesP.forEach((row, i) => {
+        const codForn = String(row[idxP.CodiceFornitore] || '').trim();
+        if (!codForn) {
+          productsWithoutCode.push({
+            rowIndex: i,
+            rowNum: headerRowP + 1 + i,
+            codiceInterno: String(row[idxP.CodiceInterno] || '').trim(),
+            fornitoreId: String(row[idxP.FornitoreID] || '').trim(),
+            descrizione: String(row[idxP.Descrizione] || '').trim().toUpperCase(),
+            um: String(row[idxP.UM] || '').trim().toUpperCase()
+          });
+        }
+      });
+
+      if (productsWithoutCode.length === 0) {
+        LOG.info('PRODUCTS_BACKFILL', 'Nessun prodotto senza CodiceFornitore trovato.');
+        return stats;
+      }
+
+      LOG.info('PRODUCTS_BACKFILL', `Trovati ${productsWithoutCode.length} prodotti senza codice. Cerco nei dati Righe...`);
+
+      // Carica tutte le righe e crea mappa Fornitore+Descrizione+UM → CodiceArticolo
+      const lastRowR = shRighe.getLastRow();
+      const lastColR = shRighe.getLastColumn();
+      const valuesR = shRighe.getRange(headerRowR + 1, 1, lastRowR - headerRowR, lastColR).getValues();
+      
+      // Mappa: "FornitoreID||Descrizione||UM" → CodiceArticolo (primo trovato)
+      const codeMap = new Map();
+      
+      valuesR.forEach(row => {
+        const fornId = String(row[idxR.FornitoreID] || '').trim();
+        const desc = String(row[idxR.Descrizione] || '').trim().toUpperCase();
+        const codArt = String(row[idxR['Codice Articolo Fornitore']] || '').trim().replace(/^'+/, '');
+        
+        // Colonna UM potrebbe non esistere in vecchie versioni
+        const umIdx = idxR.UM !== undefined ? idxR.UM : idxR.UnitaMisura;
+        const um = umIdx !== undefined ? String(row[umIdx] || '').trim().toUpperCase() : '';
+        
+        if (fornId && desc && codArt) {
+          const key = `${fornId}||${desc}||${um}`;
+          if (!codeMap.has(key)) {
+            codeMap.set(key, codArt);
+          }
+        }
+      });
+
+      LOG.info('PRODUCTS_BACKFILL', `Mappa codici creata: ${codeMap.size} combinazioni univoche.`);
+
+      // Match e aggiorna
+      const updates = {};
+      productsWithoutCode.forEach(prod => {
+        stats.scanned++;
+        const key = `${prod.fornitoreId}||${prod.descrizione}||${prod.um}`;
+        const foundCode = codeMap.get(key);
+        
+        if (foundCode) {
+          const codiceForzato = UTIL.forceText(foundCode);
+          if (!updates[prod.rowNum]) updates[prod.rowNum] = {};
+          updates[prod.rowNum][idxP.CodiceFornitore] = codiceForzato;
+          updates[prod.rowNum][idxP.UltimoAgg] = new Date();
+          stats.updated++;
+          
+          LOG.info('PRODUCTS_BACKFILL_MATCH', `Match trovato: ${prod.codiceInterno} → "${foundCode}"`);
+        }
+      });
+
+      // Scrittura batch
+      if (Object.keys(updates).length > 0) {
+        const updatedCount = UTIL.updateSheetInPlace(shProd, updates, headerRowP);
+        LOG.info('PRODUCTS_BACKFILL', `Backfill completato: ${stats.updated} prodotti aggiornati su ${stats.scanned} scansionati.`);
+      } else {
+        LOG.info('PRODUCTS_BACKFILL', `Nessun match trovato nelle Righe per i ${stats.scanned} prodotti senza codice.`);
+      }
+
+    } catch (e) {
+      stats.errors++;
+      LOG.error('PRODUCTS_BACKFILL', 'Errore durante backfill codici fornitore.', {
+        error: e.message,
+        stack: e.stack
+      });
+    }
+
+    return stats;
+  }
+
   // API pubblica
-  return { primeCache, ensureProduct, flushNewRows, isProductActive, calculateUnitCost, markJunkAsUnused };
+  return { primeCache, ensureProduct, flushNewRows, isProductActive, calculateUnitCost, markJunkAsUnused, backfillMissingCodes };
 })();
 
 // Registra PRODUCTS nel ModuleRegistry

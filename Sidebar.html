@@ -261,9 +261,10 @@
         <button onclick="runServerFunction('<?!= App.ui.fn.runSyncCategoriesRetroactive ?>')" title="Riallinea categorie prodotti">Categorie</button>
         <button onclick="runServerFunction('runSyncProdotti')" title="Sincronizza Prodotti da Righe">Sync Prodotti</button>
         <button onclick="runServerFunction('runSuggestUnitsFromDescription')" title="Suggerisci UM da descrizioni">UM Auto</button>
-        <button onclick="runServerFunction('runMarkJunkProducts')" title="Disattiva prodotti con descrizioni spazzatura">🧹 Pulisci</button>
+        <button onclick="runServerFunction('runBackfillProductCodes')" title="Recupera codici fornitore mancanti dalle righe">🔧 Codici</button>
       </div>
       <div class="gg-buttons-grid">
+        <button onclick="runServerFunction('runMarkJunkProducts')" title="Disattiva prodotti con descrizioni spazzatura">🧹 Pulisci</button>
         <button onclick="runServerFunction('<?!= App.ui.fn.runMarkDuplicateInvoices ?>')" title="Marca fatture duplicate">Duplicati</button>
         <button onclick="runServerFunction('<?!= App.ui.fn.runClearCache ?>')" title="Pulisci cache">Cache</button>
       </div>
