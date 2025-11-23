@@ -185,7 +185,7 @@ const DEBUG = (function () {
             }
             
             // Condizione 3: Reparto è vuoto E il fornitore ha un reparto da impostare (solo per Fatture)
-            if (existingReparto !== null && existingReparto === '' && curr.reparto && sheetName === SHEETS.SHEET_NAMES.Fatture) {
+            if (existingReparto !== null && existingReparto === '' && curr.reparto && curr.reparto !== '' && sheetName === SHEETS.SHEET_NAMES.Fatture) {
               rowUpdates[idx.Reparto] = curr.reparto;
               needsUpdate = true;
             }
