@@ -1078,6 +1078,180 @@ const DEBUG = (function () {
   }
 
   /**
+   * DEV_DiagnoseHotelCosts()
+   * Diagnostica il problema dei costi Hotel nel P&L.
+   * Verifica:
+   * - Nomi sedi in Fatture vs Aziende
+   * - Mapping Reparto Hotel
+   * - Totali aggregati
+   */
+  function DEV_DiagnoseHotelCosts() {
+    LOG.info('DEV_HOTEL_DIAG', '=== DIAGNOSI COSTI HOTEL ===');
+    
+    const ui = SpreadsheetApp.getUi();
+    let report = '📊 DIAGNOSI COSTI HOTEL\n\n';
+    
+    try {
+      // 1. Verifica foglio Aziende
+      const shAziende = SHEETS.get('Aziende');
+      if (!shAziende) {
+        report += '❌ Foglio "Aziende" non trovato!\n';
+        ui.alert('Errore', report, ui.ButtonSet.OK);
+        return;
+      }
+      
+      const headerRowAz = SHEETS._findHeaderRow(shAziende, 'Aziende');
+      const idxAz = SHEETS.headerIndex('Aziende');
+      
+      if (idxAz.P_IVA_Azienda === undefined || idxAz.Nome_Sede === undefined) {
+        report += '❌ Colonne P_IVA_Azienda o Nome_Sede mancanti in Aziende!\n';
+        ui.alert('Errore', report, ui.ButtonSet.OK);
+        return;
+      }
+      
+      const rowsAz = shAziende.getRange(headerRowAz + 1, 1, shAziende.getLastRow() - headerRowAz, Math.max(idxAz.P_IVA_Azienda, idxAz.Nome_Sede) + 1).getValues();
+      
+      report += '✅ FOGLIO AZIENDE:\n';
+      rowsAz.forEach(row => {
+        const pIva = String(row[idxAz.P_IVA_Azienda] || '').trim();
+        const sede = String(row[idxAz.Nome_Sede] || '').trim();
+        const azienda = pIva === '4230940167' ? 'Gemma' : pIva === '4489830986' ? 'Zaffiro' : 'Sconosciuto';
+        report += `  • Sede: "${sede}" → ${azienda} (P.IVA: ${pIva})\n`;
+      });
+      report += '\n';
+      
+      // 2. Verifica fatture Hotel
+      const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+      if (!shF) {
+        report += '❌ Foglio Fatture non trovato!\n';
+        ui.alert('Errore', report, ui.ButtonSet.OK);
+        return;
+      }
+      
+      const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
+      const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
+      
+      if (idxF.Reparto === undefined) {
+        report += '❌ Colonna Reparto mancante in Fatture!\n';
+        ui.alert('Errore', report, ui.ButtonSet.OK);
+        return;
+      }
+      
+      if (idxF.Sede === undefined) {
+        report += '⚠️ ATTENZIONE: Colonna Sede mancante in Fatture!\n';
+        report += '   Il P&L non potrà determinare l\'azienda (Gemma/Zaffiro).\n\n';
+      }
+      
+      const maxCol = Math.max(
+        idxF.Reparto,
+        idxF.Sede ?? 0,
+        idxF.TotImponibile ?? 0,
+        idxF.FornitoreID ?? 0,
+        idxF.Famiglia ?? 0,
+        idxF.Anno ?? 0,
+        idxF.Mese ?? 0
+      ) + 1;
+      
+      const rowsF = shF.getRange(headerRowF + 1, 1, Math.min(shF.getLastRow() - headerRowF, 1000), maxCol).getValues();
+      
+      const hotelInvoices = rowsF.filter(row => {
+        const reparto = String(row[idxF.Reparto] || '').trim();
+        return reparto.toLowerCase() === 'hotel';
+      });
+      
+      report += `✅ FATTURE CON REPARTO="Hotel": ${hotelInvoices.length}\n\n`;
+      
+      if (hotelInvoices.length === 0) {
+        report += '⚠️ NESSUNA FATTURA TROVATA CON REPARTO="Hotel"!\n';
+        report += '   Verifica che il campo Reparto sia popolato correttamente.\n';
+        ui.alert('Diagnosi Completata', report, ui.ButtonSet.OK);
+        return;
+      }
+      
+      // Mostra sample fatture Hotel
+      report += 'CAMPIONE FATTURE HOTEL (prime 5):\n';
+      const sediDistinte = new Set();
+      const totaliPerSede = new Map();
+      
+      hotelInvoices.slice(0, 5).forEach((row, i) => {
+        const sede = idxF.Sede !== undefined ? String(row[idxF.Sede] || '').trim() : 'N/A';
+        const totImp = idxF.TotImponibile !== undefined ? UTIL.parseNumSmart(row[idxF.TotImponibile]) : 0;
+        const forn = idxF.FornitoreID !== undefined ? String(row[idxF.FornitoreID] || '').trim() : 'N/A';
+        const fam = idxF.Famiglia !== undefined ? String(row[idxF.Famiglia] || '').trim() : 'N/A';
+        const anno = idxF.Anno !== undefined ? row[idxF.Anno] : 'N/A';
+        const mese = idxF.Mese !== undefined ? row[idxF.Mese] : 'N/A';
+        
+        report += `  ${i+1}. Sede="${sede}" | Famiglia="${fam}" | Anno=${anno} Mese=${mese} | Tot=€${totImp.toFixed(2)}\n`;
+        
+        if (sede !== 'N/A') sediDistinte.add(sede);
+      });
+      report += '\n';
+      
+      // Aggrega totali per sede
+      hotelInvoices.forEach(row => {
+        const sede = idxF.Sede !== undefined ? String(row[idxF.Sede] || 'Sconosciuta').trim() : 'Sconosciuta';
+        const totImp = idxF.TotImponibile !== undefined ? UTIL.parseNumSmart(row[idxF.TotImponibile]) : 0;
+        
+        if (!totaliPerSede.has(sede)) totaliPerSede.set(sede, 0);
+        totaliPerSede.set(sede, totaliPerSede.get(sede) + totImp);
+      });
+      
+      report += 'TOTALI HOTEL PER SEDE:\n';
+      totaliPerSede.forEach((tot, sede) => {
+        report += `  • "${sede}": €${tot.toFixed(2)}\n`;
+      });
+      report += '\n';
+      
+      // 3. Verifica matching Sede → Azienda
+      if (idxF.Sede !== undefined) {
+        report += 'VERIFICA MATCHING SEDE → AZIENDA:\n';
+        const sediAziende = new Set(rowsAz.map(r => String(r[idxAz.Nome_Sede] || '').trim()));
+        
+        sediDistinte.forEach(sede => {
+          const trovata = sediAziende.has(sede);
+          report += `  • "${sede}": ${trovata ? '✅ TROVATA' : '❌ NON TROVATA in foglio Aziende'}\n`;
+        });
+        report += '\n';
+      }
+      
+      // 4. Consigli
+      report += '💡 SUGGERIMENTI:\n';
+      if (idxF.Sede === undefined) {
+        report += '  1. Aggiungi colonna "Sede" al foglio Fatture\n';
+        report += '  2. Popola la colonna con il nome della sede\n';
+        report += '  3. Assicurati che i nomi corrispondano al foglio Aziende\n';
+      } else if (sediDistinte.size === 0) {
+        report += '  1. La colonna Sede esiste ma è vuota nelle fatture Hotel\n';
+        report += '  2. Popola il campo Sede per ogni fattura Hotel\n';
+      } else {
+        let mismatch = false;
+        const sediAziende = new Set(rowsAz.map(r => String(r[idxAz.Nome_Sede] || '').trim()));
+        sediDistinte.forEach(sede => {
+          if (!sediAziende.has(sede)) mismatch = true;
+        });
+        
+        if (mismatch) {
+          report += '  1. NOMI SEDI NON CORRISPONDONO tra Fatture e Aziende\n';
+          report += '  2. Verifica maiuscole/minuscole e spazi\n';
+          report += '  3. Allinea i nomi esattamente (case-sensitive!)\n';
+        } else {
+          report += '  ✅ Tutto sembra OK! Se il P&L ancora non mostra i costi:\n';
+          report += '     1. Rigenera il P&L (Menu → Report)\n';
+          report += '     2. Verifica il filtro anno/sede applicato\n';
+        }
+      }
+      
+      LOG.info('DEV_HOTEL_DIAG', report);
+      ui.alert('📊 Diagnosi Costi Hotel', report, ui.ButtonSet.OK);
+      
+    } catch (e) {
+      report += `\n❌ ERRORE: ${e.message}\n`;
+      LOG.error('DEV_HOTEL_DIAG', 'Errore diagnosi', { error: e.message, stack: e.stack });
+      ui.alert('Errore Diagnosi', report, ui.ButtonSet.OK);
+    }
+  }
+
+  /**
    * DEV_ResetAllImportFlags()
    * Resetta i flag di import righe su TUTTE le fatture.
    * ATTENZIONE: Usa solo DOPO aver eliminato tutte le righe dal foglio "Righe".
@@ -1203,7 +1377,8 @@ const DEBUG = (function () {
     DEV_FindRigheDuplicate: DEV_FindRigheDuplicate,
     DEV_DeleteRigheDuplicate: DEV_DeleteRigheDuplicate,
     DEV_CountDuplicates: DEV_CountDuplicates,
-    DEV_ResetAllImportFlags: DEV_ResetAllImportFlags
+    DEV_ResetAllImportFlags: DEV_ResetAllImportFlags,
+    DEV_DiagnoseHotelCosts: DEV_DiagnoseHotelCosts
   };
 })();
 
