@@ -300,10 +300,11 @@ function createPnlSheet() {
           Array.from(pnlGlobaleGelateria.values()).some(mesiValori => mesiValori.has(meseAnno) && mesiValori.get(meseAnno) !== 0)
         );
         if (globaleHaDati) {
-          // GLOBALE: non mostra costi Hotel (già aggregati in pnlHotel separato)
+          // GLOBALE: mostra costi Hotel se presenti (Gemma)
+          const costiHotelGlobale = costiHotelGemma.get('COSTI HOTEL')?.size > 0 ? costiHotelGemma : null;
           currentRow = _writePnlSection(
             sh, currentRow, `CONTO ECONOMICO RICLASSIFICATO - GLOBALE GELATERIA (Anno ${anno})`,
-            pnlGlobaleGelateria, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat, null
+            pnlGlobaleGelateria, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat, costiHotelGlobale
           );
           currentRow += 2;
         }
