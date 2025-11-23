@@ -1397,6 +1397,146 @@ const DEBUG = (function () {
   }
 
   /**
+   * DEV_InspectAggregatedCosts()
+   * Ispeziona il risultato della funzione _getAggregatedCostsBySede() del P&L.
+   * Mostra esattamente cosa viene aggregato prima del filtraggio Hotel.
+   */
+  function DEV_InspectAggregatedCosts() {
+    LOG.info('DEV_INSPECT_AGG', '=== ISPEZIONE AGGREGAZIONE COSTI ===');
+    
+    const ui = SpreadsheetApp.getUi();
+    let report = '🔍 ISPEZIONE AGGREGAZIONE COSTI P&L\n\n';
+    
+    try {
+      // 1. Leggi aziendaMap
+      const shAziende = SHEETS.get('Aziende');
+      if (!shAziende) {
+        report += '❌ Foglio "Aziende" non trovato!\n';
+        ui.alert('Errore', report, ui.ButtonSet.OK);
+        return;
+      }
+      
+      const headerRowAz = SHEETS._findHeaderRow(shAziende, 'Aziende');
+      const idxAz = SHEETS.headerIndex('Aziende');
+      const rowsAz = shAziende.getRange(headerRowAz + 1, 1, shAziende.getLastRow() - headerRowAz, Math.max(idxAz.P_IVA_Azienda, idxAz.Nome_Sede) + 1).getValues();
+      
+      const pIvaToAzienda = {
+        '4230940167': 'Gemma',
+        '4489830986': 'Zaffiro'
+      };
+      
+      const aziendaMap = new Map();
+      rowsAz.forEach(row => {
+        const pIva = String(row[idxAz.P_IVA_Azienda] || '').trim();
+        const sede = String(row[idxAz.Nome_Sede] || '').trim();
+        if (pIva && sede && pIvaToAzienda[pIva]) {
+          aziendaMap.set(sede, pIvaToAzienda[pIva]);
+        }
+      });
+      
+      // 2. Leggi famiglie fornitori
+      const shFor = SHEETS.get(SHEETS.SHEET_NAMES.Fornitori);
+      if (!shFor) {
+        report += '❌ Foglio "Fornitori" non trovato!\n';
+        ui.alert('Errore', report, ui.ButtonSet.OK);
+        return;
+      }
+      
+      const headerRowFor = SHEETS._findHeaderRow(shFor, SHEETS.SHEET_NAMES.Fornitori);
+      const idxFor = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fornitori);
+      const rowsFor = shFor.getRange(headerRowFor + 1, 1, shFor.getLastRow() - headerRowFor, Math.max(idxFor.FornitoreID, idxFor.Famiglia, idxFor.Reparto ?? 0) + 1).getValues();
+      
+      const famiglieFornitori = new Map();
+      rowsFor.forEach(r => {
+        const idNorm = UTIL.normKey(r[idxFor.FornitoreID]).replace(/^0+/, '');
+        if (!idNorm) return;
+        const fam = String(r[idxFor.Famiglia] ?? '').trim() || 'Non Categorizzato';
+        const reparto = idxFor.Reparto !== undefined ? String(r[idxFor.Reparto] ?? '').trim() : null;
+        famiglieFornitori.set(idNorm, { famiglia: fam, reparto, azienda: null });
+      });
+      
+      // 3. Aggrega manualmente (replica logica P&L)
+      const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+      const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
+      const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
+      
+      const lastCol = Math.max(idxF.Sede, idxF.Data, idxF.TotImponibile, idxF.FornitoreID, idxF.Reparto ?? 0) + 1;
+      const rowsF = shF.getRange(headerRowF + 1, 1, shF.getLastRow() - headerRowF, lastCol).getValues();
+      
+      const aggregati = new Map();
+      
+      rowsF.forEach(r => {
+        const sede = String(r[idxF.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
+        const data = r[idxF.Data];
+        if (!(data instanceof Date) || isNaN(data.getTime())) return;
+        
+        const anno = data.getFullYear();
+        const mese = data.getMonth() + 1;
+        const ym = `${anno}-${('0' + mese).slice(-2)}`;
+        
+        const idNorm = UTIL.normKey(r[idxF.FornitoreID]).replace(/^0+/, '');
+        const infoFornitore = famiglieFornitori.get(idNorm) || { famiglia: 'Non Categorizzato', reparto: null };
+        
+        const repartoFattura = idxF.Reparto !== undefined ? String(r[idxF.Reparto] ?? '').trim() : null;
+        const reparto = repartoFattura || infoFornitore.reparto;
+        const azienda = aziendaMap.get(sede) || infoFornitore.azienda;
+        const costoNetto = UTIL.parseNumSmart(r[idxF.TotImponibile]);
+        
+        const key = `${sede}|${ym}|${reparto}|${azienda}`;
+        
+        if (!aggregati.has(key)) {
+          aggregati.set(key, { sede, anno, mese, reparto, azienda, costo: 0, count: 0 });
+        }
+        
+        const curr = aggregati.get(key);
+        curr.costo += costoNetto;
+        curr.count++;
+      });
+      
+      // 4. Filtra solo Hotel Gemma 2025
+      report += 'AGGREGAZIONE COSTI HOTEL GEMMA 2025:\n';
+      report += '(Come li vede la funzione _getAggregatedCostsBySede)\n\n';
+      
+      const hotelGemma2025 = Array.from(aggregati.values())
+        .filter(x => x.reparto && x.reparto.toLowerCase() === 'hotel' && x.azienda === 'Gemma' && x.anno === 2025)
+        .sort((a, b) => a.mese - b.mese);
+      
+      if (hotelGemma2025.length === 0) {
+        report += '❌ NESSUN COSTO HOTEL GEMMA 2025 AGGREGATO!\n\n';
+        report += '🔍 Possibili cause:\n';
+        report += '1. Campo "Reparto" vuoto nelle fatture\n';
+        report += '2. Campo "Azienda" non mappato correttamente\n';
+        report += '3. Sede non trovata in aziendaMap\n';
+      } else {
+        const mesi = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+        hotelGemma2025.forEach(x => {
+          report += `${mesi[x.mese-1]} 25: €${x.costo.toFixed(2)} (${x.count} fatture, Sede: ${x.sede})\n`;
+        });
+        
+        const totale = hotelGemma2025.reduce((sum, x) => sum + x.costo, 0);
+        report += `\n✅ TOTALE AGGREGATO: €${totale.toFixed(2)}\n\n`;
+      }
+      
+      // 5. Conta fatture Hotel per debug
+      const tutteLeFattureHotel = Array.from(aggregati.values())
+        .filter(x => x.reparto && x.reparto.toLowerCase() === 'hotel');
+      
+      report += `📊 STATISTICHE COMPLESSIVE:\n`;
+      report += `Totale righe aggregate: ${aggregati.size}\n`;
+      report += `Fatture Hotel (tutti gli anni): ${tutteLeFattureHotel.length}\n`;
+      report += `Fatture Hotel Gemma 2025: ${hotelGemma2025.length}\n`;
+      
+      LOG.info('DEV_INSPECT_AGG', report);
+      ui.alert('🔍 Ispezione Aggregazione', report, ui.ButtonSet.OK);
+      
+    } catch (e) {
+      report += `\n❌ ERRORE: ${e.message}\n`;
+      LOG.error('DEV_INSPECT_AGG', 'Errore ispezione', { error: e.message, stack: e.stack });
+      ui.alert('Errore Ispezione', report, ui.ButtonSet.OK);
+    }
+  }
+
+  /**
    * DEV_ResetAllImportFlags()
    * Resetta i flag di import righe su TUTTE le fatture.
    * ATTENZIONE: Usa solo DOPO aver eliminato tutte le righe dal foglio "Righe".
@@ -1524,7 +1664,8 @@ const DEBUG = (function () {
     DEV_CountDuplicates: DEV_CountDuplicates,
     DEV_ResetAllImportFlags: DEV_ResetAllImportFlags,
     DEV_DiagnoseHotelCosts: DEV_DiagnoseHotelCosts,
-    DEV_CompareHotelCostsWithPnL: DEV_CompareHotelCostsWithPnL
+    DEV_CompareHotelCostsWithPnL: DEV_CompareHotelCostsWithPnL,
+    DEV_InspectAggregatedCosts: DEV_InspectAggregatedCosts
   };
 })();
 
