@@ -182,12 +182,39 @@ const SYNC_PRODOTTI = (() => {
       }
     });
 
-    // 4. Scrivi nuovi prodotti
+    // 4. Scrivi nuovi prodotti (con verifica anti-duplicati finale)
     if (newProducts.length > 0) {
       try {
-        const startRow = Math.max(headerRowProd + 1, shProdotti.getLastRow() + 1);
-        UTIL.writeBatched(shProdotti, startRow, newProducts);
-        LOG.info('SYNC_PRODOTTI', `Aggiunti ${newProducts.length} nuovi prodotti.`);
+        // RILEGGI il foglio Prodotti SUBITO PRIMA di scrivere (anti race-condition)
+        const finalCheck = new Map();
+        const lastRowCheck = shProdotti.getLastRow();
+        if (lastRowCheck > headerRowProd) {
+          const valuesCheck = shProdotti.getRange(headerRowProd + 1, 1, lastRowCheck - headerRowProd, shProdotti.getLastColumn()).getValues();
+          valuesCheck.forEach(row => {
+            const fornId = String(row[idxProd.FornitoreID] || '').trim();
+            const codForn = String(row[idxProd.CodiceFornitore] || '').trim();
+            if (fornId && codForn) {
+              finalCheck.set(`${fornId}||${codForn}`, true);
+            }
+          });
+        }
+
+        // Filtra solo prodotti REALMENTE nuovi
+        const safeProducts = newProducts.filter(row => {
+          const fornId = String(row[idxProd.FornitoreID] || '').trim();
+          const codForn = String(row[idxProd.CodiceFornitore] || '').trim();
+          const key = `${fornId}||${codForn}`;
+          return !finalCheck.has(key);
+        });
+
+        if (safeProducts.length === 0) {
+          LOG.warn('SYNC_PRODOTTI', 'Tutti i nuovi prodotti sono duplicati (già presenti). Nessun inserimento.');
+        } else {
+          const startRow = Math.max(headerRowProd + 1, shProdotti.getLastRow() + 1);
+          UTIL.writeBatched(shProdotti, startRow, safeProducts);
+          LOG.info('SYNC_PRODOTTI', `Aggiunti ${safeProducts.length} nuovi prodotti (${newProducts.length - safeProducts.length} duplicati scartati).`);
+          stats.nuovi = safeProducts.length; // Correggi conteggio
+        }
       } catch (e) {
         LOG.error('SYNC_PRODOTTI', 'Errore scrittura nuovi prodotti.', { error: e.message });
       }
@@ -398,6 +425,211 @@ const SYNC_PRODOTTI = (() => {
 })();
 
 // ========== WRAPPER PUBBLICI PER MENU ==========
+
+/**
+ * Diagnostica duplicati esistenti in Prodotti.
+ * Identifica prodotti con stesso CodiceFornitore e analizza differenze.
+ * 
+ * @returns {void}
+ */
+function runDiagnosticaDuplicati() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const shProdotti = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+  
+  if (!shProdotti) {
+    ss.toast('❌ Foglio Prodotti non trovato.', 'Errore', 5);
+    return;
+  }
+
+  ss.toast('Analisi duplicati in corso...', 'Attendere...', -1);
+
+  const headerRow = SHEETS._findHeaderRow(shProdotti, SHEETS.SHEET_NAMES.Prodotti);
+  const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+  
+  const lastRow = shProdotti.getLastRow();
+  if (lastRow <= headerRow) {
+    ss.toast('📋 Foglio Prodotti vuoto.', 'Info', 3);
+    return;
+  }
+
+  // Mappa: CodiceFornitore -> Array di righe
+  const mappaFornitori = new Map();
+  const values = shProdotti.getRange(headerRow + 1, 1, lastRow - headerRow, shProdotti.getLastColumn()).getValues();
+
+  values.forEach((row, i) => {
+    const codForn = String(row[idx.CodiceFornitore] || '').trim();
+    const fornId = String(row[idx.FornitoreID] || '').trim();
+    
+    if (!codForn) return;
+
+    if (!mappaFornitori.has(codForn)) {
+      mappaFornitori.set(codForn, []);
+    }
+
+    mappaFornitori.get(codForn).push({
+      rowIndex: headerRow + 1 + i,
+      codiceInterno: row[idx.CodiceInterno],
+      fornId: fornId,
+      descrizione: row[idx.Descrizione],
+      ultimoAgg: row[idx.UltimoAgg],
+      nonInUso: row[idx.NonInUso]
+    });
+  });
+
+  // Filtra solo duplicati
+  const duplicati = [];
+  mappaFornitori.forEach((righe, codForn) => {
+    if (righe.length > 1) {
+      duplicati.push({
+        codiceFornitore: codForn,
+        righe: righe,
+        count: righe.length
+      });
+    }
+  });
+
+  if (duplicati.length === 0) {
+    ss.toast('✅ Nessun duplicato trovato!', 'Ottimo!', 5);
+    LOG.info('DIAGNOSTICA_DUPLICATI', 'Nessun duplicato rilevato.');
+    return;
+  }
+
+  // Analizza CAUSE duplicati
+  const report = [];
+  report.push(`🔍 ANALISI DUPLICATI - ${duplicati.length} prodotti con duplicati`);
+  report.push('');
+
+  duplicati.forEach(d => {
+    const fornitoriDiversi = new Set(d.righe.map(r => r.fornId)).size > 1;
+    const nonInUsoCount = d.righe.filter(r => r.nonInUso === true).length;
+    const attivi = d.righe.length - nonInUsoCount;
+
+    report.push(`📦 ${d.codiceFornitore} (${d.count} copie)`);
+    report.push(`   Descrizione: ${d.righe[0].descrizione}`);
+    
+    if (fornitoriDiversi) {
+      report.push(`   ⚠️ CAUSE: Fornitori diversi! ${d.righe.map(r => r.fornId).join(', ')}`);
+    } else {
+      report.push(`   FornitoreID: ${d.righe[0].fornId}`);
+    }
+
+    report.push(`   Attivi: ${attivi}, NonInUso: ${nonInUsoCount}`);
+    
+    d.righe.forEach((r, i) => {
+      const status = r.nonInUso ? '❌ NonInUso' : '✅ Attivo';
+      const dataStr = r.ultimoAgg ? new Date(r.ultimoAgg).toLocaleDateString('it-IT') : 'N/A';
+      report.push(`   ${i + 1}. ${r.codiceInterno} (riga ${r.rowIndex}) - ${status} - Agg: ${dataStr}`);
+    });
+    
+    report.push('');
+  });
+
+  // Mostra report
+  const ui = SpreadsheetApp.getUi();
+  const msg = report.join('\n');
+  
+  if (msg.length > 1000) {
+    // Report troppo lungo - crea foglio
+    _createDuplicatiDiagnosisSheet(ss, duplicati);
+    ui.alert('Diagnostica Duplicati', 
+      `Trovati ${duplicati.length} prodotti con duplicati.\n\n` +
+      `Report dettagliato creato nel foglio "Diagnostica Duplicati".\n\n` +
+      `Usa il modulo 124_prodotti_cleanup.js per pulire.`,
+      ui.ButtonSet.OK);
+  } else {
+    ui.alert('Diagnostica Duplicati', msg, ui.ButtonSet.OK);
+  }
+
+  LOG.info('DIAGNOSTICA_DUPLICATI', `Trovati ${duplicati.length} prodotti con duplicati.`);
+}
+
+/**
+ * Crea foglio diagnostico per analisi duplicati.
+ * @private
+ */
+function _createDuplicatiDiagnosisSheet(ss, duplicati) {
+  const sheetName = 'Diagnostica Duplicati';
+  let sheet = ss.getSheetByName(sheetName);
+  
+  if (sheet) {
+    ss.deleteSheet(sheet);
+  }
+  
+  sheet = ss.insertSheet(sheetName);
+  
+  // Headers
+  const headers = [
+    'CodiceFornitore',
+    'Descrizione',
+    'FornitoreID',
+    'Totale Copie',
+    'Attivi',
+    'NonInUso',
+    'Causa Probabile',
+    'CodiciInterni (separati da |)',
+    'Date UltimoAgg'
+  ];
+  
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285f4').setFontColor('white');
+  
+  // Data
+  const data = duplicati.map(d => {
+    const fornitoriDiversi = new Set(d.righe.map(r => r.fornId)).size > 1;
+    const nonInUsoCount = d.righe.filter(r => r.nonInUso === true).length;
+    const attivi = d.righe.length - nonInUsoCount;
+    
+    let causa = '';
+    if (fornitoriDiversi) {
+      causa = 'Fornitori Diversi';
+    } else if (attivi > 1) {
+      causa = 'Modifiche Manuali / Race Condition';
+    } else if (attivi === 1 && nonInUsoCount > 0) {
+      causa = 'Storicizzazione (OK)';
+    } else {
+      causa = 'Sconosciuta';
+    }
+    
+    const codiciInterni = d.righe.map(r => r.codiceInterno).join(' | ');
+    const date = d.righe.map(r => r.ultimoAgg ? new Date(r.ultimoAgg).toLocaleDateString('it-IT') : 'N/A').join(' | ');
+    
+    return [
+      d.codiceFornitore,
+      d.righe[0].descrizione,
+      d.righe[0].fornId,
+      d.count,
+      attivi,
+      nonInUsoCount,
+      causa,
+      codiciInterni,
+      date
+    ];
+  });
+  
+  if (data.length > 0) {
+    sheet.getRange(2, 1, data.length, headers.length).setValues(data);
+  }
+  
+  // Formattazione
+  sheet.autoResizeColumns(1, headers.length);
+  sheet.setFrozenRows(1);
+  
+  // Evidenzia problemi
+  const causeRange = sheet.getRange(2, 7, data.length, 1);
+  const causeValues = causeRange.getValues();
+  causeValues.forEach((row, i) => {
+    const cellRange = sheet.getRange(i + 2, 7);
+    if (row[0] === 'Fornitori Diversi') {
+      cellRange.setBackground('#ea4335').setFontColor('white');
+    } else if (row[0] === 'Modifiche Manuali / Race Condition') {
+      cellRange.setBackground('#fbbc04').setFontColor('black');
+    } else if (row[0] === 'Storicizzazione (OK)') {
+      cellRange.setBackground('#34a853').setFontColor('white');
+    }
+  });
+  
+  LOG.info('DIAGNOSTICA_DUPLICATI', `Creato foglio diagnostico con ${data.length} righe.`);
+}
 
 /**
  * Sincronizza foglio Prodotti dalle righe fatture.
