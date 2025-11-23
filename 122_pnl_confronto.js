@@ -208,7 +208,7 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   let currentRow = startRow;
   
   // Titolo
-  sheet.getRange(currentRow, 1, 1, 6).merge()
+  sheet.getRange(currentRow, 1, 1, 7).merge()
     .setValue(`CONFRONTO P&L GELATERIA - ANNO ${anno}`)
     .setFontWeight('bold')
     .setHorizontalAlignment('center')
@@ -216,8 +216,8 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   currentRow++;
   
   // Header
-  const headers = ['Voce', 'Gemma', 'Zaffiro', 'Delta €', 'Delta %', '% su Fatturato Gemma'];
-  sheet.getRange(currentRow, 1, 1, 6).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
+  const headers = ['Voce', 'Gemma', 'Zaffiro', 'Delta €', 'Delta %', '% Fatt. Gemma', '% Fatt. Zaffiro'];
+  sheet.getRange(currentRow, 1, 1, 7).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
   currentRow++;
   
   // Helper per ottenere valori
@@ -247,6 +247,7 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   sheet.getRange(currentRow, 4).setValue(deltaFatt).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 5).setValue(deltaPercFatt / 100).setNumberFormat(percentFormat);
   sheet.getRange(currentRow, 6).setValue(calcPercentOnFatt(fattGemma, fattGemma) / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 7).setValue(calcPercentOnFatt(fattZaffiro, fattZaffiro) / 100).setNumberFormat(percentFormat);
   currentRow++;
   
   const rigaFattInc = currentRow;
@@ -261,6 +262,7 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   sheet.getRange(currentRow, 4).setValue(deltaFattInc).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 5).setValue(deltaPercFattInc / 100).setNumberFormat(percentFormat);
   sheet.getRange(currentRow, 6).setValue(calcPercentOnFatt(fattIncGemma, fattGemma) / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 7).setValue(calcPercentOnFatt(fattIncZaffiro, fattZaffiro) / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
@@ -276,6 +278,7 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   sheet.getRange(currentRow, 4).setValue(deltaTotRicavi).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 5).setValue(deltaPercTotRicavi / 100).setNumberFormat(percentFormat);
   sheet.getRange(currentRow, 6).setValue(1.0).setNumberFormat(percentFormat); // 100%
+  sheet.getRange(currentRow, 7).setValue(1.0).setNumberFormat(percentFormat); // 100%
   currentRow++;
   currentRow++; // Spazio
   
@@ -289,14 +292,16 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
     
     const delta = valGemma - valZaffiro;
     const deltaPerc = calcDeltaPercent(valGemma, valZaffiro);
-    const percOnFatt = calcPercentOnFatt(valGemma, totRicaviGemma);
+    const percOnFattGemma = calcPercentOnFatt(valGemma, totRicaviGemma);
+    const percOnFattZaffiro = calcPercentOnFatt(valZaffiro, totRicaviZaffiro);
     
     sheet.getRange(currentRow, 1).setValue(famiglia);
     sheet.getRange(currentRow, 2).setValue(valGemma).setNumberFormat(currencyFormat);
     sheet.getRange(currentRow, 3).setValue(valZaffiro).setNumberFormat(currencyFormat);
     sheet.getRange(currentRow, 4).setValue(delta).setNumberFormat(currencyFormat);
     sheet.getRange(currentRow, 5).setValue(deltaPerc / 100).setNumberFormat(percentFormat);
-    sheet.getRange(currentRow, 6).setValue(percOnFatt / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 6).setValue(percOnFattGemma / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 7).setValue(percOnFattZaffiro / 100).setNumberFormat(percentFormat);
     currentRow++;
   });
   currentRow++; // Spazio
@@ -305,14 +310,16 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   const rigaC1 = currentRow;
   const deltaC1 = valoriCostiOp.gemma - valoriCostiOp.zaffiro;
   const deltaPercC1 = calcDeltaPercent(valoriCostiOp.gemma, valoriCostiOp.zaffiro);
-  const percC1OnFatt = calcPercentOnFatt(valoriCostiOp.gemma, totRicaviGemma);
+  const percC1OnFattGemma = calcPercentOnFatt(valoriCostiOp.gemma, totRicaviGemma);
+  const percC1OnFattZaffiro = calcPercentOnFatt(valoriCostiOp.zaffiro, totRicaviZaffiro);
   
   sheet.getRange(currentRow, 1).setValue('C1 - DI CUI OPERATIVI').setFontWeight('bold').setBackground('#f3f3f3');
   sheet.getRange(currentRow, 2).setValue(valoriCostiOp.gemma).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 3).setValue(valoriCostiOp.zaffiro).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 4).setValue(deltaC1).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 5).setValue(deltaPercC1 / 100).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setValue(percC1OnFatt / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(percC1OnFattGemma / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 7).setValue(percC1OnFattZaffiro / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
@@ -322,14 +329,16 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   const gopZaffiro = totRicaviZaffiro - valoriCostiOp.zaffiro;
   const deltaGOP = gopGemma - gopZaffiro;
   const deltaPercGOP = calcDeltaPercent(gopGemma, gopZaffiro);
-  const percGOPOnFatt = calcPercentOnFatt(gopGemma, totRicaviGemma);
+  const percGOPOnFattGemma = calcPercentOnFatt(gopGemma, totRicaviGemma);
+  const percGOPOnFattZaffiro = calcPercentOnFatt(gopZaffiro, totRicaviZaffiro);
   
   sheet.getRange(currentRow, 1).setValue('GOP (A - C1)').setFontWeight('bold').setBackground('#e0e0e0');
   sheet.getRange(currentRow, 2).setValue(gopGemma).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 3).setValue(gopZaffiro).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 4).setValue(deltaGOP).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 5).setValue(deltaPercGOP / 100).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setValue(percGOPOnFatt / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(percGOPOnFattGemma / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 7).setValue(percGOPOnFattZaffiro / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
@@ -343,14 +352,16 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
     
     const delta = valGemma - valZaffiro;
     const deltaPerc = calcDeltaPercent(valGemma, valZaffiro);
-    const percOnFatt = calcPercentOnFatt(valGemma, totRicaviGemma);
+    const percOnFattGemma = calcPercentOnFatt(valGemma, totRicaviGemma);
+    const percOnFattZaffiro = calcPercentOnFatt(valZaffiro, totRicaviZaffiro);
     
     sheet.getRange(currentRow, 1).setValue(famiglia);
     sheet.getRange(currentRow, 2).setValue(valGemma).setNumberFormat(currencyFormat);
     sheet.getRange(currentRow, 3).setValue(valZaffiro).setNumberFormat(currencyFormat);
     sheet.getRange(currentRow, 4).setValue(delta).setNumberFormat(currencyFormat);
     sheet.getRange(currentRow, 5).setValue(deltaPerc / 100).setNumberFormat(percentFormat);
-    sheet.getRange(currentRow, 6).setValue(percOnFatt / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 6).setValue(percOnFattGemma / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 7).setValue(percOnFattZaffiro / 100).setNumberFormat(percentFormat);
     currentRow++;
   });
   currentRow++; // Spazio
@@ -361,14 +372,16 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   const totCostiZaffiro = valoriCostiOp.zaffiro + valoriAltriCosti.zaffiro;
   const deltaTotCosti = totCostiGemma - totCostiZaffiro;
   const deltaPercTotCosti = calcDeltaPercent(totCostiGemma, totCostiZaffiro);
-  const percTotCostiOnFatt = calcPercentOnFatt(totCostiGemma, totRicaviGemma);
+  const percTotCostiOnFattGemma = calcPercentOnFatt(totCostiGemma, totRicaviGemma);
+  const percTotCostiOnFattZaffiro = calcPercentOnFatt(totCostiZaffiro, totRicaviZaffiro);
   
   sheet.getRange(currentRow, 1).setValue('C - TOTALE COSTI').setFontWeight('bold').setBackground('#f3f3f3');
   sheet.getRange(currentRow, 2).setValue(totCostiGemma).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 3).setValue(totCostiZaffiro).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 4).setValue(deltaTotCosti).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 5).setValue(deltaPercTotCosti / 100).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setValue(percTotCostiOnFatt / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(percTotCostiOnFattGemma / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 7).setValue(percTotCostiOnFattZaffiro / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
@@ -378,14 +391,16 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   const molZaffiro = totRicaviZaffiro - totCostiZaffiro;
   const deltaMOL = molGemma - molZaffiro;
   const deltaPercMOL = calcDeltaPercent(molGemma, molZaffiro);
-  const percMOLOnFatt = calcPercentOnFatt(molGemma, totRicaviGemma);
+  const percMOLOnFattGemma = calcPercentOnFatt(molGemma, totRicaviGemma);
+  const percMOLOnFattZaffiro = calcPercentOnFatt(molZaffiro, totRicaviZaffiro);
   
   sheet.getRange(currentRow, 1).setValue('MOL (A-C)').setFontWeight('bold').setBackground('#e0e0e0');
   sheet.getRange(currentRow, 2).setValue(molGemma).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 3).setValue(molZaffiro).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 4).setValue(deltaMOL).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 5).setValue(deltaPercMOL / 100).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setValue(percMOLOnFatt / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(percMOLOnFattGemma / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 7).setValue(percMOLOnFattZaffiro / 100).setNumberFormat(percentFormat);
   currentRow++;
   
   return currentRow;
