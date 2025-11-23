@@ -81,7 +81,7 @@ const DEBUG = (function () {
 
   /**
    * Riallinea Famiglia e Categoria nei fogli storici (Fatture, Righe). Resumibile.
-   * CORRETTO: Aggiorna SOLO le celle Famiglia o Categoria VUOTE.
+   * AGGIORNATO: Sovrascrive SEMPRE i campi con i valori aggiornati dai Fornitori.
    */
   function syncCategoriesRetroactive() {
     const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
@@ -152,7 +152,7 @@ const DEBUG = (function () {
           LOG.warn('SYNC_CATEGORIES', `Timeout ${sheetName}. Ripresa salvata.`);
         },
         processChunk: (chunkData, chunkStartRow) => {
-          // --- LOGICA CORRETTA (SOLO CELLE VUOTE) ---
+          // --- LOGICA AGGIORNAMENTO FORZATO (SOVRASCRIVE SEMPRE DAI FORNITORI) ---
           for (let j = 0; j < chunkData.length; j++) {
             const rowData = chunkData[j];
             const rowNum = chunkStartRow + j;
@@ -172,20 +172,20 @@ const DEBUG = (function () {
             let needsUpdate = false;
             let rowUpdates = {}; // Aggiornamenti solo per questa riga
 
-            // Condizione 1: Famiglia è vuota E il fornitore ha una famiglia da impostare
-            if (existingFamiglia === '' && curr.famiglia) {
+            // Condizione 1: Famiglia diversa dal fornitore → aggiorna sempre
+            if (curr.famiglia && existingFamiglia !== curr.famiglia) {
               rowUpdates[idx.Famiglia] = curr.famiglia;
               needsUpdate = true;
             }
 
-            // Condizione 2: Categoria è vuota E il fornitore ha una categoria da impostare
-            if (existingCategoria === '' && curr.categoria) {
+            // Condizione 2: Categoria diversa dal fornitore → aggiorna sempre
+            if (curr.categoria && existingCategoria !== curr.categoria) {
               rowUpdates[idx.Categoria] = curr.categoria;
               needsUpdate = true;
             }
             
-            // Condizione 3: Reparto è vuoto E il fornitore ha un reparto da impostare (solo per Fatture)
-            if (existingReparto !== null && existingReparto === '' && curr.reparto && curr.reparto !== '' && sheetName === SHEETS.SHEET_NAMES.Fatture) {
+            // Condizione 3: Reparto diverso dal fornitore → aggiorna sempre (solo per Fatture)
+            if (existingReparto !== null && curr.reparto && curr.reparto !== '' && existingReparto !== curr.reparto && sheetName === SHEETS.SHEET_NAMES.Fatture) {
               rowUpdates[idx.Reparto] = curr.reparto;
               needsUpdate = true;
             }
@@ -200,7 +200,7 @@ const DEBUG = (function () {
           // Flush periodico
           if (Object.keys(updates).length >= CHUNK_SIZE * 2) {
             const flushed = UTIL.updateSheetInPlace(sh, updates, headerRow);
-            LOG.info('SYNC_CATEGORIES', `Aggiornate ${flushed} celle vuote in ${sheetName}.`);
+            LOG.info('SYNC_CATEGORIES', `Aggiornate ${flushed} celle in ${sheetName}.`);
             updates = {};
           }
 
@@ -219,7 +219,7 @@ const DEBUG = (function () {
       // Flush finale per questo foglio
       if (Object.keys(updates).length > 0) {
         const flushed = UTIL.updateSheetInPlace(sh, updates, headerRow);
-        LOG.info('SYNC_CATEGORIES', `Aggiornate ${flushed} celle vuote in ${sheetName} (finale).`);
+        LOG.info('SYNC_CATEGORIES', `Aggiornate ${flushed} celle in ${sheetName} (finale).`);
         updates = {};
       }
 
@@ -228,8 +228,8 @@ const DEBUG = (function () {
     }
 
     STATE.clear(SYNC_CAT_CURSOR_KEY);
-    UTIL.showToast('Riallineamento categorie (solo vuote) completato!', 'Fatto!');
-    LOG.info('SYNC_CATEGORIES', 'Completato per tutti i fogli (solo celle vuote).');
+    UTIL.showToast('Riallineamento categorie completato!', 'Fatto!');
+    LOG.info('SYNC_CATEGORIES', 'Completato per tutti i fogli.');
   }
 
   /**
