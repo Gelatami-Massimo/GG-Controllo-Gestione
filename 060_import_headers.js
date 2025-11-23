@@ -509,34 +509,41 @@ const IMPORT_HEADERS = (function () {
   // Reparto di default per le fatture
   // ============================================================
   /**
-   * Calcola il reparto per una fattura basato su destinazione.
-   * Se il reparto è già valorizzato, non lo modifica (correzioni manuali).
+   * Calcola il reparto per una fattura basato su:
+   * 1. Reparto già esistente nella fattura (correzioni manuali)
+   * 2. Reparto di default dal fornitore
+   * 3. Logica destinazione (VIA NAZIONALE 202 = Hotel)
+   * 4. Default: Gelateria
    * 
    * @param {string} destinazione - Indirizzo di destinazione della fattura
    * @param {string} repartoEsistente - Valore corrente di Reparto (se presente)
-   * @return {string} Reparto finale calcolato o esistente
+   * @param {string} repartoFornitore - Reparto di default dal fornitore
+   * @return {string} Reparto finale calcolato
    */
-  function computeRepartoForFattura_(destinazione, repartoEsistente) {
-    // Se il reparto è già valorizzato, non lo tocchiamo (consente correzioni manuali)
+  function computeRepartoForFattura_(destinazione, repartoEsistente, repartoFornitore) {
+    // 1. Se il reparto è già valorizzato nella fattura, non lo tocchiamo (correzioni manuali)
     if (repartoEsistente && String(repartoEsistente).trim() !== '') {
       return repartoEsistente;
     }
     
-    // Normalizza la destinazione per confronto case-insensitive
+    // 2. Usa il reparto di default dal fornitore se presente
+    if (repartoFornitore && String(repartoFornitore).trim() !== '') {
+      return repartoFornitore;
+    }
+    
+    // 3. Normalizza la destinazione per confronto case-insensitive
     const dest = String(destinazione || '')
       .toUpperCase()
       .replace(/\s+/g, ' ')
       .trim();
     
-    // Default per tutti i casi
-    let reparto = 'Gelateria';
-    
-    // Logica specifica: se destinazione contiene 'VIA NAZIONALE 202', reparto = Hotel
+    // 4. Logica specifica destinazione: VIA NAZIONALE 202 = Hotel
     if (dest.indexOf('VIA NAZIONALE 202') !== -1) {
-      reparto = 'Hotel';
+      return 'Hotel';
     }
     
-    return reparto;
+    // 5. Default finale
+    return 'Gelateria';
   }
 
   // ============================================================
@@ -637,10 +644,12 @@ const IMPORT_HEADERS = (function () {
         // ✅ Destinazione: compone l'indirizzo di destinazione dalla fattura XML
         const destinazione = data.indirizzoCliente || '';
         
-        // ✅ Calcola Reparto usando computeRepartoForFattura_
-        // Durante import di nuove fatture, repartoEsistente è sempre vuoto,
-        // quindi il reparto viene sempre calcolato dalla destinazione
-        const reparto = computeRepartoForFattura_(destinazione, '');
+        // ✅ Calcola Reparto usando:
+        // 1. Reparto esistente (vuoto per nuove fatture)
+        // 2. Reparto di default dal fornitore
+        // 3. Logica destinazione
+        // 4. Default Gelateria
+        const reparto = computeRepartoForFattura_(destinazione, '', supplierInfo.reparto);
         
         const numeroDocFormatted = UTIL.forceText(data.doc.numero);
 
