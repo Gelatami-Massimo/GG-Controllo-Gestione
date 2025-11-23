@@ -186,7 +186,7 @@ const SHEETS = (function () {
     // --- SCHEMA DATI MENSILI ---
     'Dati Mensili': [
       'Sede', 'AnnoMese', 'Anno', 'Mese', 'Fatturato', 'Costo Personale',
-      'Costi', 'Fatture Ricevute', 'Spese Bancarie', 'Altre Spese N/F'
+      'Costi', 'Fatture Incassate', 'Spese Bancarie', 'Altre Spese N/F', 'N. Doc'
     ],
     // --- Filtro Righe Spazzatura ---
     'Filtro Righe Spazzatura': ['ParolaChiaveDaIgnorare', 'Note'],
@@ -626,9 +626,10 @@ const SHEETS = (function () {
           format: '€ #,##0.00;[Red]-€ #,##0.00;€ 0.00',
           cols: [
             'Fatturato', 'Costo Personale',
-            'Costi', 'Fatture Ricevute', 'Spese Bancarie', 'Altre Spese N/F'
+            'Costi', 'Fatture Incassate', 'Spese Bancarie', 'Altre Spese N/F'
           ]
-        }
+        },
+        { format: '#,##0', cols: ['N. Doc'] }
       ],
       [SHEET_NAMES.Filtro_Righe_Spazzatura]: [
         { format: '@', cols: ['ParolaChiaveDaIgnorare', 'Note'] }
