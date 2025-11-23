@@ -48,6 +48,8 @@ function onOpen() {
   menu.addSubMenu(ui.createMenu('📊 Analisi')
     .addItem('Dashboard', App.ui.fn.runCreateDashboard)
     .addItem('P&L', App.ui.fn.runCreatePnlSheet)
+    .addItem('📊 Confronto Gemma-Zaffiro', 'runCreatePnlConfrontoGemmaZaffiro')
+    .addSeparator()
     .addItem('Magazzino', 'buildMagazzinoByYear')
     .addItem('Mag. Ingredienti', 'buildMagazzinoIngredientiByYear')
     .addSeparator()
@@ -372,6 +374,19 @@ function openTriggerStatusSheet() {
   } catch (e) {
     LOG?.error('UI', 'Errore apertura Trigger Status', { error: e.message });
     throw e;
+  }
+}
+
+/**
+ * Wrapper per menu: crea confronto P&L Gemma vs Zaffiro
+ * @returns {void}
+ */
+function runCreatePnlConfrontoGemmaZaffiro() {
+  try {
+    createPnlConfrontoGemmaZaffiro();
+  } catch (e) {
+    LOG?.error('UI', 'Errore creazione confronto Gemma-Zaffiro', { error: e.message });
+    SpreadsheetApp.getUi().alert('Errore durante la creazione del confronto: ' + e.message);
   }
 }
 
