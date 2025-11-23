@@ -957,11 +957,18 @@ function _sortFamilies(famList, VOCE_CEDOLINI) {
 /**
  * Legge il foglio "Aziende" e crea una mappa Sede → Azienda (Gemma/Zaffiro).
  * Necessario perché il campo "azienda" non è presente in "Dati Mensili" ma in "Aziende".
+ * Inferisce l'azienda dalla P_IVA: 4230940167 = Gemma, 4489830986 = Zaffiro
  * @returns {Map<string, string>} Mappa Sede → Azienda
  * @private
  */
 function _getAziendaMap() {
   const aziendaMap = new Map();
+  
+  // Mapping P_IVA → Azienda (hardcoded per robustezza)
+  const pIvaToAzienda = {
+    '4230940167': 'Gemma',
+    '4489830986': 'Zaffiro'
+  };
   
   try {
     const shAziende = SHEETS.get('Aziende');
@@ -980,21 +987,26 @@ function _getAziendaMap() {
 
     const idx = SHEETS.headerIndex('Aziende');
     
-    // Verifica che le colonne necessarie esistano
-    if (idx.Sede === undefined || idx.Azienda === undefined) {
-      LOG.error('PNL_AZIENDA_MAP', 'Colonne "Sede" o "Azienda" non trovate nel foglio "Aziende".');
+    // Verifica che le colonne necessarie esistano (P_IVA_Azienda e Nome_Sede)
+    if (idx.P_IVA_Azienda === undefined || idx.Nome_Sede === undefined) {
+      LOG.error('PNL_AZIENDA_MAP', 'Colonne "P_IVA_Azienda" o "Nome_Sede" non trovate nel foglio "Aziende".');
       return aziendaMap;
     }
 
-    const maxCol = Math.max(idx.Sede, idx.Azienda) + 1;
+    const maxCol = Math.max(idx.P_IVA_Azienda, idx.Nome_Sede) + 1;
     const rows = shAziende.getRange(headerRow + 1, 1, lastRow - headerRow, maxCol).getValues();
 
     rows.forEach(row => {
-      const sede = String(row[idx.Sede] ?? '').trim();
-      const azienda = String(row[idx.Azienda] ?? '').trim();
+      const pIva = String(row[idx.P_IVA_Azienda] ?? '').trim();
+      const sede = String(row[idx.Nome_Sede] ?? '').trim();
       
-      if (sede && azienda) {
-        aziendaMap.set(sede, azienda);
+      if (sede && pIva) {
+        const azienda = pIvaToAzienda[pIva];
+        if (azienda) {
+          aziendaMap.set(sede, azienda);
+        } else {
+          LOG.warn('PNL_AZIENDA_MAP', `P_IVA non riconosciuta per sede "${sede}": ${pIva}`);
+        }
       }
     });
 
