@@ -165,8 +165,12 @@ function createPnlSheet() {
     mesi.forEach((dati, annoMese) => {
       tuttiIMesi.add(annoMese);
       const { fatturato, personale, azienda, reparto } = dati;
+      
+      // LOGICA REPARTO: Zaffiro ignora sempre il reparto (solo Gelateria), Gemma usa il reparto
+      const repartoEffettivo = (azienda === 'Zaffiro') ? 'Gelateria' : reparto;
+      
       // Perimetro gelateria
-      if (isGelateria(reparto)) {
+      if (isGelateria(repartoEffettivo)) {
         pnlGlobaleGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlGlobaleGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + fatturato);
         pnlGlobaleGelateria.get(VOCE_CEDOLINI).set(annoMese, (pnlGlobaleGelateria.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
         if (azienda === 'Gemma') {
@@ -178,8 +182,8 @@ function createPnlSheet() {
           pnlZaffiroGelateria.get(VOCE_CEDOLINI).set(annoMese, (pnlZaffiroGelateria.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
         }
       }
-      // Perimetro hotel
-      if (isHotel(reparto)) {
+      // Perimetro hotel (solo Gemma, Zaffiro sempre Gelateria)
+      if (isHotel(repartoEffettivo)) {
         pnlHotel.get(VOCE_FATTURATO).set(annoMese, (pnlHotel.get(VOCE_FATTURATO).get(annoMese) ?? 0) + fatturato);
         pnlHotel.get(VOCE_CEDOLINI).set(annoMese, (pnlHotel.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
       }
@@ -204,8 +208,11 @@ function createPnlSheet() {
         tutteLeFamiglie.add(famiglia);
         const { costoNetto, reparto, azienda } = infoFamiglia;
         
-        // Perimetro gelateria (escludi Hotel solo da Gemma, Zaffiro ha solo Gelateria)
-        if (isGelateria(reparto)) {
+        // LOGICA REPARTO: Zaffiro ignora sempre il reparto (solo Gelateria), Gemma usa il reparto
+        const repartoEffettivo = (azienda === 'Zaffiro') ? 'Gelateria' : reparto;
+        
+        // Perimetro gelateria (escludi Hotel solo da Gemma, Zaffiro sempre Gelateria)
+        if (isGelateria(repartoEffettivo)) {
           if (!pnlGlobaleGelateria.has(famiglia)) pnlGlobaleGelateria.set(famiglia, new Map());
           pnlGlobaleGelateria.get(famiglia).set(annoMese, (pnlGlobaleGelateria.get(famiglia).get(annoMese) ?? 0) + costoNetto);
           
@@ -220,7 +227,7 @@ function createPnlSheet() {
         }
         
         // Perimetro hotel: aggrega separatamente solo per Gemma (Zaffiro non ha Hotel)
-        if (isHotel(reparto)) {
+        if (isHotel(repartoEffettivo)) {
           if (!pnlHotel.has(famiglia)) pnlHotel.set(famiglia, new Map());
           pnlHotel.get(famiglia).set(annoMese, (pnlHotel.get(famiglia).get(annoMese) ?? 0) + costoNetto);
           
