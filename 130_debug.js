@@ -1537,6 +1537,164 @@ const DEBUG = (function () {
   }
 
   /**
+   * DEV_DebugCostiHotelLoop()
+   * Debug del loop di aggregazione costi Hotel nel P&L.
+   * Verifica esattamente cosa succede nel loop alle righe 202-238 di 120_pnl.js
+   */
+  function DEV_DebugCostiHotelLoop() {
+    LOG.info('DEV_HOTEL_LOOP', '=== DEBUG LOOP AGGREGAZIONE HOTEL ===');
+    
+    const ui = SpreadsheetApp.getUi();
+    let report = '🐛 DEBUG LOOP AGGREGAZIONE HOTEL\n\n';
+    
+    try {
+      // Replica esatta della logica P&L per capire il bug
+      
+      // 1. aziendaMap
+      const shAziende = SHEETS.get('Aziende');
+      const headerRowAz = SHEETS._findHeaderRow(shAziende, 'Aziende');
+      const idxAz = SHEETS.headerIndex('Aziende');
+      const rowsAz = shAziende.getRange(headerRowAz + 1, 1, shAziende.getLastRow() - headerRowAz, Math.max(idxAz.P_IVA_Azienda, idxAz.Nome_Sede) + 1).getValues();
+      
+      const pIvaToAzienda = {
+        '4230940167': 'Gemma',
+        '4489830986': 'Zaffiro'
+      };
+      
+      const aziendaMap = new Map();
+      rowsAz.forEach(row => {
+        const pIva = String(row[idxAz.P_IVA_Azienda] || '').trim();
+        const sede = String(row[idxAz.Nome_Sede] || '').trim();
+        if (pIva && sede && pIvaToAzienda[pIva]) {
+          aziendaMap.set(sede, pIvaToAzienda[pIva]);
+        }
+      });
+      
+      report += `✅ AZIENDA MAP:\n`;
+      aziendaMap.forEach((az, sede) => {
+        report += `  • "${sede}" → "${az}"\n`;
+      });
+      report += '\n';
+      
+      // 2. Leggi costiAggregati
+      const shFor = SHEETS.get(SHEETS.SHEET_NAMES.Fornitori);
+      const headerRowFor = SHEETS._findHeaderRow(shFor, SHEETS.SHEET_NAMES.Fornitori);
+      const idxFor = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fornitori);
+      const rowsFor = shFor.getRange(headerRowFor + 1, 1, shFor.getLastRow() - headerRowFor, Math.max(idxFor.FornitoreID, idxFor.Famiglia, idxFor.Reparto ?? 0) + 1).getValues();
+      
+      const famiglieFornitori = new Map();
+      rowsFor.forEach(r => {
+        const idNorm = UTIL.normKey(r[idxFor.FornitoreID]).replace(/^0+/, '');
+        if (!idNorm) return;
+        const fam = String(r[idxFor.Famiglia] ?? '').trim() || 'Non Categorizzato';
+        const reparto = idxFor.Reparto !== undefined ? String(r[idxFor.Reparto] ?? '').trim() : null;
+        famiglieFornitori.set(idNorm, { famiglia: fam, reparto, azienda: null });
+      });
+      
+      const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+      const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
+      const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
+      
+      const lastCol = Math.max(idxF.Sede, idxF.Data, idxF.TotImponibile, idxF.FornitoreID, idxF.Reparto ?? 0) + 1;
+      const rowsF = shF.getRange(headerRowF + 1, 1, shF.getLastRow() - headerRowF, lastCol).getValues();
+      
+      const costiAggregati = new Map();
+      
+      rowsF.forEach(r => {
+        const sede = String(r[idxF.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
+        const data = r[idxF.Data];
+        if (!(data instanceof Date) || isNaN(data.getTime())) return;
+        
+        const ym = `${data.getFullYear()}-${('0' + (data.getMonth() + 1)).slice(-2)}`;
+        const idNorm = UTIL.normKey(r[idxF.FornitoreID]).replace(/^0+/, '');
+        const infoFornitore = famiglieFornitori.get(idNorm) || { famiglia: 'Non Categorizzato', reparto: null };
+        const famiglia = infoFornitore.famiglia;
+        
+        const repartoFattura = idxF.Reparto !== undefined ? String(r[idxF.Reparto] ?? '').trim() : null;
+        const reparto = repartoFattura || infoFornitore.reparto;
+        const azienda = aziendaMap.get(sede) || infoFornitore.azienda;
+        const costoNetto = UTIL.parseNumSmart(r[idxF.TotImponibile]);
+        
+        if (!costiAggregati.has(sede)) costiAggregati.set(sede, new Map());
+        const m = costiAggregati.get(sede);
+        if (!m.has(ym)) m.set(ym, new Map());
+        const famMap = m.get(ym);
+        
+        // CHIAVE: Famiglia + Reparto (come nel P&L fixato)
+        const chiaveAggregazione = `${famiglia}|${reparto || 'NoReparto'}`;
+        
+        if (!famMap.has(chiaveAggregazione)) {
+          famMap.set(chiaveAggregazione, { costoNetto: 0, reparto, azienda, famiglia });
+        }
+        const curr = famMap.get(chiaveAggregazione);
+        curr.costoNetto += costoNetto;
+        // Non sovrascrivere reparto/azienda
+      });
+      
+      // 3. Simula il loop del P&L
+      report += '🔄 SIMULAZIONE LOOP P&L (solo Hotel Gemma 2025):\n\n';
+      
+      const costiHotelGemma = new Map();
+      costiHotelGemma.set('COSTI HOTEL', new Map());
+      
+      let processed = 0;
+      let aggregated = 0;
+      
+      costiAggregati.forEach((mesi, sede) => {
+        mesi.forEach((costiPerChiave, annoMese) => {
+          const anno = annoMese.split('-')[0];
+          if (anno !== '2025') return; // Filtra solo 2025
+          
+          costiPerChiave.forEach((infoFamiglia, chiaveAggregazione) => {
+            const { costoNetto, reparto, azienda, famiglia } = infoFamiglia;
+            
+            // Replica logica P&L
+            const repartoEffettivo = (azienda === 'Zaffiro') ? 'Gelateria' : reparto;
+            const isHotelCheck = repartoEffettivo && String(repartoEffettivo).toLowerCase() === 'hotel';
+            
+            if (isHotelCheck) {
+              processed++;
+              report += `${annoMese} | Chiave="${chiaveAggregazione}" | Sede="${sede}" | Fam="${famiglia}" | Rep="${reparto}" | Az="${azienda}" | €${costoNetto.toFixed(2)}\n`;
+              report += `  → repartoEffettivo="${repartoEffettivo}" | isHotel=${isHotelCheck}\n`;
+              
+              if (azienda === 'Gemma') {
+                aggregated++;
+                costiHotelGemma.get('COSTI HOTEL').set(annoMese, (costiHotelGemma.get('COSTI HOTEL').get(annoMese) ?? 0) + costoNetto);
+                report += `  ✅ AGGREGATO in costiHotelGemma\n`;
+              } else {
+                report += `  ❌ NON AGGREGATO: azienda="${azienda}" (non === "Gemma")\n`;
+              }
+              report += '\n';
+            }
+          });
+        });
+      });
+      
+      report += `\n📊 RISULTATO SIMULAZIONE:\n`;
+      report += `Righe Hotel 2025 processate: ${processed}\n`;
+      report += `Righe aggregate in costiHotelGemma: ${aggregated}\n\n`;
+      
+      report += `💰 TOTALE costiHotelGemma:\n`;
+      const mesi = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+      let totale = 0;
+      costiHotelGemma.get('COSTI HOTEL').forEach((costo, annoMese) => {
+        const [anno, mese] = annoMese.split('-');
+        report += `${mesi[parseInt(mese)-1]} ${anno.slice(-2)}: €${costo.toFixed(2)}\n`;
+        totale += costo;
+      });
+      report += `\n✅ TOTALE: €${totale.toFixed(2)}\n`;
+      
+      LOG.info('DEV_HOTEL_LOOP', report);
+      ui.alert('🐛 Debug Loop Hotel', report, ui.ButtonSet.OK);
+      
+    } catch (e) {
+      report += `\n❌ ERRORE: ${e.message}\n`;
+      LOG.error('DEV_HOTEL_LOOP', 'Errore debug loop', { error: e.message, stack: e.stack });
+      ui.alert('Errore Debug', report, ui.ButtonSet.OK);
+    }
+  }
+
+  /**
    * DEV_ResetAllImportFlags()
    * Resetta i flag di import righe su TUTTE le fatture.
    * ATTENZIONE: Usa solo DOPO aver eliminato tutte le righe dal foglio "Righe".
@@ -1665,7 +1823,8 @@ const DEBUG = (function () {
     DEV_ResetAllImportFlags: DEV_ResetAllImportFlags,
     DEV_DiagnoseHotelCosts: DEV_DiagnoseHotelCosts,
     DEV_CompareHotelCostsWithPnL: DEV_CompareHotelCostsWithPnL,
-    DEV_InspectAggregatedCosts: DEV_InspectAggregatedCosts
+    DEV_InspectAggregatedCosts: DEV_InspectAggregatedCosts,
+    DEV_DebugCostiHotelLoop: DEV_DebugCostiHotelLoop
   };
 })();
 

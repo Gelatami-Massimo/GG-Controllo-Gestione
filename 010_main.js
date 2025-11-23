@@ -80,6 +80,7 @@ function onOpen() {
     .addItem('🏨 Diagnosi Costi Hotel', 'runDiagnoseHotelCosts')
     .addItem('📊 Confronta Hotel: Fatture vs P&L', 'runCompareHotelCostsWithPnL')
     .addItem('🔍 Ispeziona Aggregazione Costi', 'runInspectAggregatedCosts')
+    .addItem('🐛 Debug Loop Hotel', 'runDebugCostiHotelLoop')
   );
 
   // --- Configurazione ---
@@ -274,6 +275,9 @@ function runCompareHotelCostsWithPnL() { _runSafely(() => DEBUG.DEV_CompareHotel
 
 /** Ispeziona aggregazione costi dal foglio Fatture. @returns {void} */
 function runInspectAggregatedCosts() { _runSafely(() => DEBUG.DEV_InspectAggregatedCosts(), 'Debug Hotel', 'Ispezione aggregazione...', 'Analisi completata!'); }
+
+/** Debug dettagliato loop aggregazione costi Hotel. @returns {void} */
+function runDebugCostiHotelLoop() { _runSafely(() => DEBUG.DEV_DebugCostiHotelLoop(), 'Debug Hotel', 'Debug loop in corso...', 'Debug completato!'); }
 
 /**
  * Scansiona il catalogo Prodotti e disattiva quelli con descrizioni "spazzatura".
