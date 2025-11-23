@@ -161,36 +161,39 @@ function createPnlSheet() {
     pnlPerSede.set(sede, sedeMap);
   });
 
-  // --- Aggrega Dati Mensili (Fatturato, Cedolini) per perimetro ---
+  // --- Aggrega Dati Mensili (Fatturato, Cedolini, Fatture Incassate) per perimetro ---
   dataMensili.forEach((mesi, sede) => {
     mesi.forEach((dati, annoMese) => {
       tuttiIMesi.add(annoMese);
-      const { fatturato, personale, azienda, reparto } = dati;
+      const { fatturato, personale, fattureIncassate, azienda, reparto } = dati;
       
       // LOGICA REPARTO: Zaffiro ignora sempre il reparto (solo Gelateria), Gemma usa il reparto
       const repartoEffettivo = (azienda === 'Zaffiro') ? 'Gelateria' : reparto;
       
+      // Calcola ricavi totali (fatturato + fatture incassate)
+      const ricaviTotali = fatturato + (fattureIncassate || 0);
+      
       // Perimetro gelateria
       if (isGelateria(repartoEffettivo)) {
-        pnlGlobaleGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlGlobaleGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + fatturato);
+        pnlGlobaleGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlGlobaleGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + ricaviTotali);
         pnlGlobaleGelateria.get(VOCE_CEDOLINI).set(annoMese, (pnlGlobaleGelateria.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
         if (azienda === 'Gemma') {
-          pnlGemmaGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlGemmaGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + fatturato);
+          pnlGemmaGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlGemmaGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + ricaviTotali);
           pnlGemmaGelateria.get(VOCE_CEDOLINI).set(annoMese, (pnlGemmaGelateria.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
         }
         if (azienda === 'Zaffiro') {
-          pnlZaffiroGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlZaffiroGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + fatturato);
+          pnlZaffiroGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlZaffiroGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + ricaviTotali);
           pnlZaffiroGelateria.get(VOCE_CEDOLINI).set(annoMese, (pnlZaffiroGelateria.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
         }
       }
       // Perimetro hotel (solo Gemma, Zaffiro sempre Gelateria)
       if (isHotel(repartoEffettivo)) {
-        pnlHotel.get(VOCE_FATTURATO).set(annoMese, (pnlHotel.get(VOCE_FATTURATO).get(annoMese) ?? 0) + fatturato);
+        pnlHotel.get(VOCE_FATTURATO).set(annoMese, (pnlHotel.get(VOCE_FATTURATO).get(annoMese) ?? 0) + ricaviTotali);
         pnlHotel.get(VOCE_CEDOLINI).set(annoMese, (pnlHotel.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
       }
       // Sede (come ora)
       const sedePnl = pnlPerSede.get(sede);
-      sedePnl.get(VOCE_FATTURATO)?.set(annoMese, (sedePnl.get(VOCE_FATTURATO)?.get(annoMese) ?? 0) + fatturato);
+      sedePnl.get(VOCE_FATTURATO)?.set(annoMese, (sedePnl.get(VOCE_FATTURATO)?.get(annoMese) ?? 0) + ricaviTotali);
       sedePnl.get(VOCE_CEDOLINI)?.set(annoMese, (sedePnl.get(VOCE_CEDOLINI)?.get(annoMese) ?? 0) + personale);
     });
   });
@@ -752,8 +755,9 @@ function _getDatiMensiliBySede() {
     const idxPersonale = idx.Costo_Personale; // opzionale
     const idxAzienda = idx.Azienda; // opzionale
     const idxReparto = idx.Reparto; // opzionale
+    const idxFattureIncassate = idx.Fatture_Incassate; // opzionale
 
-    const lastCol = Math.max(idx.Sede, idx.AnnoMese, idx.Fatturato, idxPersonale ?? 0, idxAzienda ?? 0, idxReparto ?? 0) + 1;
+    const lastCol = Math.max(idx.Sede, idx.AnnoMese, idx.Fatturato, idxPersonale ?? 0, idxAzienda ?? 0, idxReparto ?? 0, idxFattureIncassate ?? 0) + 1;
     const rows = sh.getRange(headerRow + 1, 1, sh.getLastRow() - headerRow, lastCol).getValues();
 
     rows.forEach(r => {
@@ -763,14 +767,16 @@ function _getDatiMensiliBySede() {
 
       const fatt = UTIL.parseNumSmart(r[idx.Fatturato]);
       const pers = idxPersonale !== undefined ? UTIL.parseNumSmart(r[idxPersonale]) : 0;
+      const fattIncassate = idxFattureIncassate !== undefined ? UTIL.parseNumSmart(r[idxFattureIncassate]) : 0;
       const azienda = idxAzienda !== undefined ? String(r[idxAzienda] ?? '').trim() : null;
       const reparto = idxReparto !== undefined ? String(r[idxReparto] ?? '').trim() : null;
 
       if (!result.has(sede)) result.set(sede, new Map());
       const m = result.get(sede);
-      const curr = m.get(ym) || { fatturato: 0, personale: 0, azienda, reparto };
+      const curr = m.get(ym) || { fatturato: 0, personale: 0, fattureIncassate: 0, azienda, reparto };
       curr.fatturato += fatt;
       curr.personale += pers;
+      curr.fattureIncassate += fattIncassate;
       if (azienda) curr.azienda = azienda;
       if (reparto) curr.reparto = reparto;
       m.set(ym, curr);
