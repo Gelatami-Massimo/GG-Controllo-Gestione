@@ -126,7 +126,10 @@ const DEBUG = (function () {
       }
 
       let updates = {};
-      const maxColNeeded = Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria) + 1;
+      // Include anche Reparto se esiste
+      const maxColNeeded = idx.Reparto !== undefined
+        ? Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria, idx.Reparto) + 1
+        : Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria) + 1;
 
       // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling
       const iteratorResult = SHEET_ITERATOR.forEachChunk({
@@ -162,6 +165,9 @@ const DEBUG = (function () {
 
             const existingFamiglia = String(rowData[idx.Famiglia] ?? '').trim();
             const existingCategoria = String(rowData[idx.Categoria] ?? '').trim();
+            const existingReparto = idx.Reparto !== undefined 
+              ? String(rowData[idx.Reparto] ?? '').trim() 
+              : null;
             
             let needsUpdate = false;
             let rowUpdates = {}; // Aggiornamenti solo per questa riga
@@ -178,7 +184,13 @@ const DEBUG = (function () {
               needsUpdate = true;
             }
             
-            // Se la riga deve essere aggiornata (anche solo uno dei due campi)
+            // Condizione 3: Reparto è vuoto E il fornitore ha un reparto da impostare (solo per Fatture)
+            if (existingReparto !== null && existingReparto === '' && curr.reparto && sheetName === SHEETS.SHEET_NAMES.Fatture) {
+              rowUpdates[idx.Reparto] = curr.reparto;
+              needsUpdate = true;
+            }
+            
+            // Se la riga deve essere aggiornata (uno o più campi)
             if (needsUpdate) {
               if (!updates[rowNum]) updates[rowNum] = {};
               Object.assign(updates[rowNum], rowUpdates);
@@ -248,8 +260,9 @@ const DEBUG = (function () {
         const idNorm = UTIL.normKey(r[idx.FornitoreID]).replace(/^0+/, '');
         if (!idNorm) return;
         map.set(idNorm, {
-          famiglia: String(r[idx.Famiglia] ?? '').trim() || 'Non Categorizzato', // Default a 'Non Categorizzato'
-          categoria: String(r[idx.Categoria] ?? '').trim() || '' // Default a vuoto
+          famiglia: String(r[idx.Famiglia] ?? '').trim() || 'Non Categorizzato',
+          categoria: String(r[idx.Categoria] ?? '').trim() || '',
+          reparto: idx.Reparto !== undefined ? String(r[idx.Reparto] ?? '').trim() : ''
         });
       });
     } catch (e) {
