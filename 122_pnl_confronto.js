@@ -58,6 +58,21 @@ function createPnlConfrontoGemmaZaffiro() {
   let sh = ss.getSheetByName(sheetName);
   if (!sh) { sh = ss.insertSheet(sheetName, 1); }
 
+  // --- DIALOG DI FILTRO ANNO ---
+  const ui = SpreadsheetApp.getUi();
+  const responseAnno = ui.prompt(
+    '📅 FILTRO ANNO',
+    'Inserisci anno (es: 2025) oppure lascia VUOTO per tutti:',
+    ui.ButtonSet.OK_CANCEL
+  );
+  
+  if (responseAnno.getSelectedButton() === ui.Button.CANCEL) {
+    UTIL.showToast('Operazione annullata', 'Info', 3);
+    return;
+  }
+  
+  const filtroAnno = responseAnno.getResponseText().trim();
+
   try {
     sh.clear();
     
@@ -133,7 +148,15 @@ function createPnlConfrontoGemmaZaffiro() {
       });
     });
 
-    const anniOrdinati = Array.from(tuttiGliAnni).sort();
+    // Filtra anni se specificato
+    let anniOrdinati = Array.from(tuttiGliAnni).sort();
+    if (filtroAnno) {
+      anniOrdinati = anniOrdinati.filter(a => a === filtroAnno);
+      if (anniOrdinati.length === 0) {
+        UTIL.showToast(`Nessun dato trovato per l'anno ${filtroAnno}`, 'Avviso', 5);
+        return;
+      }
+    }
     
     // --- SCRITTURA FOGLIO ---
     let currentRow = 1;
@@ -157,7 +180,8 @@ function createPnlConfrontoGemmaZaffiro() {
       );
     }
 
-    LOG.info('PNL_CONFRONTO', `Confronto Gemma-Zaffiro creato con successo per ${anniOrdinati.length} anni.`);
+    const messaggioAnno = filtroAnno ? ` per anno ${filtroAnno}` : ` per ${anniOrdinati.length} anni`;
+    LOG.info('PNL_CONFRONTO', `Confronto Gemma-Zaffiro creato con successo${messaggioAnno}.`);
     UTIL.showToast(`Confronto "${sheetName}" creato!`, 'Completato', 10);
     ss.setActiveSheet(sh);
 
