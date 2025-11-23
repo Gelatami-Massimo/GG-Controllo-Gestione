@@ -190,13 +190,21 @@ function createPnlConfrontoGemmaZaffiro() {
         COSTI_OPERATIVI_GOP, ALTRI_COSTI, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE, VOCE_CEDOLINI,
         currencyFormat, percentFormat
       );
+      currentRow += 2; // Spazio
+      
+      // Aggiungi sezione RIALLINEAMENTO CE
+      currentRow = _writeRiallineamentoSection(
+        sh, currentRow, anno, pnlGlobale, pnlGemma, pnlZaffiro,
+        FAMIGLIE_ORDINATE, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE,
+        currencyFormat, percentFormat
+      );
       currentRow += 3; // Spazio tra anni
     });
 
     // Ridimensiona colonne
     if (sh.getLastColumn() > 0) {
       GG.get('ERROR_HANDLER').safely(
-        () => sh.autoResizeColumns(1, Math.min(sh.getMaxColumns(), 7)),
+        () => sh.autoResizeColumns(1, Math.min(sh.getMaxColumns(), 14)),
         { scope: 'CONFRONTO_RESIZE', message: 'Impossibile ridimensionare colonne.' }
       );
     }
@@ -406,6 +414,160 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGlobale, pnlGemma, pnl
   sheet.getRange(currentRow, 5).setValue(percMOLGemma / 100).setNumberFormat(percentFormat);
   sheet.getRange(currentRow, 6).setValue(molZaffiro).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 7).setValue(percMOLZaffiro / 100).setNumberFormat(percentFormat);
+  currentRow++;
+  
+  return currentRow;
+}
+
+/**
+ * Scrive la sezione di RIALLINEAMENTO CE per un anno specifico
+ * Mostra quanto ogni sede dovrebbe ricevere/cedere per allinearsi alla % globale
+ * @private
+ */
+function _writeRiallineamentoSection(sheet, startRow, anno, pnlGlobale, pnlGemma, pnlZaffiro, famiglieOrdinate, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE, currencyFormat, percentFormat) {
+  let currentRow = startRow;
+  
+  // Helper per ottenere valori
+  const getVal = (map, voce, anno) => map.get(voce)?.get(anno) || 0;
+  
+  // Ottieni ricavi totali (base per calcolo %)
+  const fattGlobale = getVal(pnlGlobale, VOCE_FATTURATO, anno);
+  const fattIncGlobale = getVal(pnlGlobale, VOCE_FATTURE_INCASSATE, anno);
+  const ricaviGlobali = fattGlobale + fattIncGlobale;
+  
+  const fattGemma = getVal(pnlGemma, VOCE_FATTURATO, anno);
+  const fattIncGemma = getVal(pnlGemma, VOCE_FATTURE_INCASSATE, anno);
+  const ricaviGemma = fattGemma + fattIncGemma;
+  
+  const fattZaffiro = getVal(pnlZaffiro, VOCE_FATTURATO, anno);
+  const fattIncZaffiro = getVal(pnlZaffiro, VOCE_FATTURE_INCASSATE, anno);
+  const ricaviZaffiro = fattZaffiro + fattIncZaffiro;
+  
+  // Titolo sezione
+  sheet.getRange(currentRow, 1, 1, 14).merge()
+    .setValue(`📊 ANALISI RIALLINEAMENTO COSTI - ANNO ${anno}`)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setBackground('#d0e0f0')
+    .setFontSize(11);
+  currentRow++;
+  
+  // Sottotitolo esplicativo
+  sheet.getRange(currentRow, 1, 1, 14).merge()
+    .setValue('Questa sezione mostra quanto costo dovrebbe essere "spostato" tra Gemma e Zaffiro per allinearsi alla % globale di ogni voce')
+    .setFontSize(9)
+    .setFontStyle('italic')
+    .setHorizontalAlignment('center')
+    .setBackground('#f0f0f0');
+  currentRow++;
+  currentRow++; // Spazio
+  
+  // Header tabella riallineamento
+  const headers = [
+    'Voce',
+    'Costo Glob €',
+    '% Glob',
+    'Ricavi Gemma',
+    'Costo Gemma Att.',
+    '% Gemma Att.',
+    'Costo Gemma Align.',
+    'Δ Gemma',
+    'Ricavi Zaffiro',
+    'Costo Zaffiro Att.',
+    '% Zaffiro Att.',
+    'Costo Zaffiro Align.',
+    'Δ Zaffiro',
+    'Direzione'
+  ];
+  
+  const headerRange = sheet.getRange(currentRow, 1, 1, 14);
+  headerRange.setValues([headers])
+    .setFontWeight('bold')
+    .setBackground('#c0d0e0')
+    .setHorizontalAlignment('center')
+    .setWrap(true);
+  currentRow++;
+  
+  // Filtra solo voci di COSTO (escludi ricavi e aggregati)
+  const vociDaEscludere = [
+    VOCE_FATTURATO,
+    VOCE_FATTURE_INCASSATE,
+    '(A) - TOTALE RICAVI',
+    'C1 - DI CUI OPERATIVI',
+    'GOP (A - C1)',
+    'C - TOTALE COSTI',
+    'MOL (A-C)'
+  ];
+  
+  const vociCosto = famiglieOrdinate.filter(voce => !vociDaEscludere.includes(voce));
+  
+  // Elabora ogni voce di costo
+  vociCosto.forEach(voce => {
+    // Dati attuali
+    const costoGlobale = getVal(pnlGlobale, voce, anno);
+    const costoGemmaAtt = getVal(pnlGemma, voce, anno);
+    const costoZaffiroAtt = getVal(pnlZaffiro, voce, anno);
+    
+    // Skip se voce vuota
+    if (costoGlobale === 0 && costoGemmaAtt === 0 && costoZaffiroAtt === 0) return;
+    
+    // Calcola % target (globale)
+    const percTarget = ricaviGlobali > 0 ? (costoGlobale / ricaviGlobali) : 0;
+    
+    // Calcola % attuali
+    const percGemmaAtt = ricaviGemma > 0 ? (costoGemmaAtt / ricaviGemma) : 0;
+    const percZaffiroAtt = ricaviZaffiro > 0 ? (costoZaffiroAtt / ricaviZaffiro) : 0;
+    
+    // Calcola costi allineati
+    const costoGemmaAlign = ricaviGemma * percTarget;
+    const costoZaffiroAlign = ricaviZaffiro * percTarget;
+    
+    // Calcola delta (quanto ricevere/cedere)
+    const deltaGemma = costoGemmaAlign - costoGemmaAtt;
+    const deltaZaffiro = costoZaffiroAlign - costoZaffiroAtt;
+    
+    // Determina direzione spostamento
+    let direzione = '';
+    const importoDaSpostare = Math.abs(deltaGemma);
+    if (Math.abs(deltaGemma) < 1) {
+      direzione = '✓ Allineato';
+    } else if (deltaGemma > 0) {
+      direzione = `← da Zaffiro a Gemma (€${importoDaSpostare.toFixed(0)})`;
+    } else {
+      direzione = `→ da Gemma a Zaffiro (€${importoDaSpostare.toFixed(0)})`;
+    }
+    
+    // Scrivi riga
+    sheet.getRange(currentRow, 1).setValue(voce);
+    sheet.getRange(currentRow, 2).setValue(costoGlobale).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 3).setValue(percTarget).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 4).setValue(ricaviGemma).setNumberFormat(currencyFormat).setBackground('#fff3cd');
+    sheet.getRange(currentRow, 5).setValue(costoGemmaAtt).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 6).setValue(percGemmaAtt).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 7).setValue(costoGemmaAlign).setNumberFormat(currencyFormat).setBackground('#e8f5e9');
+    sheet.getRange(currentRow, 8).setValue(deltaGemma).setNumberFormat(currencyFormat)
+      .setBackground(deltaGemma > 0 ? '#ffebee' : deltaGemma < 0 ? '#e3f2fd' : '#f5f5f5')
+      .setFontWeight('bold');
+    sheet.getRange(currentRow, 9).setValue(ricaviZaffiro).setNumberFormat(currencyFormat).setBackground('#fff3cd');
+    sheet.getRange(currentRow, 10).setValue(costoZaffiroAtt).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 11).setValue(percZaffiroAtt).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 12).setValue(costoZaffiroAlign).setNumberFormat(currencyFormat).setBackground('#e8f5e9');
+    sheet.getRange(currentRow, 13).setValue(deltaZaffiro).setNumberFormat(currencyFormat)
+      .setBackground(deltaZaffiro > 0 ? '#ffebee' : deltaZaffiro < 0 ? '#e3f2fd' : '#f5f5f5')
+      .setFontWeight('bold');
+    sheet.getRange(currentRow, 14).setValue(direzione).setFontSize(9);
+    
+    currentRow++;
+  });
+  
+  currentRow++; // Spazio finale
+  
+  // Nota esplicativa
+  sheet.getRange(currentRow, 1, 1, 14).merge()
+    .setValue('📌 Legenda: Δ positivo = sede deve RICEVERE costo | Δ negativo = sede deve CEDERE costo | % Target = % globale da raggiungere')
+    .setFontSize(8)
+    .setFontStyle('italic')
+    .setBackground('#f9f9f9');
   currentRow++;
   
   return currentRow;
