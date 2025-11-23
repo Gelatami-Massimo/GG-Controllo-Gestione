@@ -190,11 +190,9 @@ function createPnlSheet() {
     });
   });
 
-  // Mappe separate per costi Hotel (esclusi dal P&L normale, mostrati sotto MOL)
+  // Mappe separate per costi Hotel (esclusi dal P&L normale, mostrati sotto MOL solo per Gemma)
   const costiHotelGemma = new Map();
-  const costiHotelZaffiro = new Map();
   costiHotelGemma.set('COSTI HOTEL', new Map());
-  costiHotelZaffiro.set('COSTI HOTEL', new Map());
 
   // --- Aggrega Costi Fornitori per perimetro ---
   costiAggregati.forEach((mesi, sede) => {
@@ -206,7 +204,7 @@ function createPnlSheet() {
         tutteLeFamiglie.add(famiglia);
         const { costoNetto, reparto, azienda } = infoFamiglia;
         
-        // Perimetro gelateria (escludi Hotel da Gemma/Zaffiro)
+        // Perimetro gelateria (escludi Hotel solo da Gemma, Zaffiro ha solo Gelateria)
         if (isGelateria(reparto)) {
           if (!pnlGlobaleGelateria.has(famiglia)) pnlGlobaleGelateria.set(famiglia, new Map());
           pnlGlobaleGelateria.get(famiglia).set(annoMese, (pnlGlobaleGelateria.get(famiglia).get(annoMese) ?? 0) + costoNetto);
@@ -221,17 +219,14 @@ function createPnlSheet() {
           }
         }
         
-        // Perimetro hotel: aggrega separatamente per Gemma/Zaffiro (escluso da P&L normale)
+        // Perimetro hotel: aggrega separatamente solo per Gemma (Zaffiro non ha Hotel)
         if (isHotel(reparto)) {
           if (!pnlHotel.has(famiglia)) pnlHotel.set(famiglia, new Map());
           pnlHotel.get(famiglia).set(annoMese, (pnlHotel.get(famiglia).get(annoMese) ?? 0) + costoNetto);
           
-          // Aggrega costi Hotel per azienda (mostrati sotto MOL)
+          // Aggrega costi Hotel solo per Gemma (mostrati sotto MOL)
           if (azienda === 'Gemma') {
             costiHotelGemma.get('COSTI HOTEL').set(annoMese, (costiHotelGemma.get('COSTI HOTEL').get(annoMese) ?? 0) + costoNetto);
-          }
-          if (azienda === 'Zaffiro') {
-            costiHotelZaffiro.get('COSTI HOTEL').set(annoMese, (costiHotelZaffiro.get('COSTI HOTEL').get(annoMese) ?? 0) + costoNetto);
           }
         }
         
@@ -319,9 +314,9 @@ function createPnlSheet() {
             );
           }
           if (sedeHaDatiAnno) {
-            // Determina se mostrare costi Hotel (solo per Gemma/Zaffiro)
+            // Determina se mostrare costi Hotel (solo per Gemma, Zaffiro ha solo Gelateria)
             const aziendaSede = dataMensili.get(sede)?.values().next().value?.azienda;
-            const costiHotelSede = aziendaSede === 'Gemma' ? costiHotelGemma : (aziendaSede === 'Zaffiro' ? costiHotelZaffiro : null);
+            const costiHotelSede = aziendaSede === 'Gemma' ? costiHotelGemma : null;
             
             currentRow = _writePnlSection(
               sh, currentRow, `CONTO ECONOMICO RICLASSIFICATO - SEDE: ${sede} (Anno ${anno})`,
@@ -342,9 +337,9 @@ function createPnlSheet() {
               );
             }
             if (sedeHaDatiAnno) {
-              // Determina se mostrare costi Hotel (solo per Gemma/Zaffiro)
+              // Determina se mostrare costi Hotel (solo per Gemma, Zaffiro ha solo Gelateria)
               const aziendaSede = dataMensili.get(sede)?.values().next().value?.azienda;
-              const costiHotelSede = aziendaSede === 'Gemma' ? costiHotelGemma : (aziendaSede === 'Zaffiro' ? costiHotelZaffiro : null);
+              const costiHotelSede = aziendaSede === 'Gemma' ? costiHotelGemma : null;
               
               currentRow = _writePnlSection(
                 sh, currentRow, `CONTO ECONOMICO RICLASSIFICATO - SEDE: ${sede} (Anno ${anno})`,
