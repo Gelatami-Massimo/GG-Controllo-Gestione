@@ -238,9 +238,13 @@ function createPnlSheet() {
           if (azienda === 'Gemma') {
             costiHotelGemma.get('COSTI HOTEL').set(annoMese, (costiHotelGemma.get('COSTI HOTEL').get(annoMese) ?? 0) + costoNetto);
           }
+          
+          // IMPORTANTE: I costi Hotel NON vanno nel P&L sede (sono mostrati separatamente sotto MOL)
+          // Salta l'aggregazione pnlPerSede per evitare doppi conteggi
+          return;
         }
         
-        // Sede (come ora)
+        // Sede (solo costi NON Hotel)
         const sedePnl = pnlPerSede.get(sede);
         if (!sedePnl.has(famiglia)) sedePnl.set(famiglia, new Map());
         sedePnl.get(famiglia).set(annoMese, (sedePnl.get(famiglia).get(annoMese) ?? 0) + costoNetto);
