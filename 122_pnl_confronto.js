@@ -223,117 +223,169 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   // Helper per ottenere valori
   const getVal = (map, voce, anno) => map.get(voce)?.get(anno) || 0;
   
+  // Helper per calcolare percentuali
+  const calcDeltaPercent = (valGemma, valZaffiro) => {
+    if (valZaffiro === 0) return 0;
+    return ((valGemma - valZaffiro) / valZaffiro) * 100;
+  };
+  
+  const calcPercentOnFatt = (valore, fatturatoTotale) => {
+    if (fatturatoTotale === 0) return 0;
+    return (valore / fatturatoTotale) * 100;
+  };
+  
   // RICAVI
   const rigaFatt = currentRow;
   const fattGemma = getVal(pnlGemma, VOCE_FATTURATO, anno);
   const fattZaffiro = getVal(pnlZaffiro, VOCE_FATTURATO, anno);
+  const deltaFatt = fattGemma - fattZaffiro;
+  const deltaPercFatt = calcDeltaPercent(fattGemma, fattZaffiro);
+  
   sheet.getRange(currentRow, 1).setValue(VOCE_FATTURATO);
   sheet.getRange(currentRow, 2).setValue(fattGemma).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 3).setValue(fattZaffiro).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 4).setFormula(`=B${currentRow}-C${currentRow}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setFormula(`=IF(C${currentRow}=0,0,(B${currentRow}-C${currentRow})/C${currentRow})`).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setFormula(`=IF(B${rigaFatt}=0,0,B${currentRow}/B${rigaFatt})`).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 4).setValue(deltaFatt).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(deltaPercFatt / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(calcPercentOnFatt(fattGemma, fattGemma) / 100).setNumberFormat(percentFormat);
   currentRow++;
   
   const rigaFattInc = currentRow;
   const fattIncGemma = getVal(pnlGemma, VOCE_FATTURE_INCASSATE, anno);
   const fattIncZaffiro = getVal(pnlZaffiro, VOCE_FATTURE_INCASSATE, anno);
+  const deltaFattInc = fattIncGemma - fattIncZaffiro;
+  const deltaPercFattInc = calcDeltaPercent(fattIncGemma, fattIncZaffiro);
+  
   sheet.getRange(currentRow, 1).setValue(VOCE_FATTURE_INCASSATE);
   sheet.getRange(currentRow, 2).setValue(fattIncGemma).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 3).setValue(fattIncZaffiro).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 4).setFormula(`=B${currentRow}-C${currentRow}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setFormula(`=IF(C${currentRow}=0,0,(B${currentRow}-C${currentRow})/C${currentRow})`).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setFormula(`=IF(B${rigaFatt}=0,0,B${currentRow}/B${rigaFatt})`).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 4).setValue(deltaFattInc).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(deltaPercFattInc / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(calcPercentOnFatt(fattIncGemma, fattGemma) / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
   const rigaTotRicavi = currentRow;
+  const totRicaviGemma = fattGemma + fattIncGemma;
+  const totRicaviZaffiro = fattZaffiro + fattIncZaffiro;
+  const deltaTotRicavi = totRicaviGemma - totRicaviZaffiro;
+  const deltaPercTotRicavi = calcDeltaPercent(totRicaviGemma, totRicaviZaffiro);
+  
   sheet.getRange(currentRow, 1).setValue('(A) - TOTALE RICAVI').setFontWeight('bold').setBackground('#f3f3f3');
-  sheet.getRange(currentRow, 2).setFormula(`=B${rigaFatt}+B${rigaFattInc}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setFormula(`=C${rigaFatt}+C${rigaFattInc}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 4).setFormula(`=B${currentRow}-C${currentRow}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setFormula(`=IF(C${currentRow}=0,0,(B${currentRow}-C${currentRow})/C${currentRow})`).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setValue('(100.0)%').setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(totRicaviGemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(totRicaviZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 4).setValue(deltaTotRicavi).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(deltaPercTotRicavi / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(1.0).setNumberFormat(percentFormat); // 100%
   currentRow++;
   currentRow++; // Spazio
   
   // COSTI OPERATIVI
-  const righeCostiOp = [];
+  const valoriCostiOp = { gemma: 0, zaffiro: 0 };
   costiOperativiGOP.forEach(famiglia => {
     const valGemma = getVal(pnlGemma, famiglia, anno);
     const valZaffiro = getVal(pnlZaffiro, famiglia, anno);
+    valoriCostiOp.gemma += valGemma;
+    valoriCostiOp.zaffiro += valZaffiro;
+    
+    const delta = valGemma - valZaffiro;
+    const deltaPerc = calcDeltaPercent(valGemma, valZaffiro);
+    const percOnFatt = calcPercentOnFatt(valGemma, totRicaviGemma);
+    
     sheet.getRange(currentRow, 1).setValue(famiglia);
     sheet.getRange(currentRow, 2).setValue(valGemma).setNumberFormat(currencyFormat);
     sheet.getRange(currentRow, 3).setValue(valZaffiro).setNumberFormat(currencyFormat);
-    sheet.getRange(currentRow, 4).setFormula(`=B${currentRow}-C${currentRow}`).setNumberFormat(currencyFormat);
-    sheet.getRange(currentRow, 5).setFormula(`=IF(C${currentRow}=0,0,(B${currentRow}-C${currentRow})/C${currentRow})`).setNumberFormat(percentFormat);
-    sheet.getRange(currentRow, 6).setFormula(`=IF(B${rigaFatt}=0,0,B${currentRow}/B${rigaFatt})`).setNumberFormat(percentFormat);
-    righeCostiOp.push(currentRow);
+    sheet.getRange(currentRow, 4).setValue(delta).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 5).setValue(deltaPerc / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 6).setValue(percOnFatt / 100).setNumberFormat(percentFormat);
     currentRow++;
   });
   currentRow++; // Spazio
   
   // C1 - TOTALE OPERATIVI
   const rigaC1 = currentRow;
-  const formulaSumC1Gemma = righeCostiOp.map(r => `B${r}`).join('+');
-  const formulaSumC1Zaffiro = righeCostiOp.map(r => `C${r}`).join('+');
+  const deltaC1 = valoriCostiOp.gemma - valoriCostiOp.zaffiro;
+  const deltaPercC1 = calcDeltaPercent(valoriCostiOp.gemma, valoriCostiOp.zaffiro);
+  const percC1OnFatt = calcPercentOnFatt(valoriCostiOp.gemma, totRicaviGemma);
+  
   sheet.getRange(currentRow, 1).setValue('C1 - DI CUI OPERATIVI').setFontWeight('bold').setBackground('#f3f3f3');
-  sheet.getRange(currentRow, 2).setFormula(`=${formulaSumC1Gemma}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setFormula(`=${formulaSumC1Zaffiro}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 4).setFormula(`=B${currentRow}-C${currentRow}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setFormula(`=IF(C${currentRow}=0,0,(B${currentRow}-C${currentRow})/C${currentRow})`).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setFormula(`=IF(B${rigaFatt}=0,0,B${currentRow}/B${rigaFatt})`).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(valoriCostiOp.gemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(valoriCostiOp.zaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 4).setValue(deltaC1).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(deltaPercC1 / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(percC1OnFatt / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
   // GOP
   const rigaGOP = currentRow;
+  const gopGemma = totRicaviGemma - valoriCostiOp.gemma;
+  const gopZaffiro = totRicaviZaffiro - valoriCostiOp.zaffiro;
+  const deltaGOP = gopGemma - gopZaffiro;
+  const deltaPercGOP = calcDeltaPercent(gopGemma, gopZaffiro);
+  const percGOPOnFatt = calcPercentOnFatt(gopGemma, totRicaviGemma);
+  
   sheet.getRange(currentRow, 1).setValue('GOP (A - C1)').setFontWeight('bold').setBackground('#e0e0e0');
-  sheet.getRange(currentRow, 2).setFormula(`=B${rigaTotRicavi}-B${rigaC1}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setFormula(`=C${rigaTotRicavi}-C${rigaC1}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 4).setFormula(`=B${currentRow}-C${currentRow}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setFormula(`=IF(C${currentRow}=0,0,(B${currentRow}-C${currentRow})/C${currentRow})`).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setFormula(`=IF(B${rigaFatt}=0,0,B${currentRow}/B${rigaFatt})`).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(gopGemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(gopZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 4).setValue(deltaGOP).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(deltaPercGOP / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(percGOPOnFatt / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
   // ALTRI COSTI
-  const righeAltriCosti = [];
+  const valoriAltriCosti = { gemma: 0, zaffiro: 0 };
   altriCosti.forEach(famiglia => {
     const valGemma = getVal(pnlGemma, famiglia, anno);
     const valZaffiro = getVal(pnlZaffiro, famiglia, anno);
+    valoriAltriCosti.gemma += valGemma;
+    valoriAltriCosti.zaffiro += valZaffiro;
+    
+    const delta = valGemma - valZaffiro;
+    const deltaPerc = calcDeltaPercent(valGemma, valZaffiro);
+    const percOnFatt = calcPercentOnFatt(valGemma, totRicaviGemma);
+    
     sheet.getRange(currentRow, 1).setValue(famiglia);
     sheet.getRange(currentRow, 2).setValue(valGemma).setNumberFormat(currencyFormat);
     sheet.getRange(currentRow, 3).setValue(valZaffiro).setNumberFormat(currencyFormat);
-    sheet.getRange(currentRow, 4).setFormula(`=B${currentRow}-C${currentRow}`).setNumberFormat(currencyFormat);
-    sheet.getRange(currentRow, 5).setFormula(`=IF(C${currentRow}=0,0,(B${currentRow}-C${currentRow})/C${currentRow})`).setNumberFormat(percentFormat);
-    sheet.getRange(currentRow, 6).setFormula(`=IF(B${rigaFatt}=0,0,B${currentRow}/B${rigaFatt})`).setNumberFormat(percentFormat);
-    righeAltriCosti.push(currentRow);
+    sheet.getRange(currentRow, 4).setValue(delta).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 5).setValue(deltaPerc / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 6).setValue(percOnFatt / 100).setNumberFormat(percentFormat);
     currentRow++;
   });
   currentRow++; // Spazio
   
   // C - TOTALE COSTI
   const rigaTotCosti = currentRow;
-  const formulaTotCostiGemma = `B${rigaC1}+${righeAltriCosti.map(r => `B${r}`).join('+')}`;
-  const formulaTotCostiZaffiro = `C${rigaC1}+${righeAltriCosti.map(r => `C${r}`).join('+')}`;
+  const totCostiGemma = valoriCostiOp.gemma + valoriAltriCosti.gemma;
+  const totCostiZaffiro = valoriCostiOp.zaffiro + valoriAltriCosti.zaffiro;
+  const deltaTotCosti = totCostiGemma - totCostiZaffiro;
+  const deltaPercTotCosti = calcDeltaPercent(totCostiGemma, totCostiZaffiro);
+  const percTotCostiOnFatt = calcPercentOnFatt(totCostiGemma, totRicaviGemma);
+  
   sheet.getRange(currentRow, 1).setValue('C - TOTALE COSTI').setFontWeight('bold').setBackground('#f3f3f3');
-  sheet.getRange(currentRow, 2).setFormula(`=${formulaTotCostiGemma}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setFormula(`=${formulaTotCostiZaffiro}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 4).setFormula(`=B${currentRow}-C${currentRow}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setFormula(`=IF(C${currentRow}=0,0,(B${currentRow}-C${currentRow})/C${currentRow})`).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setFormula(`=IF(B${rigaFatt}=0,0,B${currentRow}/B${rigaFatt})`).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(totCostiGemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(totCostiZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 4).setValue(deltaTotCosti).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(deltaPercTotCosti / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(percTotCostiOnFatt / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
   // MOL
   const rigaMOL = currentRow;
+  const molGemma = totRicaviGemma - totCostiGemma;
+  const molZaffiro = totRicaviZaffiro - totCostiZaffiro;
+  const deltaMOL = molGemma - molZaffiro;
+  const deltaPercMOL = calcDeltaPercent(molGemma, molZaffiro);
+  const percMOLOnFatt = calcPercentOnFatt(molGemma, totRicaviGemma);
+  
   sheet.getRange(currentRow, 1).setValue('MOL (A-C)').setFontWeight('bold').setBackground('#e0e0e0');
-  sheet.getRange(currentRow, 2).setFormula(`=B${rigaTotRicavi}-B${rigaTotCosti}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setFormula(`=C${rigaTotRicavi}-C${rigaTotCosti}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 4).setFormula(`=B${currentRow}-C${currentRow}`).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setFormula(`=IF(C${currentRow}=0,0,(B${currentRow}-C${currentRow})/C${currentRow})`).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 6).setFormula(`=IF(B${rigaFatt}=0,0,B${currentRow}/B${rigaFatt})`).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(molGemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(molZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 4).setValue(deltaMOL).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(deltaPercMOL / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(percMOLOnFatt / 100).setNumberFormat(percentFormat);
   currentRow++;
   
   return currentRow;
