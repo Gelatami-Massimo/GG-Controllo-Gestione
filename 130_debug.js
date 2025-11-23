@@ -1252,6 +1252,151 @@ const DEBUG = (function () {
   }
 
   /**
+   * DEV_CompareHotelCostsWithPnL()
+   * Confronta i costi Hotel dal foglio Fatture con quelli mostrati nel P&L.
+   * Identifica discrepanze e fatture mancanti.
+   */
+  function DEV_CompareHotelCostsWithPnL() {
+    LOG.info('DEV_HOTEL_COMPARE', '=== CONFRONTO COSTI HOTEL FATTURE VS P&L ===');
+    
+    const ui = SpreadsheetApp.getUi();
+    let report = '📊 CONFRONTO COSTI HOTEL: FATTURE VS P&L\n\n';
+    
+    try {
+      const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+      if (!shF) {
+        report += '❌ Foglio Fatture non trovato!\n';
+        ui.alert('Errore', report, ui.ButtonSet.OK);
+        return;
+      }
+      
+      const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
+      const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
+      
+      const maxCol = Math.max(
+        idxF.Reparto ?? 0,
+        idxF.Sede ?? 0,
+        idxF.TotImponibile ?? 0,
+        idxF.Anno ?? 0,
+        idxF.Mese ?? 0,
+        idxF.Famiglia ?? 0,
+        idxF.FornitoreID ?? 0,
+        idxF.DenominazioneFornitore ?? 0
+      ) + 1;
+      
+      const rowsF = shF.getRange(headerRowF + 1, 1, shF.getLastRow() - headerRowF, maxCol).getValues();
+      
+      // Filtra fatture Hotel per Gemma 2025
+      const hotelGemma2025 = rowsF.filter(row => {
+        const reparto = String(row[idxF.Reparto] || '').trim().toLowerCase();
+        const sede = String(row[idxF.Sede] || '').trim();
+        const anno = row[idxF.Anno];
+        return reparto === 'hotel' && sede === 'Gemma' && anno === 2025;
+      });
+      
+      report += `FATTURE HOTEL GEMMA 2025: ${hotelGemma2025.length} fatture\n\n`;
+      
+      // Aggrega per mese
+      const totaliPerMese = new Map();
+      const fatturePerMese = new Map();
+      
+      hotelGemma2025.forEach(row => {
+        const mese = row[idxF.Mese];
+        const totImp = UTIL.parseNumSmart(row[idxF.TotImponibile]);
+        const famiglia = String(row[idxF.Famiglia] || '').trim();
+        const forn = String(row[idxF.DenominazioneFornitore] || '').trim();
+        
+        if (!totaliPerMese.has(mese)) {
+          totaliPerMese.set(mese, 0);
+          fatturePerMese.set(mese, []);
+        }
+        
+        totaliPerMese.set(mese, totaliPerMese.get(mese) + totImp);
+        fatturePerMese.get(mese).push({
+          fornitore: forn,
+          famiglia: famiglia,
+          importo: totImp
+        });
+      });
+      
+      // Totale generale
+      const totaleGenerale = Array.from(totaliPerMese.values()).reduce((sum, v) => sum + v, 0);
+      
+      report += 'TOTALI HOTEL GEMMA 2025 PER MESE:\n';
+      report += '(Dal foglio Fatture - dati RAW)\n\n';
+      
+      const mesi = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+      
+      for (let m = 1; m <= 12; m++) {
+        const tot = totaliPerMese.get(m) || 0;
+        const fatture = fatturePerMese.get(m) || [];
+        
+        report += `${mesi[m-1]} 25: €${tot.toFixed(2)}`;
+        
+        if (fatture.length > 0) {
+          report += ` (${fatture.length} fatture)\n`;
+          fatture.forEach(f => {
+            report += `    • ${f.fornitore} - ${f.famiglia}: €${f.importo.toFixed(2)}\n`;
+          });
+        } else {
+          report += '\n';
+        }
+      }
+      
+      report += `\n✅ TOTALE GENERALE (FATTURE): €${totaleGenerale.toFixed(2)}\n\n`;
+      
+      // Confronto con P&L
+      const pnlHotelCosts = [
+        { mese: 'gen', valore: 1271.30 },
+        { mese: 'feb', valore: 0 },
+        { mese: 'mar', valore: 0 },
+        { mese: 'apr', valore: 2360.39 },
+        { mese: 'mag', valore: 0 },
+        { mese: 'giu', valore: 0 },
+        { mese: 'lug', valore: 33535.10 },
+        { mese: 'ago', valore: 349.60 },
+        { mese: 'set', valore: 11370.24 },
+        { mese: 'ott', valore: 770.00 }
+      ];
+      
+      const totalePnL = pnlHotelCosts.reduce((sum, m) => sum + m.valore, 0);
+      
+      report += '📋 TOTALE P&L GENERATO: €' + totalePnL.toFixed(2) + '\n\n';
+      
+      report += '⚠️ DISCREPANZA:\n';
+      const diff = totaleGenerale - totalePnL;
+      const diffPercent = ((diff / totaleGenerale) * 100).toFixed(1);
+      report += `Mancano: €${diff.toFixed(2)} (${diffPercent}% delle fatture)\n\n`;
+      
+      report += '💡 ANALISI MENSILE (Fatture vs P&L):\n';
+      for (let m = 1; m <= 10; m++) {
+        const totFatture = totaliPerMese.get(m) || 0;
+        const totPnL = pnlHotelCosts[m-1].valore;
+        const diffMese = totFatture - totPnL;
+        
+        if (Math.abs(diffMese) > 0.01) {
+          report += `${mesi[m-1]}: Fatture €${totFatture.toFixed(2)} vs P&L €${totPnL.toFixed(2)} `;
+          report += `→ ${diffMese > 0 ? 'MANCANO' : 'EXTRA'} €${Math.abs(diffMese).toFixed(2)}\n`;
+        }
+      }
+      
+      report += '\n🔍 POSSIBILI CAUSE:\n';
+      report += '1. Filtro Anno/Mese nel P&L diverso da quello delle Fatture\n';
+      report += '2. Campo Anno o Mese mancante/errato in alcune fatture\n';
+      report += '3. Logica aggregazione esclude alcune famiglie\n';
+      report += '4. Bug nella funzione _getAggregatedCostsBySede()\n';
+      
+      LOG.info('DEV_HOTEL_COMPARE', report);
+      ui.alert('📊 Confronto Costi Hotel', report, ui.ButtonSet.OK);
+      
+    } catch (e) {
+      report += `\n❌ ERRORE: ${e.message}\n`;
+      LOG.error('DEV_HOTEL_COMPARE', 'Errore confronto', { error: e.message, stack: e.stack });
+      ui.alert('Errore Confronto', report, ui.ButtonSet.OK);
+    }
+  }
+
+  /**
    * DEV_ResetAllImportFlags()
    * Resetta i flag di import righe su TUTTE le fatture.
    * ATTENZIONE: Usa solo DOPO aver eliminato tutte le righe dal foglio "Righe".
@@ -1378,7 +1523,8 @@ const DEBUG = (function () {
     DEV_DeleteRigheDuplicate: DEV_DeleteRigheDuplicate,
     DEV_CountDuplicates: DEV_CountDuplicates,
     DEV_ResetAllImportFlags: DEV_ResetAllImportFlags,
-    DEV_DiagnoseHotelCosts: DEV_DiagnoseHotelCosts
+    DEV_DiagnoseHotelCosts: DEV_DiagnoseHotelCosts,
+    DEV_CompareHotelCostsWithPnL: DEV_CompareHotelCostsWithPnL
   };
 })();
 
