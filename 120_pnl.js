@@ -203,11 +203,13 @@ function createPnlSheet() {
   costiAggregati.forEach((mesi, sede) => {
     mesi.forEach((costiPerFamiglia, annoMese) => {
       tuttiIMesi.add(annoMese);
-      costiPerFamiglia.forEach((infoFamiglia, famigliaOriginale) => {
+      costiPerFamiglia.forEach((infoFamiglia, chiaveAggregazione) => {
+        // Estrai famiglia dal valore (ora abbiamo anche famiglia nel valore)
+        const { costoNetto, reparto, azienda, famiglia: famigliaOriginale } = infoFamiglia;
+        
         // Normalizza il nome della famiglia per matching con standard
         const famiglia = trovaFamigliaStandard(famigliaOriginale);
         tutteLeFamiglie.add(famiglia);
-        const { costoNetto, reparto, azienda } = infoFamiglia;
         
         // LOGICA REPARTO: Zaffiro ignora sempre il reparto (solo Gelateria), Gemma usa il reparto
         const repartoEffettivo = (azienda === 'Zaffiro') ? 'Gelateria' : reparto;
@@ -859,13 +861,16 @@ function _getAggregatedCostsBySede(famiglieFornitori, aziendaMap) {
       const m = result.get(sede);
       if (!m.has(ym)) m.set(ym, new Map());
       const famMap = m.get(ym);
-      if (!famMap.has(famiglia)) {
-        famMap.set(famiglia, { costoNetto: 0, reparto, azienda });
+      
+      // CHIAVE: Famiglia + Reparto (per evitare che Hotel/Gelateria si mischino)
+      const chiaveAggregazione = `${famiglia}|${reparto || 'NoReparto'}`;
+      
+      if (!famMap.has(chiaveAggregazione)) {
+        famMap.set(chiaveAggregazione, { costoNetto: 0, reparto, azienda, famiglia });
       }
-      const curr = famMap.get(famiglia);
+      const curr = famMap.get(chiaveAggregazione);
       curr.costoNetto += costoNetto;
-      if (reparto) curr.reparto = reparto;
-      if (azienda) curr.azienda = azienda;
+      // Non sovrascrivere reparto/azienda (già impostati alla creazione)
     });
   } catch (e) {
     LOG.error('PNL_FATT', 'Errore lettura/aggregazione Fatture.', { error: e.message });
