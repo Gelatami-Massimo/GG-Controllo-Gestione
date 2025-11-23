@@ -14,7 +14,9 @@ function createPnlSheet() {
   const sheetName = 'Conto Economico Riclassificato';
   UTIL.showToast(`Aggiornamento ${sheetName}...`, 'Conto Economico', 10);
 
-  const VOCE_FATTURATO = 'RICAVI DA SERVIZI GENERICI';
+  const VOCE_FATTURATO = 'Fatturato';
+  const VOCE_FATTURE_INCASSATE = 'Fatture Incassate';
+  const VOCE_TOTALE_RICAVI = 'RICAVI DA SERVIZI GENERICI';
   const VOCE_CEDOLINI = '3 - Cedolini';
   
   // COSTI OPERATIVI (C1 - GOP): Food + Consumabili + Cedolini
@@ -150,12 +152,14 @@ function createPnlSheet() {
   // Inizializza mappe per famiglie e voci
   [pnlGlobaleGelateria, pnlGemmaGelateria, pnlZaffiroGelateria, pnlHotel].forEach(map => {
     map.set(VOCE_FATTURATO, new Map());
+    map.set(VOCE_FATTURE_INCASSATE, new Map());
     COSTI_OPERATIVI_GOP.forEach(fam => map.set(fam, new Map()));
     ALTRI_COSTI.forEach(fam => map.set(fam, new Map()));
   });
   tutteLeSedi.forEach(sede => {
     const sedeMap = new Map();
     sedeMap.set(VOCE_FATTURATO, new Map());
+    sedeMap.set(VOCE_FATTURE_INCASSATE, new Map());
     COSTI_OPERATIVI_GOP.forEach(fam => sedeMap.set(fam, new Map()));
     ALTRI_COSTI.forEach(fam => sedeMap.set(fam, new Map()));
     pnlPerSede.set(sede, sedeMap);
@@ -170,30 +174,32 @@ function createPnlSheet() {
       // LOGICA REPARTO: Zaffiro ignora sempre il reparto (solo Gelateria), Gemma usa il reparto
       const repartoEffettivo = (azienda === 'Zaffiro') ? 'Gelateria' : reparto;
       
-      // Calcola ricavi totali (fatturato + fatture incassate)
-      const ricaviTotali = fatturato + (fattureIncassate || 0);
-      
       // Perimetro gelateria
       if (isGelateria(repartoEffettivo)) {
-        pnlGlobaleGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlGlobaleGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + ricaviTotali);
+        pnlGlobaleGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlGlobaleGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + fatturato);
+        pnlGlobaleGelateria.get(VOCE_FATTURE_INCASSATE).set(annoMese, (pnlGlobaleGelateria.get(VOCE_FATTURE_INCASSATE).get(annoMese) ?? 0) + (fattureIncassate || 0));
         pnlGlobaleGelateria.get(VOCE_CEDOLINI).set(annoMese, (pnlGlobaleGelateria.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
         if (azienda === 'Gemma') {
-          pnlGemmaGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlGemmaGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + ricaviTotali);
+          pnlGemmaGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlGemmaGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + fatturato);
+          pnlGemmaGelateria.get(VOCE_FATTURE_INCASSATE).set(annoMese, (pnlGemmaGelateria.get(VOCE_FATTURE_INCASSATE).get(annoMese) ?? 0) + (fattureIncassate || 0));
           pnlGemmaGelateria.get(VOCE_CEDOLINI).set(annoMese, (pnlGemmaGelateria.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
         }
         if (azienda === 'Zaffiro') {
-          pnlZaffiroGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlZaffiroGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + ricaviTotali);
+          pnlZaffiroGelateria.get(VOCE_FATTURATO).set(annoMese, (pnlZaffiroGelateria.get(VOCE_FATTURATO).get(annoMese) ?? 0) + fatturato);
+          pnlZaffiroGelateria.get(VOCE_FATTURE_INCASSATE).set(annoMese, (pnlZaffiroGelateria.get(VOCE_FATTURE_INCASSATE).get(annoMese) ?? 0) + (fattureIncassate || 0));
           pnlZaffiroGelateria.get(VOCE_CEDOLINI).set(annoMese, (pnlZaffiroGelateria.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
         }
       }
       // Perimetro hotel (solo Gemma, Zaffiro sempre Gelateria)
       if (isHotel(repartoEffettivo)) {
-        pnlHotel.get(VOCE_FATTURATO).set(annoMese, (pnlHotel.get(VOCE_FATTURATO).get(annoMese) ?? 0) + ricaviTotali);
+        pnlHotel.get(VOCE_FATTURATO).set(annoMese, (pnlHotel.get(VOCE_FATTURATO).get(annoMese) ?? 0) + fatturato);
+        pnlHotel.get(VOCE_FATTURE_INCASSATE).set(annoMese, (pnlHotel.get(VOCE_FATTURE_INCASSATE).get(annoMese) ?? 0) + (fattureIncassate || 0));
         pnlHotel.get(VOCE_CEDOLINI).set(annoMese, (pnlHotel.get(VOCE_CEDOLINI).get(annoMese) ?? 0) + personale);
       }
       // Sede (come ora)
       const sedePnl = pnlPerSede.get(sede);
-      sedePnl.get(VOCE_FATTURATO)?.set(annoMese, (sedePnl.get(VOCE_FATTURATO)?.get(annoMese) ?? 0) + ricaviTotali);
+      sedePnl.get(VOCE_FATTURATO)?.set(annoMese, (sedePnl.get(VOCE_FATTURATO)?.get(annoMese) ?? 0) + fatturato);
+      sedePnl.get(VOCE_FATTURE_INCASSATE)?.set(annoMese, (sedePnl.get(VOCE_FATTURE_INCASSATE)?.get(annoMese) ?? 0) + (fattureIncassate || 0));
       sedePnl.get(VOCE_CEDOLINI)?.set(annoMese, (sedePnl.get(VOCE_CEDOLINI)?.get(annoMese) ?? 0) + personale);
     });
   });
@@ -314,7 +320,7 @@ function createPnlSheet() {
           const costiHotelGlobale = costiHotelGemma.get('COSTI HOTEL')?.size > 0 ? costiHotelGemma : null;
           currentRow = _writePnlSection(
             sh, currentRow, `CONTO ECONOMICO RICLASSIFICATO - GLOBALE GELATERIA (Anno ${anno})`,
-            pnlGlobaleGelateria, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat, costiHotelGlobale
+            pnlGlobaleGelateria, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE, currencyFormat, percentFormat, costiHotelGlobale
           );
           currentRow += 2;
         }
@@ -338,7 +344,7 @@ function createPnlSheet() {
             
             currentRow = _writePnlSection(
               sh, currentRow, `CONTO ECONOMICO RICLASSIFICATO - SEDE: ${sede} (Anno ${anno})`,
-              pnlDataSede, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat, costiHotelSede
+              pnlDataSede, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE, currencyFormat, percentFormat, costiHotelSede
             );
             currentRow += 3;
           }
@@ -361,7 +367,7 @@ function createPnlSheet() {
               
               currentRow = _writePnlSection(
                 sh, currentRow, `CONTO ECONOMICO RICLASSIFICATO - SEDE: ${sede} (Anno ${anno})`,
-                pnlDataSede, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat, costiHotelSede
+                pnlDataSede, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE, currencyFormat, percentFormat, costiHotelSede
               );
               currentRow += 3;
             }
@@ -400,7 +406,7 @@ function createPnlSheet() {
  * (A) Ricavi → C1 Costi Operativi (Food+Consumabili+Cedolini) → GOP (A-C1) → Altri Costi → (C) Totale Costi → MOL (A-C) → [COSTI HOTEL]
  * @private
  */
-function _writePnlSection(sheet, currentRow, title, pnlData, costiOperativiGOP, altriCosti, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat, costiHotel = null) {
+function _writePnlSection(sheet, currentRow, title, pnlData, costiOperativiGOP, altriCosti, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE, currencyFormat, percentFormat, costiHotel = null) {
   try {
     const headerNames = headerRowAnno;
     if (!Array.isArray(headerNames)) {
@@ -436,10 +442,22 @@ function _writePnlSection(sheet, currentRow, title, pnlData, costiOperativiGOP, 
   sheet.getRange(headerDataRow, 1, 1, numCols).setValues([headerRowAnno]).setFontWeight('bold');
   currentRow = headerDataRow + 1;
 
-  // (A) Fatturato
+  // (A) RICAVI - Sezione dettagliata
   const rigaFatturato = currentRow;
-  sheet.getRange(rigaFatturato, 1).setValue(VOCE_FATTURATO).setFontWeight('bold');
+  sheet.getRange(rigaFatturato, 1).setValue(VOCE_FATTURATO);
   _writePnlRow(sheet, pnlData.get(VOCE_FATTURATO), rigaFatturato, mesiDellAnno, headerMap, totalColLetter, firstMonthColLetter, lastMonthColLetter);
+  currentRow++;
+  
+  const rigaFattureIncassate = currentRow;
+  sheet.getRange(rigaFattureIncassate, 1).setValue(VOCE_FATTURE_INCASSATE);
+  _writePnlRow(sheet, pnlData.get(VOCE_FATTURE_INCASSATE), rigaFattureIncassate, mesiDellAnno, headerMap, totalColLetter, firstMonthColLetter, lastMonthColLetter);
+  currentRow++;
+  currentRow++; // Spazio
+  
+  // (A) - TOTALE RICAVI (somma Fatturato + Fatture Incassate)
+  const rigaTotRicavi = currentRow;
+  sheet.getRange(rigaTotRicavi, 1).setValue('(A) - TOTALE RICAVI').setFontWeight('bold').setBackground('#f3f3f3');
+  _writeFormulaRow(sheet, rigaTotRicavi, `${totalColLetter}${rigaFatturato}+${totalColLetter}${rigaFattureIncassate}`, headerMap, mesiDellAnno, '#f3f3f3');
   
   // Percentuale 100% per ricavi
   currentRow++;
@@ -449,12 +467,6 @@ function _writePnlSection(sheet, currentRow, title, pnlData, costiOperativiGOP, 
     const colLetter = UTIL.getColumnLetter(i);
     sheet.getRange(`${colLetter}${rigaPercRicavi}`).setValue('(100.0)%').setFontStyle('italic');
   }
-  currentRow++;
-
-  // (A) - TOTALE RICAVI
-  const rigaTotRicavi = currentRow;
-  sheet.getRange(rigaTotRicavi, 1).setValue('(A) - TOTALE RICAVI').setFontWeight('bold').setBackground('#f3f3f3');
-  _writeFormulaRow(sheet, rigaTotRicavi, `${totalColLetter}${rigaFatturato}`, headerMap, mesiDellAnno, '#f3f3f3');
   currentRow++;
   currentRow++; // Spazio
 
@@ -550,7 +562,7 @@ function _writePnlSection(sheet, currentRow, title, pnlData, costiOperativiGOP, 
   }
 
   // Formattazione valori monetari (escluse percentuali)
-  const righeDaFormattare = [rigaFatturato, rigaTotRicavi, ...Object.values(righeCostiOp), rigaTotCostiOp, rigaGOP, ...Object.values(righeAltriCosti), rigaTotCosti, rigaMOL];
+  const righeDaFormattare = [rigaFatturato, rigaFattureIncassate, rigaTotRicavi, ...Object.values(righeCostiOp), rigaTotCostiOp, rigaGOP, ...Object.values(righeAltriCosti), rigaTotCosti, rigaMOL];
   if (rigaCostiHotel) righeDaFormattare.push(rigaCostiHotel);
   righeDaFormattare.forEach(riga => {
     if (numCols > 1) {
