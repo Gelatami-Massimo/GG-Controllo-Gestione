@@ -126,7 +126,7 @@ function createPnlSheet() {
   const aziendaMap = _getAziendaMap(); // Mappa Sede → Azienda dal foglio Aziende
   const dataMensili = _getDatiMensiliBySede();
   const famiglieFornitori = _getFamiglieFornitori();
-  const costiAggregati = _getAggregatedCostsBySede(famiglieFornitori);
+  const costiAggregati = _getAggregatedCostsBySede(famiglieFornitori, aziendaMap);
 
   // --- 2. PREPARAZIONE STRUTTURA DATI P&L PER PERIMETRO ---
   // Mappe per perimetro: globale gelateria, gemma gelateria, zaffiro gelateria, hotel, sedi
@@ -816,9 +816,10 @@ function _getFamiglieFornitori() {
 /**
  * Aggrega costi fornitori: Map<Sede, Map<AnnoMese, Map<Famiglia, {costoNetto, reparto, azienda}>>>
  * Usa TotImponibile (segno già corretto da import) e info da Fornitori + Fatture.
+ * @param {Map<string, string>} aziendaMap - Mappa Sede → Azienda (Gemma/Zaffiro)
  * @private
  */
-function _getAggregatedCostsBySede(famiglieFornitori) {
+function _getAggregatedCostsBySede(famiglieFornitori, aziendaMap) {
   const result = new Map();
   const sh = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
   if (!sh) return result;
@@ -849,9 +850,9 @@ function _getAggregatedCostsBySede(famiglieFornitori) {
       const famiglia = infoFornitore.famiglia;
       // Priorità: Reparto da Fatture, poi da Fornitori
       const repartoFattura = idx.Reparto !== undefined ? String(r[idx.Reparto] ?? '').trim() : null;
-      const aziendaFattura = idx.Azienda !== undefined ? String(r[idx.Azienda] ?? '').trim() : null;
       const reparto = repartoFattura || infoFornitore.reparto;
-      const azienda = aziendaFattura || infoFornitore.azienda;
+      // Azienda: usa aziendaMap (Sede → Azienda) invece di leggere da colonna Azienda (che non esiste)
+      const azienda = aziendaMap.get(sede) || infoFornitore.azienda;
       const costoNetto = UTIL.parseNumSmart(r[idx.TotImponibile]); // può essere negativo per NC
 
       if (!result.has(sede)) result.set(sede, new Map());
