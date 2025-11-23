@@ -71,6 +71,8 @@ function onOpen() {
     .addItem('🧼 Pulisci Descrizioni', 'runCleanProductDescriptions')
     .addSeparator()
     .addItem('🧹 Disattiva Prodotti Spazzatura', 'runMarkJunkProducts')
+    .addItem('🔍 Preview Duplicati Prodotti', 'previewProdottiDuplicati')
+    .addItem('🗑️ Pulisci Duplicati Prodotti', 'cleanupProdottiDuplicati')
     .addSeparator()
     .addItem('Duplicati', App.ui.fn.runMarkDuplicateInvoices)
     .addItem('Cache', App.ui.fn.runClearCache)
