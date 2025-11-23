@@ -82,15 +82,13 @@ function createPnlConfrontoGemmaZaffiro() {
     const aziendaMap = _getAziendaMap();
     const costiAggregati = _getAggregatedCostsBySede(famiglieFornitori, aziendaMap);
 
-    // Mappe separate per Gemma e Zaffiro (solo Gelateria)
+    // Mappe per Gemma, Zaffiro e Globale (Gemma+Zaffiro) - SOLO GELATERIA
     const pnlGemma = new Map();
     const pnlZaffiro = new Map();
-    // Mappe per costi GLOBALI (Gemma include Hotel)
-    const pnlGemmaGlobale = new Map();
-    const pnlZaffiroGlobale = new Map();
+    const pnlGlobale = new Map(); // Somma Gemma + Zaffiro
     
     // Inizializza mappe
-    [pnlGemma, pnlZaffiro, pnlGemmaGlobale, pnlZaffiroGlobale].forEach(map => {
+    [pnlGemma, pnlZaffiro, pnlGlobale].forEach(map => {
       map.set(VOCE_FATTURATO, new Map());
       map.set(VOCE_FATTURE_INCASSATE, new Map());
       COSTI_OPERATIVI_GOP.forEach(fam => map.set(fam, new Map()));
@@ -99,7 +97,7 @@ function createPnlConfrontoGemmaZaffiro() {
 
     const tuttiGliAnni = new Set();
 
-    // Aggrega dati mensili per anno (Gelateria + Globale)
+    // Aggrega dati mensili per anno (SOLO GELATERIA, NO HOTEL)
     dataMensili.forEach((mesi, sede) => {
       const azienda = aziendaMap.get(sede);
       if (!azienda) {
@@ -112,39 +110,34 @@ function createPnlConfrontoGemmaZaffiro() {
         const anno = annoMese.split('-')[0];
         tuttiGliAnni.add(anno);
         
+        // SOLO GELATERIA (escludi Hotel)
         const repartoEffettivo = (azienda === 'Zaffiro') ? 'Gelateria' : reparto;
         const isGelateria = !repartoEffettivo || String(repartoEffettivo).toLowerCase() !== 'hotel';
         
-        // Aggregazione GELATERIA (escludi Hotel)
-        if (isGelateria) {
-          if (azienda === 'Gemma') {
-            pnlGemma.get(VOCE_FATTURATO).set(anno, (pnlGemma.get(VOCE_FATTURATO).get(anno) ?? 0) + fatturato);
-            pnlGemma.get(VOCE_FATTURE_INCASSATE).set(anno, (pnlGemma.get(VOCE_FATTURE_INCASSATE).get(anno) ?? 0) + (fattureIncassate || 0));
-            pnlGemma.get(VOCE_CEDOLINI).set(anno, (pnlGemma.get(VOCE_CEDOLINI).get(anno) ?? 0) + personale);
-          } else if (azienda === 'Zaffiro') {
-            pnlZaffiro.get(VOCE_FATTURATO).set(anno, (pnlZaffiro.get(VOCE_FATTURATO).get(anno) ?? 0) + fatturato);
-            pnlZaffiro.get(VOCE_FATTURE_INCASSATE).set(anno, (pnlZaffiro.get(VOCE_FATTURE_INCASSATE).get(anno) ?? 0) + (fattureIncassate || 0));
-            pnlZaffiro.get(VOCE_CEDOLINI).set(anno, (pnlZaffiro.get(VOCE_CEDOLINI).get(anno) ?? 0) + personale);
-          }
+        if (!isGelateria) return; // Skip Hotel
+        
+        // Aggrega per azienda
+        if (azienda === 'Gemma') {
+          pnlGemma.get(VOCE_FATTURATO).set(anno, (pnlGemma.get(VOCE_FATTURATO).get(anno) ?? 0) + fatturato);
+          pnlGemma.get(VOCE_FATTURE_INCASSATE).set(anno, (pnlGemma.get(VOCE_FATTURE_INCASSATE).get(anno) ?? 0) + (fattureIncassate || 0));
+          pnlGemma.get(VOCE_CEDOLINI).set(anno, (pnlGemma.get(VOCE_CEDOLINI).get(anno) ?? 0) + personale);
+        } else if (azienda === 'Zaffiro') {
+          pnlZaffiro.get(VOCE_FATTURATO).set(anno, (pnlZaffiro.get(VOCE_FATTURATO).get(anno) ?? 0) + fatturato);
+          pnlZaffiro.get(VOCE_FATTURE_INCASSATE).set(anno, (pnlZaffiro.get(VOCE_FATTURE_INCASSATE).get(anno) ?? 0) + (fattureIncassate || 0));
+          pnlZaffiro.get(VOCE_CEDOLINI).set(anno, (pnlZaffiro.get(VOCE_CEDOLINI).get(anno) ?? 0) + personale);
         }
         
-        // Aggregazione GLOBALE (include Hotel per Gemma)
-        if (azienda === 'Gemma') {
-          pnlGemmaGlobale.get(VOCE_FATTURATO).set(anno, (pnlGemmaGlobale.get(VOCE_FATTURATO).get(anno) ?? 0) + fatturato);
-          pnlGemmaGlobale.get(VOCE_FATTURE_INCASSATE).set(anno, (pnlGemmaGlobale.get(VOCE_FATTURE_INCASSATE).get(anno) ?? 0) + (fattureIncassate || 0));
-          pnlGemmaGlobale.get(VOCE_CEDOLINI).set(anno, (pnlGemmaGlobale.get(VOCE_CEDOLINI).get(anno) ?? 0) + personale);
-        } else if (azienda === 'Zaffiro') {
-          pnlZaffiroGlobale.get(VOCE_FATTURATO).set(anno, (pnlZaffiroGlobale.get(VOCE_FATTURATO).get(anno) ?? 0) + fatturato);
-          pnlZaffiroGlobale.get(VOCE_FATTURE_INCASSATE).set(anno, (pnlZaffiroGlobale.get(VOCE_FATTURE_INCASSATE).get(anno) ?? 0) + (fattureIncassate || 0));
-          pnlZaffiroGlobale.get(VOCE_CEDOLINI).set(anno, (pnlZaffiroGlobale.get(VOCE_CEDOLINI).get(anno) ?? 0) + personale);
-        }
+        // Aggrega GLOBALE (Gemma + Zaffiro)
+        pnlGlobale.get(VOCE_FATTURATO).set(anno, (pnlGlobale.get(VOCE_FATTURATO).get(anno) ?? 0) + fatturato);
+        pnlGlobale.get(VOCE_FATTURE_INCASSATE).set(anno, (pnlGlobale.get(VOCE_FATTURE_INCASSATE).get(anno) ?? 0) + (fattureIncassate || 0));
+        pnlGlobale.get(VOCE_CEDOLINI).set(anno, (pnlGlobale.get(VOCE_CEDOLINI).get(anno) ?? 0) + personale);
       });
     });
     
     LOG.info('PNL_CONFRONTO', `Dati aggregati - Gemma Fatturato anni: ${Array.from(pnlGemma.get(VOCE_FATTURATO).keys()).join(', ')}`);
     LOG.info('PNL_CONFRONTO', `Dati aggregati - Zaffiro Fatturato anni: ${Array.from(pnlZaffiro.get(VOCE_FATTURATO).keys()).join(', ')}`);
 
-    // Aggrega costi fornitori per anno (Gelateria + Globale)
+    // Aggrega costi fornitori per anno (SOLO GELATERIA, NO HOTEL)
     costiAggregati.forEach((mesi, sede) => {
       mesi.forEach((costiPerFamiglia, annoMese) => {
         const anno = annoMese.split('-')[0];
@@ -154,28 +147,24 @@ function createPnlConfrontoGemmaZaffiro() {
           const { costoNetto, reparto, azienda, famiglia: famigliaOriginale } = infoFamiglia;
           const famiglia = trovaFamigliaStandard(famigliaOriginale);
           
+          // SOLO GELATERIA (escludi Hotel)
           const repartoEffettivo = (azienda === 'Zaffiro') ? 'Gelateria' : reparto;
           const isGelateria = !repartoEffettivo || String(repartoEffettivo).toLowerCase() !== 'hotel';
           
-          // Aggregazione GELATERIA (escludi Hotel)
-          if (isGelateria) {
-            if (azienda === 'Gemma') {
-              if (!pnlGemma.has(famiglia)) pnlGemma.set(famiglia, new Map());
-              pnlGemma.get(famiglia).set(anno, (pnlGemma.get(famiglia).get(anno) ?? 0) + costoNetto);
-            } else if (azienda === 'Zaffiro') {
-              if (!pnlZaffiro.has(famiglia)) pnlZaffiro.set(famiglia, new Map());
-              pnlZaffiro.get(famiglia).set(anno, (pnlZaffiro.get(famiglia).get(anno) ?? 0) + costoNetto);
-            }
+          if (!isGelateria) return; // Skip Hotel
+          
+          // Aggrega per azienda
+          if (azienda === 'Gemma') {
+            if (!pnlGemma.has(famiglia)) pnlGemma.set(famiglia, new Map());
+            pnlGemma.get(famiglia).set(anno, (pnlGemma.get(famiglia).get(anno) ?? 0) + costoNetto);
+          } else if (azienda === 'Zaffiro') {
+            if (!pnlZaffiro.has(famiglia)) pnlZaffiro.set(famiglia, new Map());
+            pnlZaffiro.get(famiglia).set(anno, (pnlZaffiro.get(famiglia).get(anno) ?? 0) + costoNetto);
           }
           
-          // Aggregazione GLOBALE (include Hotel per Gemma)
-          if (azienda === 'Gemma') {
-            if (!pnlGemmaGlobale.has(famiglia)) pnlGemmaGlobale.set(famiglia, new Map());
-            pnlGemmaGlobale.get(famiglia).set(anno, (pnlGemmaGlobale.get(famiglia).get(anno) ?? 0) + costoNetto);
-          } else if (azienda === 'Zaffiro') {
-            if (!pnlZaffiroGlobale.has(famiglia)) pnlZaffiroGlobale.set(famiglia, new Map());
-            pnlZaffiroGlobale.get(famiglia).set(anno, (pnlZaffiroGlobale.get(famiglia).get(anno) ?? 0) + costoNetto);
-          }
+          // Aggrega GLOBALE (Gemma + Zaffiro)
+          if (!pnlGlobale.has(famiglia)) pnlGlobale.set(famiglia, new Map());
+          pnlGlobale.get(famiglia).set(anno, (pnlGlobale.get(famiglia).get(anno) ?? 0) + costoNetto);
         });
       });
     });
@@ -196,19 +185,10 @@ function createPnlConfrontoGemmaZaffiro() {
     const percentFormat = '(0.0)%;[Red](0.0)%;(0.0)%';
 
     anniOrdinati.forEach(anno => {
-      // Scrivi sezione GLOBALE
       currentRow = _writeConfrontoSection(
-        sh, currentRow, anno, pnlGemmaGlobale, pnlZaffiroGlobale, 
+        sh, currentRow, anno, pnlGlobale, pnlGemma, pnlZaffiro,
         COSTI_OPERATIVI_GOP, ALTRI_COSTI, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE, VOCE_CEDOLINI,
-        currencyFormat, percentFormat, 'GLOBALE (Gelateria + Hotel)'
-      );
-      currentRow += 2; // Spazio
-      
-      // Scrivi sezione GELATERIA
-      currentRow = _writeConfrontoSection(
-        sh, currentRow, anno, pnlGemma, pnlZaffiro, 
-        COSTI_OPERATIVI_GOP, ALTRI_COSTI, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE, VOCE_CEDOLINI,
-        currencyFormat, percentFormat, 'GELATERIA'
+        currencyFormat, percentFormat
       );
       currentRow += 3; // Spazio tra anni
     });
@@ -216,7 +196,7 @@ function createPnlConfrontoGemmaZaffiro() {
     // Ridimensiona colonne
     if (sh.getLastColumn() > 0) {
       GG.get('ERROR_HANDLER').safely(
-        () => sh.autoResizeColumns(1, Math.min(sh.getMaxColumns(), 5)),
+        () => sh.autoResizeColumns(1, Math.min(sh.getMaxColumns(), 7)),
         { scope: 'CONFRONTO_RESIZE', message: 'Impossibile ridimensionare colonne.' }
       );
     }
@@ -236,20 +216,20 @@ function createPnlConfrontoGemmaZaffiro() {
  * Scrive una sezione di confronto per un anno specifico
  * @private
  */
-function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, costiOperativiGOP, altriCosti, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE, VOCE_CEDOLINI, currencyFormat, percentFormat, sezioneNome) {
+function _writeConfrontoSection(sheet, startRow, anno, pnlGlobale, pnlGemma, pnlZaffiro, costiOperativiGOP, altriCosti, VOCE_FATTURATO, VOCE_FATTURE_INCASSATE, VOCE_CEDOLINI, currencyFormat, percentFormat) {
   let currentRow = startRow;
   
   // Titolo
-  sheet.getRange(currentRow, 1, 1, 5).merge()
-    .setValue(`${sezioneNome || 'CONFRONTO P&L'} - ANNO ${anno}`)
+  sheet.getRange(currentRow, 1, 1, 7).merge()
+    .setValue(`CONFRONTO GELATERIA - ANNO ${anno}`)
     .setFontWeight('bold')
     .setHorizontalAlignment('center')
     .setBackground('#e0e0e0');
   currentRow++;
   
   // Header
-  const headers = ['Voce', 'Gemma €', '% Gemma', 'Zaffiro €', '% Zaffiro'];
-  sheet.getRange(currentRow, 1, 1, 5).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
+  const headers = ['Voce', 'Globale €', '% Glob', 'Gemma €', '% Gemma', 'Zaffiro €', '% Zaffiro'];
+  sheet.getRange(currentRow, 1, 1, 7).setValues([headers]).setFontWeight('bold').setBackground('#f3f3f3');
   currentRow++;
   
   // Helper per ottenere valori
@@ -263,135 +243,169 @@ function _writeConfrontoSection(sheet, startRow, anno, pnlGemma, pnlZaffiro, cos
   
   // RICAVI
   const rigaFatt = currentRow;
+  const fattGlobale = getVal(pnlGlobale, VOCE_FATTURATO, anno);
   const fattGemma = getVal(pnlGemma, VOCE_FATTURATO, anno);
   const fattZaffiro = getVal(pnlZaffiro, VOCE_FATTURATO, anno);
   
   sheet.getRange(currentRow, 1).setValue(VOCE_FATTURATO);
-  sheet.getRange(currentRow, 2).setValue(fattGemma).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setValue(calcPercentOnFatt(fattGemma, fattGemma) / 100).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 4).setValue(fattZaffiro).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setValue(calcPercentOnFatt(fattZaffiro, fattZaffiro) / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(fattGlobale).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(calcPercentOnFatt(fattGlobale, fattGlobale) / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 4).setValue(fattGemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(calcPercentOnFatt(fattGemma, fattGemma) / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(fattZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 7).setValue(calcPercentOnFatt(fattZaffiro, fattZaffiro) / 100).setNumberFormat(percentFormat);
   currentRow++;
   
   const rigaFattInc = currentRow;
+  const fattIncGlobale = getVal(pnlGlobale, VOCE_FATTURE_INCASSATE, anno);
   const fattIncGemma = getVal(pnlGemma, VOCE_FATTURE_INCASSATE, anno);
   const fattIncZaffiro = getVal(pnlZaffiro, VOCE_FATTURE_INCASSATE, anno);
   
   sheet.getRange(currentRow, 1).setValue(VOCE_FATTURE_INCASSATE);
-  sheet.getRange(currentRow, 2).setValue(fattIncGemma).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setValue(calcPercentOnFatt(fattIncGemma, fattGemma) / 100).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 4).setValue(fattIncZaffiro).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setValue(calcPercentOnFatt(fattIncZaffiro, fattZaffiro) / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(fattIncGlobale).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(calcPercentOnFatt(fattIncGlobale, fattGlobale) / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 4).setValue(fattIncGemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(calcPercentOnFatt(fattIncGemma, fattGemma) / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(fattIncZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 7).setValue(calcPercentOnFatt(fattIncZaffiro, fattZaffiro) / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
   const rigaTotRicavi = currentRow;
+  const totRicaviGlobale = fattGlobale + fattIncGlobale;
   const totRicaviGemma = fattGemma + fattIncGemma;
   const totRicaviZaffiro = fattZaffiro + fattIncZaffiro;
   
   sheet.getRange(currentRow, 1).setValue('(A) - TOTALE RICAVI').setFontWeight('bold').setBackground('#f3f3f3');
-  sheet.getRange(currentRow, 2).setValue(totRicaviGemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 2).setValue(totRicaviGlobale).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 3).setValue(1.0).setNumberFormat(percentFormat); // 100%
-  sheet.getRange(currentRow, 4).setValue(totRicaviZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 4).setValue(totRicaviGemma).setNumberFormat(currencyFormat);
   sheet.getRange(currentRow, 5).setValue(1.0).setNumberFormat(percentFormat); // 100%
+  sheet.getRange(currentRow, 6).setValue(totRicaviZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 7).setValue(1.0).setNumberFormat(percentFormat); // 100%
   currentRow++;
   currentRow++; // Spazio
   
   // COSTI OPERATIVI
-  const valoriCostiOp = { gemma: 0, zaffiro: 0 };
+  const valoriCostiOp = { globale: 0, gemma: 0, zaffiro: 0 };
   costiOperativiGOP.forEach(famiglia => {
+    const valGlobale = getVal(pnlGlobale, famiglia, anno);
     const valGemma = getVal(pnlGemma, famiglia, anno);
     const valZaffiro = getVal(pnlZaffiro, famiglia, anno);
+    valoriCostiOp.globale += valGlobale;
     valoriCostiOp.gemma += valGemma;
     valoriCostiOp.zaffiro += valZaffiro;
     
-    const percOnFattGemma = calcPercentOnFatt(valGemma, totRicaviGemma);
-    const percOnFattZaffiro = calcPercentOnFatt(valZaffiro, totRicaviZaffiro);
+    const percGlobale = calcPercentOnFatt(valGlobale, totRicaviGlobale);
+    const percGemma = calcPercentOnFatt(valGemma, totRicaviGemma);
+    const percZaffiro = calcPercentOnFatt(valZaffiro, totRicaviZaffiro);
     
     sheet.getRange(currentRow, 1).setValue(famiglia);
-    sheet.getRange(currentRow, 2).setValue(valGemma).setNumberFormat(currencyFormat);
-    sheet.getRange(currentRow, 3).setValue(percOnFattGemma / 100).setNumberFormat(percentFormat);
-    sheet.getRange(currentRow, 4).setValue(valZaffiro).setNumberFormat(currencyFormat);
-    sheet.getRange(currentRow, 5).setValue(percOnFattZaffiro / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 2).setValue(valGlobale).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 3).setValue(percGlobale / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 4).setValue(valGemma).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 5).setValue(percGemma / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 6).setValue(valZaffiro).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 7).setValue(percZaffiro / 100).setNumberFormat(percentFormat);
     currentRow++;
   });
   currentRow++; // Spazio
   
   // C1 - TOTALE OPERATIVI
   const rigaC1 = currentRow;
-  const percC1OnFattGemma = calcPercentOnFatt(valoriCostiOp.gemma, totRicaviGemma);
-  const percC1OnFattZaffiro = calcPercentOnFatt(valoriCostiOp.zaffiro, totRicaviZaffiro);
+  const percC1Globale = calcPercentOnFatt(valoriCostiOp.globale, totRicaviGlobale);
+  const percC1Gemma = calcPercentOnFatt(valoriCostiOp.gemma, totRicaviGemma);
+  const percC1Zaffiro = calcPercentOnFatt(valoriCostiOp.zaffiro, totRicaviZaffiro);
   
   sheet.getRange(currentRow, 1).setValue('C1 - DI CUI OPERATIVI').setFontWeight('bold').setBackground('#f3f3f3');
-  sheet.getRange(currentRow, 2).setValue(valoriCostiOp.gemma).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setValue(percC1OnFattGemma / 100).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 4).setValue(valoriCostiOp.zaffiro).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setValue(percC1OnFattZaffiro / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(valoriCostiOp.globale).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(percC1Globale / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 4).setValue(valoriCostiOp.gemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(percC1Gemma / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(valoriCostiOp.zaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 7).setValue(percC1Zaffiro / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
   // GOP
   const rigaGOP = currentRow;
+  const gopGlobale = totRicaviGlobale - valoriCostiOp.globale;
   const gopGemma = totRicaviGemma - valoriCostiOp.gemma;
   const gopZaffiro = totRicaviZaffiro - valoriCostiOp.zaffiro;
-  const percGOPOnFattGemma = calcPercentOnFatt(gopGemma, totRicaviGemma);
-  const percGOPOnFattZaffiro = calcPercentOnFatt(gopZaffiro, totRicaviZaffiro);
+  const percGOPGlobale = calcPercentOnFatt(gopGlobale, totRicaviGlobale);
+  const percGOPGemma = calcPercentOnFatt(gopGemma, totRicaviGemma);
+  const percGOPZaffiro = calcPercentOnFatt(gopZaffiro, totRicaviZaffiro);
   
   sheet.getRange(currentRow, 1).setValue('GOP (A - C1)').setFontWeight('bold').setBackground('#e0e0e0');
-  sheet.getRange(currentRow, 2).setValue(gopGemma).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setValue(percGOPOnFattGemma / 100).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 4).setValue(gopZaffiro).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setValue(percGOPOnFattZaffiro / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(gopGlobale).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(percGOPGlobale / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 4).setValue(gopGemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(percGOPGemma / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(gopZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 7).setValue(percGOPZaffiro / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
   // ALTRI COSTI
-  const valoriAltriCosti = { gemma: 0, zaffiro: 0 };
+  const valoriAltriCosti = { globale: 0, gemma: 0, zaffiro: 0 };
   altriCosti.forEach(famiglia => {
+    const valGlobale = getVal(pnlGlobale, famiglia, anno);
     const valGemma = getVal(pnlGemma, famiglia, anno);
     const valZaffiro = getVal(pnlZaffiro, famiglia, anno);
+    valoriAltriCosti.globale += valGlobale;
     valoriAltriCosti.gemma += valGemma;
     valoriAltriCosti.zaffiro += valZaffiro;
     
-    const percOnFattGemma = calcPercentOnFatt(valGemma, totRicaviGemma);
-    const percOnFattZaffiro = calcPercentOnFatt(valZaffiro, totRicaviZaffiro);
+    const percGlobale = calcPercentOnFatt(valGlobale, totRicaviGlobale);
+    const percGemma = calcPercentOnFatt(valGemma, totRicaviGemma);
+    const percZaffiro = calcPercentOnFatt(valZaffiro, totRicaviZaffiro);
     
     sheet.getRange(currentRow, 1).setValue(famiglia);
-    sheet.getRange(currentRow, 2).setValue(valGemma).setNumberFormat(currencyFormat);
-    sheet.getRange(currentRow, 3).setValue(percOnFattGemma / 100).setNumberFormat(percentFormat);
-    sheet.getRange(currentRow, 4).setValue(valZaffiro).setNumberFormat(currencyFormat);
-    sheet.getRange(currentRow, 5).setValue(percOnFattZaffiro / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 2).setValue(valGlobale).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 3).setValue(percGlobale / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 4).setValue(valGemma).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 5).setValue(percGemma / 100).setNumberFormat(percentFormat);
+    sheet.getRange(currentRow, 6).setValue(valZaffiro).setNumberFormat(currencyFormat);
+    sheet.getRange(currentRow, 7).setValue(percZaffiro / 100).setNumberFormat(percentFormat);
     currentRow++;
   });
   currentRow++; // Spazio
   
   // C - TOTALE COSTI
   const rigaTotCosti = currentRow;
+  const totCostiGlobale = valoriCostiOp.globale + valoriAltriCosti.globale;
   const totCostiGemma = valoriCostiOp.gemma + valoriAltriCosti.gemma;
   const totCostiZaffiro = valoriCostiOp.zaffiro + valoriAltriCosti.zaffiro;
-  const percTotCostiOnFattGemma = calcPercentOnFatt(totCostiGemma, totRicaviGemma);
-  const percTotCostiOnFattZaffiro = calcPercentOnFatt(totCostiZaffiro, totRicaviZaffiro);
+  const percTotCostiGlobale = calcPercentOnFatt(totCostiGlobale, totRicaviGlobale);
+  const percTotCostiGemma = calcPercentOnFatt(totCostiGemma, totRicaviGemma);
+  const percTotCostiZaffiro = calcPercentOnFatt(totCostiZaffiro, totRicaviZaffiro);
   
   sheet.getRange(currentRow, 1).setValue('C - TOTALE COSTI').setFontWeight('bold').setBackground('#f3f3f3');
-  sheet.getRange(currentRow, 2).setValue(totCostiGemma).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setValue(percTotCostiOnFattGemma / 100).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 4).setValue(totCostiZaffiro).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setValue(percTotCostiOnFattZaffiro / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(totCostiGlobale).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(percTotCostiGlobale / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 4).setValue(totCostiGemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(percTotCostiGemma / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(totCostiZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 7).setValue(percTotCostiZaffiro / 100).setNumberFormat(percentFormat);
   currentRow++;
   currentRow++; // Spazio
   
   // MOL
   const rigaMOL = currentRow;
+  const molGlobale = totRicaviGlobale - totCostiGlobale;
   const molGemma = totRicaviGemma - totCostiGemma;
   const molZaffiro = totRicaviZaffiro - totCostiZaffiro;
-  const percMOLOnFattGemma = calcPercentOnFatt(molGemma, totRicaviGemma);
-  const percMOLOnFattZaffiro = calcPercentOnFatt(molZaffiro, totRicaviZaffiro);
+  const percMOLGlobale = calcPercentOnFatt(molGlobale, totRicaviGlobale);
+  const percMOLGemma = calcPercentOnFatt(molGemma, totRicaviGemma);
+  const percMOLZaffiro = calcPercentOnFatt(molZaffiro, totRicaviZaffiro);
   
   sheet.getRange(currentRow, 1).setValue('MOL (A-C)').setFontWeight('bold').setBackground('#e0e0e0');
-  sheet.getRange(currentRow, 2).setValue(molGemma).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 3).setValue(percMOLOnFattGemma / 100).setNumberFormat(percentFormat);
-  sheet.getRange(currentRow, 4).setValue(molZaffiro).setNumberFormat(currencyFormat);
-  sheet.getRange(currentRow, 5).setValue(percMOLOnFattZaffiro / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 2).setValue(molGlobale).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 3).setValue(percMOLGlobale / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 4).setValue(molGemma).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 5).setValue(percMOLGemma / 100).setNumberFormat(percentFormat);
+  sheet.getRange(currentRow, 6).setValue(molZaffiro).setNumberFormat(currencyFormat);
+  sheet.getRange(currentRow, 7).setValue(percMOLZaffiro / 100).setNumberFormat(percentFormat);
   currentRow++;
   
   return currentRow;
