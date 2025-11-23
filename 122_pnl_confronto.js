@@ -98,8 +98,14 @@ function createPnlConfrontoGemmaZaffiro() {
 
     // Aggrega dati mensili per anno (solo Gelateria)
     dataMensili.forEach((mesi, sede) => {
+      const azienda = aziendaMap.get(sede); // Ottieni azienda dalla mappa
+      if (!azienda) {
+        LOG.warn('PNL_CONFRONTO', `Sede "${sede}" non trovata in aziendaMap. Saltata.`);
+        return; // Salta se azienda non trovata
+      }
+      
       mesi.forEach((dati, annoMese) => {
-        const { fatturato, personale, fattureIncassate, azienda, reparto } = dati;
+        const { fatturato, personale, fattureIncassate, reparto } = dati;
         const anno = annoMese.split('-')[0];
         tuttiGliAnni.add(anno);
         
@@ -120,6 +126,9 @@ function createPnlConfrontoGemmaZaffiro() {
         }
       });
     });
+    
+    LOG.info('PNL_CONFRONTO', `Dati aggregati - Gemma Fatturato anni: ${Array.from(pnlGemma.get(VOCE_FATTURATO).keys()).join(', ')}`);
+    LOG.info('PNL_CONFRONTO', `Dati aggregati - Zaffiro Fatturato anni: ${Array.from(pnlZaffiro.get(VOCE_FATTURATO).keys()).join(', ')}`);
 
     // Aggrega costi fornitori per anno (solo Gelateria)
     costiAggregati.forEach((mesi, sede) => {
