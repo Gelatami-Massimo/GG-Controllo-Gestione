@@ -75,6 +75,12 @@ function onOpen() {
     .addItem('🗑️ Pulisci Log Vecchi', 'runCleanupLogs')
   );
 
+  // --- Debug Tools ---
+  menu.addSubMenu(ui.createMenu('🐛 Debug')
+    .addItem('🏨 Diagnosi Costi Hotel', 'runDiagnoseHotelCosts')
+    .addItem('📊 Confronta Hotel: Fatture vs P&L', 'runCompareHotelCostsWithPnL')
+  );
+
   // --- Configurazione ---
   menu.addSubMenu(ui.createMenu('⚙️ Config')
     .addItem('Setup', App.ui.fn.runInitialSetup)
@@ -258,6 +264,12 @@ function runSyncSuppliers() { _runSafely(() => DEBUG.syncSuppliersFromInvoices()
 
 /** Riallinea le categorie prodotti storiche con la configurazione attuale. @returns {void} */
 function runSyncCategoriesRetroactive() { _runSafely(() => DEBUG.syncCategoriesRetroactive(), 'Debug', 'Riallineamento categorie storiche...', 'Categorie storiche riallineate!'); }
+
+/** Diagnostica costi Hotel - verifica configurazione e dati. @returns {void} */
+function runDiagnoseHotelCosts() { _runSafely(() => DEBUG.DEV_DiagnoseHotelCosts(), 'Debug Hotel', 'Analisi configurazione costi Hotel...', 'Diagnosi completata!'); }
+
+/** Confronta costi Hotel tra Fatture e P&L generato. @returns {void} */
+function runCompareHotelCostsWithPnL() { _runSafely(() => DEBUG.DEV_CompareHotelCostsWithPnL(), 'Debug Hotel', 'Confronto Fatture vs P&L...', 'Analisi completata!'); }
 
 /**
  * Scansiona il catalogo Prodotti e disattiva quelli con descrizioni "spazzatura".
