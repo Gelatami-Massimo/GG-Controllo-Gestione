@@ -190,6 +190,12 @@ function createPnlSheet() {
     });
   });
 
+  // Mappe separate per costi Hotel (esclusi dal P&L normale, mostrati sotto MOL)
+  const costiHotelGemma = new Map();
+  const costiHotelZaffiro = new Map();
+  costiHotelGemma.set('COSTI HOTEL', new Map());
+  costiHotelZaffiro.set('COSTI HOTEL', new Map());
+
   // --- Aggrega Costi Fornitori per perimetro ---
   costiAggregati.forEach((mesi, sede) => {
     mesi.forEach((costiPerFamiglia, annoMese) => {
@@ -200,7 +206,7 @@ function createPnlSheet() {
         tutteLeFamiglie.add(famiglia);
         const { costoNetto, reparto, azienda } = infoFamiglia;
         
-        // Perimetro gelateria
+        // Perimetro gelateria (escludi Hotel da Gemma/Zaffiro)
         if (isGelateria(reparto)) {
           if (!pnlGlobaleGelateria.has(famiglia)) pnlGlobaleGelateria.set(famiglia, new Map());
           pnlGlobaleGelateria.get(famiglia).set(annoMese, (pnlGlobaleGelateria.get(famiglia).get(annoMese) ?? 0) + costoNetto);
@@ -215,10 +221,18 @@ function createPnlSheet() {
           }
         }
         
-        // Perimetro hotel
+        // Perimetro hotel: aggrega separatamente per Gemma/Zaffiro (escluso da P&L normale)
         if (isHotel(reparto)) {
           if (!pnlHotel.has(famiglia)) pnlHotel.set(famiglia, new Map());
           pnlHotel.get(famiglia).set(annoMese, (pnlHotel.get(famiglia).get(annoMese) ?? 0) + costoNetto);
+          
+          // Aggrega costi Hotel per azienda (mostrati sotto MOL)
+          if (azienda === 'Gemma') {
+            costiHotelGemma.get('COSTI HOTEL').set(annoMese, (costiHotelGemma.get('COSTI HOTEL').get(annoMese) ?? 0) + costoNetto);
+          }
+          if (azienda === 'Zaffiro') {
+            costiHotelZaffiro.get('COSTI HOTEL').set(annoMese, (costiHotelZaffiro.get('COSTI HOTEL').get(annoMese) ?? 0) + costoNetto);
+          }
         }
         
         // Sede (come ora)
@@ -284,15 +298,16 @@ function createPnlSheet() {
           Array.from(pnlGlobaleGelateria.values()).some(mesiValori => mesiValori.has(meseAnno) && mesiValori.get(meseAnno) !== 0)
         );
         if (globaleHaDati) {
+          // GLOBALE: non mostra costi Hotel (già aggregati in pnlHotel separato)
           currentRow = _writePnlSection(
             sh, currentRow, `CONTO ECONOMICO RICLASSIFICATO - GLOBALE GELATERIA (Anno ${anno})`,
-            pnlGlobaleGelateria, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat
+            pnlGlobaleGelateria, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat, null
           );
           currentRow += 2;
         }
       }
 
-      // Sezioni SEDI
+      // Sezioni SEDI (con logica azienda per costi Hotel)
       if (filtroPerimetro === '2' || filtroPerimetro === '4') {
         // Mostra tutte le sedi
         [...tutteLeSedi].sort().forEach(sede => {
@@ -304,9 +319,13 @@ function createPnlSheet() {
             );
           }
           if (sedeHaDatiAnno) {
+            // Determina se mostrare costi Hotel (solo per Gemma/Zaffiro)
+            const aziendaSede = dataMensili.get(sede)?.values().next().value?.azienda;
+            const costiHotelSede = aziendaSede === 'Gemma' ? costiHotelGemma : (aziendaSede === 'Zaffiro' ? costiHotelZaffiro : null);
+            
             currentRow = _writePnlSection(
               sh, currentRow, `CONTO ECONOMICO RICLASSIFICATO - SEDE: ${sede} (Anno ${anno})`,
-              pnlDataSede, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat
+              pnlDataSede, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat, costiHotelSede
             );
             currentRow += 3;
           }
@@ -323,9 +342,13 @@ function createPnlSheet() {
               );
             }
             if (sedeHaDatiAnno) {
+              // Determina se mostrare costi Hotel (solo per Gemma/Zaffiro)
+              const aziendaSede = dataMensili.get(sede)?.values().next().value?.azienda;
+              const costiHotelSede = aziendaSede === 'Gemma' ? costiHotelGemma : (aziendaSede === 'Zaffiro' ? costiHotelZaffiro : null);
+              
               currentRow = _writePnlSection(
                 sh, currentRow, `CONTO ECONOMICO RICLASSIFICATO - SEDE: ${sede} (Anno ${anno})`,
-                pnlDataSede, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat
+                pnlDataSede, COSTI_OPERATIVI_GOP, ALTRI_COSTI, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat, costiHotelSede
               );
               currentRow += 3;
             }
@@ -361,10 +384,10 @@ function createPnlSheet() {
 
 /**
  * Scrive una sezione completa di P&L sul foglio con logica GOP.
- * (A) Ricavi → C1 Costi Operativi (Food+Consumabili+Cedolini) → GOP (A-C1) → Altri Costi → (C) Totale Costi → MOL (A-C)
+ * (A) Ricavi → C1 Costi Operativi (Food+Consumabili+Cedolini) → GOP (A-C1) → Altri Costi → (C) Totale Costi → MOL (A-C) → [COSTI HOTEL]
  * @private
  */
-function _writePnlSection(sheet, currentRow, title, pnlData, costiOperativiGOP, altriCosti, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat) {
+function _writePnlSection(sheet, currentRow, title, pnlData, costiOperativiGOP, altriCosti, mesiDellAnno, headerRowAnno, VOCE_FATTURATO, currencyFormat, percentFormat, costiHotel = null) {
   try {
     const headerNames = headerRowAnno;
     if (!Array.isArray(headerNames)) {
@@ -502,9 +525,20 @@ function _writePnlSection(sheet, currentRow, title, pnlData, costiOperativiGOP, 
   sheet.getRange(rigaMOL, 1).setValue('MOL (A-C)').setFontWeight('bold').setBackground('#e0e0e0');
   _writeFormulaRow(sheet, rigaMOL, `${totalColLetter}${rigaTotRicavi}-${totalColLetter}${rigaTotCosti}`, headerMap, mesiDellAnno, '#e0e0e0');
   currentRow++;
+  currentRow++; // Spazio
+
+  // 7. COSTI HOTEL (solo se presenti)
+  let rigaCostiHotel = null;
+  if (costiHotel && costiHotel.has('COSTI HOTEL')) {
+    rigaCostiHotel = currentRow;
+    sheet.getRange(rigaCostiHotel, 1).setValue('COSTI HOTEL').setFontWeight('bold').setFontColor('#cc0000');
+    _writePnlRow(sheet, costiHotel.get('COSTI HOTEL'), rigaCostiHotel, mesiDellAnno, headerMap, totalColLetter, firstMonthColLetter, lastMonthColLetter);
+    currentRow++;
+  }
 
   // Formattazione valori monetari (escluse percentuali)
   const righeDaFormattare = [rigaFatturato, rigaTotRicavi, ...Object.values(righeCostiOp), rigaTotCostiOp, rigaGOP, ...Object.values(righeAltriCosti), rigaTotCosti, rigaMOL];
+  if (rigaCostiHotel) righeDaFormattare.push(rigaCostiHotel);
   righeDaFormattare.forEach(riga => {
     if (numCols > 1) {
       GG.get('ERROR_HANDLER').safely(
