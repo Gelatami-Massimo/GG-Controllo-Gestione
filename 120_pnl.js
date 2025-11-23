@@ -123,6 +123,7 @@ function createPnlSheet() {
   try { sh.getDataRange().breakApart(); } catch(e){} // Rimuove merge
 
   // --- 1. CARICAMENTO DATI ---
+  const aziendaMap = _getAziendaMap(); // Mappa Sede → Azienda dal foglio Aziende
   const dataMensili = _getDatiMensiliBySede();
   const famiglieFornitori = _getFamiglieFornitori();
   const costiAggregati = _getAggregatedCostsBySede(famiglieFornitori);
@@ -323,7 +324,7 @@ function createPnlSheet() {
           }
           if (sedeHaDatiAnno) {
             // Determina se mostrare costi Hotel (solo per Gemma, Zaffiro ha solo Gelateria)
-            const aziendaSede = dataMensili.get(sede)?.values().next().value?.azienda;
+            const aziendaSede = aziendaMap.get(sede);
             const costiHotelSede = aziendaSede === 'Gemma' ? costiHotelGemma : null;
             
             currentRow = _writePnlSection(
@@ -346,7 +347,7 @@ function createPnlSheet() {
             }
             if (sedeHaDatiAnno) {
               // Determina se mostrare costi Hotel (solo per Gemma, Zaffiro ha solo Gelateria)
-              const aziendaSede = dataMensili.get(sede)?.values().next().value?.azienda;
+              const aziendaSede = aziendaMap.get(sede);
               const costiHotelSede = aziendaSede === 'Gemma' ? costiHotelGemma : null;
               
               currentRow = _writePnlSection(
@@ -951,4 +952,57 @@ function _sortFamilies(famList, VOCE_CEDOLINI) {
   });
 
   return arr;
+}
+
+/**
+ * Legge il foglio "Aziende" e crea una mappa Sede → Azienda (Gemma/Zaffiro).
+ * Necessario perché il campo "azienda" non è presente in "Dati Mensili" ma in "Aziende".
+ * @returns {Map<string, string>} Mappa Sede → Azienda
+ * @private
+ */
+function _getAziendaMap() {
+  const aziendaMap = new Map();
+  
+  try {
+    const shAziende = SHEETS.get('Aziende');
+    if (!shAziende) {
+      LOG.warn('PNL_AZIENDA_MAP', 'Foglio "Aziende" non trovato. Impossibile determinare Azienda per le sedi.');
+      return aziendaMap;
+    }
+
+    const headerRow = SHEETS._findHeaderRow(shAziende, 'Aziende');
+    const lastRow = shAziende.getLastRow();
+    
+    if (lastRow <= headerRow) {
+      LOG.warn('PNL_AZIENDA_MAP', 'Foglio "Aziende" vuoto.');
+      return aziendaMap;
+    }
+
+    const idx = SHEETS.headerIndex('Aziende');
+    
+    // Verifica che le colonne necessarie esistano
+    if (idx.Sede === undefined || idx.Azienda === undefined) {
+      LOG.error('PNL_AZIENDA_MAP', 'Colonne "Sede" o "Azienda" non trovate nel foglio "Aziende".');
+      return aziendaMap;
+    }
+
+    const maxCol = Math.max(idx.Sede, idx.Azienda) + 1;
+    const rows = shAziende.getRange(headerRow + 1, 1, lastRow - headerRow, maxCol).getValues();
+
+    rows.forEach(row => {
+      const sede = String(row[idx.Sede] ?? '').trim();
+      const azienda = String(row[idx.Azienda] ?? '').trim();
+      
+      if (sede && azienda) {
+        aziendaMap.set(sede, azienda);
+      }
+    });
+
+    LOG.info('PNL_AZIENDA_MAP', `Mappa Sede→Azienda creata con ${aziendaMap.size} sedi.`);
+    
+  } catch (e) {
+    LOG.error('PNL_AZIENDA_MAP', 'Errore lettura foglio "Aziende".', { error: e.message, stack: e.stack });
+  }
+  
+  return aziendaMap;
 }
