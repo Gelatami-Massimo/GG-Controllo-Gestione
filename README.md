@@ -37,16 +37,31 @@
 - Node.js e npm installati
 - clasp CLI (`npm install -g @google/clasp`)
 
-### Deploy su Apps Script
+### Setup Iniziale
 
 ```bash
-# Login a clasp (prima volta)
+# 1. Clona il repository
+git clone https://github.com/Gelatami-Massimo/GG-Controllo-Gestione.git
+cd GG-Controllo-Gestione
+
+# 2. Configura clasp con il tuo Script ID
+cp .clasp.json.example .clasp.json
+# Modifica .clasp.json inserendo il tuo scriptId
+
+# 3. Login a clasp (prima volta)
 clasp login
 
+# 4. Deploy su Apps Script
+clasp push
+```
+
+### Deploy Modifiche
+
+```bash
 # Deploy modifiche
 clasp push
 
-# Oppure apri direttamente l'editor
+# Apri editor Apps Script
 clasp open
 ```
 
