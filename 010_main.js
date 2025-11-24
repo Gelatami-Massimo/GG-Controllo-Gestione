@@ -66,6 +66,8 @@ function onOpen() {
     .addSeparator()
     .addItem('🔄 Duplicati Fatture', App.ui.fn.runMarkDuplicateInvoices)
     .addItem('🗑️ Pulisci Cache', App.ui.fn.runClearCache)
+    .addItem('🗑️ Pulisci Righe Vuote', 'runDeleteEmptyRowsFromRigheSheet')
+    .addSeparator()
   );
 
   // --- Configurazione ---
@@ -398,6 +400,16 @@ function runDataValidation() {
     'DataValidation',
     'Validazione dati completa in corso...',
     'Validazione completata! Controlla i log per il report dettagliato.'
+  );
+}
+
+/** Pulisce le righe vuote dal foglio 'Righe'. @returns {void} */
+function runDeleteEmptyRowsFromRigheSheet() {
+  _runSafely(
+    () => SHEET_CLEANUP.deleteEmptyRows('Righe'),
+    'SheetCleanup',
+    'Pulizia righe vuote dal foglio "Righe" in corso...',
+    'Pulizia del foglio "Righe" completata!'
   );
 }
 
