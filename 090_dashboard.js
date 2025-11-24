@@ -346,7 +346,7 @@ const DASHBOARD = (function () {
               const data    = row[idx.Data];
               const costoNetto  = UTIL.parseNumSmart(row[idx.TotImponibile]);
               const costoTotale = UTIL.parseNumSmart(row[idx.TotDocumento]);
-              if (data instanceof Date && !isNaN(data.getTime())) {
+              if (UTIL.date.isValidDate(data)) {
                 const ymObj = UTIL.date.extractYearMonth(data);
                 const annoMese = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
                 if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());

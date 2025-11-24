@@ -527,7 +527,7 @@ const DEBUG = (function () {
 
         if (!fornId || !numDoc) return;
 
-        if (dataDoc instanceof Date && !isNaN(dataDoc.getTime())) {
+        if (UTIL.date.isValidDate(dataDoc)) {
           dataDoc = Utilities.formatDate(dataDoc, Session.getScriptTimeZone(), 'yyyy-MM-dd');
         } else {
           return; // Skip righe con data non valida

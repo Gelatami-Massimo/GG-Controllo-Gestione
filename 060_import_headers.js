@@ -593,12 +593,10 @@ const IMPORT_HEADERS = (function () {
 
       // Ordine cronologico crescente
       extractedData.sort((a, b) => {
-        const ta =
-          a?.doc?.data instanceof Date && !isNaN(a.doc.data)
+        const ta = UTIL.date.isValidDate(a?.doc?.data)
             ? a.doc.data.getTime()
             : 0;
-        const tb =
-          b?.doc?.data instanceof Date && !isNaN(b.doc.data)
+        const tb = UTIL.date.isValidDate(b?.doc?.data)
             ? b.doc.data.getTime()
             : 0;
         return ta - tb;
@@ -1010,12 +1008,10 @@ const IMPORT_HEADERS = (function () {
 
     return {
       data: dataDoc,
-      anno:
-        dataDoc instanceof Date && !isNaN(dataDoc)
+      anno: UTIL.date.isValidDate(dataDoc)
           ? dataDoc.getFullYear()
           : 0,
-      mese:
-        dataDoc instanceof Date && !isNaN(dataDoc)
+      mese: UTIL.date.isValidDate(dataDoc)
           ? dataDoc.getMonth() + 1
           : 0,
       numero: numeroRaw,
