@@ -522,7 +522,11 @@ const IMPORT_ROWS = (function () {
     // Scrittura finale
     _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF);
     STATE.clear(CURSOR_KEY);
-    if (!isSilent) STATE.clear(App.config.keys.progress);
+    if (!isSilent) {
+      STATE.clear(App.config.keys.progress);
+      const message = `Importazione righe completata.\n\nFatture processate: ${processedInvoices}\nFatture saltate: ${skippedInvoices}`;
+      UTIL.showModalDialog('Importazione Completata', message);
+    }
 
     LOG?.info('ROWS', `Importazione righe completata. Processate: ${processedInvoices}, Saltate: ${skippedInvoices}.`);
   }
@@ -587,6 +591,9 @@ const IMPORT_ROWS = (function () {
           const codiceValoreRaw = codiceArticolo ? UTIL.firstText(codiceArticolo, 'CodiceValore') : '';
           const codiceTipo = codiceArticolo ? (UTIL.firstText(codiceArticolo, 'CodiceTipo') || '') : '';
 
+          // Se CodiceFornitore non è presente, assegna un placeholder
+          const codiceValoreConFallback = codiceValoreRaw || 'DA_ATTRIBUIRE';
+
           const um = UTIL.firstText(linea, 'UnitaMisura');
           const codiceValoreForzato = UTIL.forceText(codiceValoreRaw);
 
@@ -615,7 +622,8 @@ const IMPORT_ROWS = (function () {
           if (!isJunk && (tipoRiga === 'ARTICOLO' || tipoRiga === 'OMAGGIO')) {
             const prodResult = PRODUCTS.findOrCreateProduct(
               invData[idxF.FornitoreID], invData[idxF.DenominazioneFornitore],
-              codiceValoreRaw, descrizione, um, productCache, categoriaFornitore
+              codiceValoreConFallback, // Usa il codice con fallback
+              descrizione, um, productCache, categoriaFornitore
             );
             codiceInterno = prodResult.codiceInterno; // Legacy (per compatibilità)
             codiceInternoBreve = prodResult.codiceInternoBreve; // Nuovo

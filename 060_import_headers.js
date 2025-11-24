@@ -136,9 +136,13 @@ const IMPORT_HEADERS = (function () {
         const isDone = _runScanAndExtractPhase(startTime, maxSec, isSilent);
         if (!isDone) return; // Pausa per timeout
 
-        _runSortAndWritePhase(isSilent);
+        const writeStats = _runSortAndWritePhase(isSilent);
         LOG?.info('HEADERS', 'Importazione e conteggio completati.');
-        if (!isSilent) STATE.clear(App.config.keys.progress);
+        if (!isSilent) {
+          STATE.clear(App.config.keys.progress);
+          const message = `Importazione intestazioni completata.\n\nNuove fatture importate: ${writeStats.fatture}\nNuovi fornitori creati: ${writeStats.fornitori}`;
+          UTIL.showModalDialog('Importazione Completata', message);
+        }
         _clearAllStates(false);
       }
     } catch (e) {
@@ -550,6 +554,7 @@ const IMPORT_HEADERS = (function () {
   // FASE 3: SORT + WRITE + SAVE COUNTS
   // ============================================================
   function _runSortAndWritePhase(isSilent) {
+    let stats = { fatture: 0, fornitori: 0 };
     if (!isSilent) {
       STATE.setJSON(App.config.keys.progress, {
         phase: 'WRITE',
@@ -697,6 +702,9 @@ const IMPORT_HEADERS = (function () {
       _flushBatch(shFornitori, fornitoriBatch, 'Fornitori', headerRowFor);
       _flushBatch(shFatture, fattureBatch, 'Fatture', headerRowFat);
 
+      stats.fatture = fattureBatch.length;
+      stats.fornitori = fornitoriBatch.length;
+
       // ✅ Applica formattazione 'MMMM' alla colonna Mese per visualizzare nome mese
       if (fattureBatch.length > 0) {
         try {
@@ -762,6 +770,8 @@ const IMPORT_HEADERS = (function () {
     STATE.cache.clearLargeJSON(EXTRACTED_DATA_KEY, numChunks);
     STATE.clear(EXTRACTED_DATA_CHUNKS_KEY);
     STATE.clear(PARTIAL_COUNTS_KEY);
+    
+    return stats;
   }
 
   // ============================================================

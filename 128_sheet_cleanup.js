@@ -18,8 +18,9 @@ const SHEET_CLEANUP = (function () {
   }
 
   /**
-   * Rimuove le righe vuote da un foglio di calcolo specificato.
-   * Scansiona il foglio dal basso verso l'alto per evitare problemi con gli indici durante l'eliminazione.
+   * Rimuove le righe vuote da un foglio di calcolo specificato in modo efficiente.
+   * Legge tutti i dati, filtra le righe non vuote in memoria e le riscrive,
+   * minimizzando le chiamate all'API di Spreadsheet.
    *
    * @param {string} sheetName - Il nome del foglio da cui rimuovere le righe vuote.
    */
@@ -39,27 +40,46 @@ const SHEET_CLEANUP = (function () {
       }
 
       const lastRow = sheet.getLastRow();
+      const maxCols = sheet.getMaxColumns();
+      
       // Se il foglio ha solo l'intestazione o è vuoto, non fare nulla.
       if (lastRow <= 1) {
         UTIL.showToast(`Il foglio "${sheetName}" è già pulito.`, 'Informazione', 5);
         return;
       }
       
-      UTIL.showToast(`Avvio pulizia righe vuote dal foglio "${sheetName}"...`, 'Pulizia in corso', 5);
+      UTIL.showToast(`Avvio pulizia efficiente del foglio "${sheetName}"...`, 'Pulizia in corso', 10);
 
-      const range = sheet.getRange(1, 1, lastRow, sheet.getMaxColumns());
-      const values = range.getValues();
-      let rowsDeleted = 0;
+      const range = sheet.getRange(1, 1, lastRow, maxCols);
+      const allValues = range.getValues();
+      
+      const header = allValues[0];
+      const dataRows = allValues.slice(1);
 
-      // Scansiona dal basso verso l'alto per eliminare le righe
-      for (let i = values.length - 1; i >= 1; i--) { // i >= 1 per saltare l'intestazione
-        if (_isRowEmpty(values[i])) {
-          sheet.deleteRow(i + 1); // +1 perché l'array è 0-based
-          rowsDeleted++;
-        }
-      }
+      // Filtra le righe mantenendo solo quelle che non sono vuote
+      const nonEmptyRows = dataRows.filter(row => !_isRowEmpty(row));
+      
+      const originalDataRowsCount = dataRows.length;
+      const finalDataRowsCount = nonEmptyRows.length;
+      const rowsDeleted = originalDataRowsCount - finalDataRowsCount;
 
       if (rowsDeleted > 0) {
+        // Pulisci l'intero foglio (dati)
+        if (lastRow > 1) {
+            sheet.getRange(2, 1, lastRow - 1, maxCols).clearContent();
+        }
+
+        // Se ci sono righe di dati rimaste, scrivile di nuovo
+        if (finalDataRowsCount > 0) {
+          sheet.getRange(2, 1, finalDataRowsCount, header.length).setValues(nonEmptyRows);
+        }
+        
+        // Se il numero di righe è cambiato, elimina le righe fisiche in eccesso alla fine
+        const newMaxRows = finalDataRowsCount + 1;
+        if (sheet.getMaxRows() > newMaxRows) {
+            sheet.deleteRows(newMaxRows + 1, sheet.getMaxRows() - newMaxRows);
+        }
+
         const message = `Pulizia completata. Rimosse ${rowsDeleted} righe vuote dal foglio "${sheetName}".`;
         UTIL.showToast(message, 'Successo', 10);
         LOG.info('SHEET_CLEANUP', message);
