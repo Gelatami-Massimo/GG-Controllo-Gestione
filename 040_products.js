@@ -436,6 +436,7 @@ const PRODUCTS = (() => {
     findOrCreateProduct, 
     flushNewRows, 
     normalizeDescrizione,
+    generateSupplierSigla: _generateSupplierSigla,  // Esposta per riuso in tools
     isProductActive
   };
 })();

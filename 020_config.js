@@ -25,28 +25,27 @@ const CONFIG = (function () {
       if (s === 'true' || s === 'vero') return true;
       if (s === 'false' || s === 'falso') return false;
 
-      // numeri (gestisce € e spazi)
-      const money = sRaw.replace(/[€\s]/g, '');
-      if (money.includes(',') && money.includes('.')) {
-        if (money.lastIndexOf('.') < money.lastIndexOf(',')) {
-          const n1 = parseFloat(money.replace(/\./g, '').replace(',', '.'));
-          if (!isNaN(n1)) return n1;
-        }
+      // numeri (usa UTIL.number.parse centralizzato)
+      const parsedNum = UTIL.number.parse(sRaw);
+      if (parsedNum !== 0 || sRaw === '0' || sRaw === '0.0' || sRaw === '0,0') {
+        return parsedNum;
       }
-      const n2 = parseFloat(money.replace(',', '.'));
-      if (!isNaN(n2) && /^-?\d+(\.\d+)?$/.test(money.replace(',', '.'))) return n2;
 
       // date ISO
       if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-        const d = new Date(sRaw);
-        if (!isNaN(d.getTime())) return d;
+        const d = UTIL.date.parseXmlDate(sRaw);
+        if (d) return d;
       }
       // date IT: dd/mm/yyyy (con eventuale orario)
+      const parsedItalianDate = UTIL.date.parseItalianDate(sRaw);
+      if (parsedItalianDate) return parsedItalianDate;
+      
+      // Date con orario IT (estendi parsing)
       const mIT = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(sRaw);
       if (mIT) {
         const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = mIT;
         const d = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`);
-        if (!isNaN(d.getTime())) return d;
+        if (UTIL.date.isValidDate(d)) return d;
       }
     }
     return v; // Ritorna il valore originale se nessun parsing ha avuto successo

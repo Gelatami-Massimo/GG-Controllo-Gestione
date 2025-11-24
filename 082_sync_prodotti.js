@@ -437,9 +437,8 @@ const SYNC_PRODOTTI = (() => {
     const regexKg = /kg[\s.]*([0-9]+[,.]?[0-9]*)/i;
     const matchKg = desc.match(regexKg);
     if (matchKg) {
-      const numStr = matchKg[1].replace(',', '.');
-      const kg = parseFloat(numStr);
-      if (!isNaN(kg) && kg > 0) {
+      const kg = UTIL.number.parseStrict(matchKg[1]);
+      if (kg !== null && kg > 0) {
         return { tipo: 'KG', kgPerPezzo: kg };
       }
     }
@@ -449,8 +448,8 @@ const SYNC_PRODOTTI = (() => {
     const regexGr = /\b(?:gr?|grammi?)[\s.]*([0-9]+)\b/i;
     const matchGr = desc.match(regexGr);
     if (matchGr) {
-      const gr = parseInt(matchGr[1], 10);
-      if (!isNaN(gr) && gr > 0) {
+      const gr = UTIL.number.parseStrict(matchGr[1]);
+      if (gr !== null && gr > 0) {
         return { tipo: 'KG', kgPerPezzo: gr / 1000 };
       }
     }

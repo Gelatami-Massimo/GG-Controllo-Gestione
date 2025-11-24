@@ -264,12 +264,9 @@ const FILTERS = (function () {
     return { type: 'textContains', value: s };
   }
 
-  // Numero “strict”: accetta "123", "123.45", "123,45" (stile IT/EN); rifiuta se misto con lettere
+  // Numero "strict": usa UTIL.number.parseStrict centralizzato
   function _parseNumberStrict(x) {
-    const t = String(x ?? '').trim();
-    if (!/^[-+]?\d+(?:[.,]\d+)?$/.test(t)) return null;
-    const num = parseFloat(t.replace(',', '.'));
-    return Number.isFinite(num) ? num : null;
+    return UTIL.number.parseStrict(x);
   }
 
   // Date: YYYY-MM-DD o DD/MM/YYYY (usa DATE_UTILS centralizzato)

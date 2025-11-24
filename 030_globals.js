@@ -213,24 +213,70 @@ const UTIL = (function () {
     activeLock = null;
   }
 
-  function parseNumSmart(value) {
-    if (value === null || value === undefined || value === '') return 0;
+  /**
+   * Parsing robusto di numeri da stringhe con opzioni avanzate.
+   * Supporta formati italiani (1.234,56), inglesi (1,234.56), valute (€ 123).
+   * 
+   * @param {*} value - Valore da parsare (string, number, null)
+   * @param {Object} [options] - Opzioni parsing
+   * @param {boolean} [options.returnZeroOnFail=true] - Se true ritorna 0, altrimenti null
+   * @param {boolean} [options.allowNegative=true] - Permetti numeri negativi
+   * @param {boolean} [options.strictMode=false] - Validazione rigida (solo numeri puri, no lettere)
+   * @returns {number|null} Numero parsato o 0/null se non valido
+   * 
+   * @example
+   * parseNumSmart('1.234,56'); // => 1234.56
+   * parseNumSmart('€ 45,99');   // => 45.99
+   * parseNumSmart('invalid');  // => 0
+   * parseNumSmart('invalid', {returnZeroOnFail: false}); // => null
+   * parseNumSmart('abc123', {strictMode: true}); // => null (lettere non permesse)
+   */
+  function parseNumSmart(value, options = {}) {
+    const {
+      returnZeroOnFail = true,
+      allowNegative = true,
+      strictMode = false
+    } = options;
+    
+    const failValue = returnZeroOnFail ? 0 : null;
+    
+    if (value === null || value === undefined || value === '') return failValue;
     if (typeof value === 'number') return value;
+    
     if (typeof value === 'string') {
       const cleaned = value.replace(/[€$£\s]/g, '').trim();
-      if (!cleaned) return 0;
-      if (cleaned.includes('.') && cleaned.includes(',') && cleaned.lastIndexOf('.') < cleaned.lastIndexOf(',')) {
-         const num = parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
-         return isNaN(num) ? 0 : num;
+      if (!cleaned) return failValue;
+      
+      // Strict mode: validazione rigida (solo cifre, punto, virgola, segno opzionale)
+      if (strictMode) {
+        const strictPattern = allowNegative ? /^[-+]?\d+(?:[.,]\d+)?$/ : /^\d+(?:[.,]\d+)?$/;
+        if (!strictPattern.test(cleaned)) return failValue;
       }
-      if (cleaned.includes(',') && cleaned.includes('.') && cleaned.lastIndexOf(',') < cleaned.lastIndexOf('.')) {
-         const num = parseFloat(cleaned.replace(/,/g, ''));
-         return isNaN(num) ? 0 : num;
+      
+      // Gestione segno negativo
+      const isNegative = cleaned.startsWith('-');
+      if (isNegative && !allowNegative) return failValue;
+      
+      // Parsing formato IT/EN
+      let num;
+      if (cleaned.includes('.') && cleaned.includes(',')) {
+        // Formato misto: determina quale è separatore migliaia e quale decimale
+        if (cleaned.lastIndexOf('.') < cleaned.lastIndexOf(',')) {
+          // Formato IT: 1.234,56
+          num = parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
+        } else {
+          // Formato EN: 1,234.56
+          num = parseFloat(cleaned.replace(/,/g, ''));
+        }
+      } else {
+        // Un solo separatore o nessuno: tratta virgola come decimale
+        num = parseFloat(cleaned.replace(',', '.'));
       }
-      const num = parseFloat(cleaned.replace(',', '.'));
-      return isNaN(num) ? 0 : num;
+      
+      return (isNaN(num) || !Number.isFinite(num)) ? failValue : num;
     }
-    return 0;
+    
+    return failValue;
   }
 
   // === XML HELPERS (Fix critico) ===
@@ -736,6 +782,86 @@ const UTIL = (function () {
   };
 
   // ============================================================================
+  // NUMBER_UTILS - Utility centralizzate per parsing numeri
+  // ============================================================================
+  
+  /**
+   * NUMBER_UTILS
+   * 
+   * Centralizza tutte le operazioni di parsing numerico sparse nel progetto.
+   * 
+   * ELIMINA DUPLICAZIONI IN:
+   * - 020_config.js (_parseValue con logica parsing money)
+   * - 050_filters.js (_parseNumberStrict)
+   * - 082_sync_prodotti.js (parsing inline peso/grammi)
+   * 
+   * PERFORMANCE: Gestione ottimizzata formati IT/EN con single-pass parsing.
+   * 
+   * @namespace NUMBER_UTILS
+   * @memberof UTIL
+   */
+  const NUMBER_UTILS = {
+    
+    /**
+     * Parsing standard con comportamento backward-compatible.
+     * Ritorna 0 se fallisce, supporta valute e formati IT/EN.
+     * 
+     * @param {*} value - Valore da parsare
+     * @returns {number} Numero parsato o 0
+     * 
+     * @example
+     * UTIL.number.parse('1.234,56'); // => 1234.56
+     * UTIL.number.parse('€ 45,99');   // => 45.99
+     */
+    parse(value) {
+      return parseNumSmart(value);
+    },
+
+    /**
+     * Parsing rigoroso per validazione input utente.
+     * Accetta solo numeri puri (con separatori decimali), rifiuta testo misto.
+     * Ritorna null se fallisce (non 0).
+     * 
+     * @param {*} value - Valore da parsare
+     * @returns {number|null} Numero parsato o null se invalido
+     * 
+     * @example
+     * UTIL.number.parseStrict('123.45');  // => 123.45
+     * UTIL.number.parseStrict('123,45');  // => 123.45
+     * UTIL.number.parseStrict('abc123');  // => null (testo non permesso)
+     * UTIL.number.parseStrict('€ 123');   // => null (simboli non permessi in strict)
+     */
+    parseStrict(value) {
+      return parseNumSmart(value, { 
+        strictMode: true, 
+        returnZeroOnFail: false 
+      });
+    },
+
+    /**
+     * Verifica se una stringa sembra un numero (anche con valute/separatori).
+     * 
+     * @param {*} value - Valore da verificare
+     * @returns {boolean} True se ha aspetto numerico
+     * 
+     * @example
+     * UTIL.number.isNumericLike('1.234,56'); // => true
+     * UTIL.number.isNumericLike('€ 123');     // => true
+     * UTIL.number.isNumericLike('abc');       // => false
+     */
+    isNumericLike(value) {
+      if (typeof value === 'number') return true;
+      if (typeof value !== 'string') return false;
+      
+      const s = String(value).trim();
+      if (!s) return false;
+      
+      const cleaned = s.replace(/[€$£\s]/g, '');
+      return /^-?[\d.,]+$/.test(cleaned) && this.parse(s) !== 0;
+    }
+  };
+
+  // ============================================================================
   // COLUMN VALIDATION HELPER (Optional micro-utility)
   // ============================================================================
   /**
@@ -921,8 +1047,9 @@ const UTIL = (function () {
      * }
      */
     checkColumns,  // Column validation helper
-    // DATE_UTILS namespace
-    date: DATE_UTILS
+    // Namespaces
+    date: DATE_UTILS,
+    number: NUMBER_UTILS
   };
 })();
 
