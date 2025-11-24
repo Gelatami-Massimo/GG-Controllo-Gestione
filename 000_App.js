@@ -153,6 +153,7 @@ const App = {
       runCreatePnlSheet: 'runCreatePnlSheet',
       runReconciliationReport: 'runReconciliationReport',
       runCreateWarehouse: 'runCreateWarehouse',
+      runDataValidation: 'runDataValidation',
 
       // --- Manutenzione e Debug UI ---
       runInitialSetup: 'runInitialSetup',

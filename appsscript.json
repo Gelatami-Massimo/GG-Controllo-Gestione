@@ -1,11 +1,38 @@
 {
   "timeZone": "Europe/Rome",
-  "dependencies": {},
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "Drive",
+        "version": "v3",
+        "serviceId": "drive"
+      }
+    ]
+  },
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8",
   "oauthScopes": [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/script.scriptapp"
-  ]
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/script.container.ui"
+  ],
+  "addOns": {
+    "common": {
+      "name": "GG Controllo Gestione",
+      "logoUrl": "https://www.gstatic.com/images/branding/product/1x/sheets_48dp.png",
+      "layoutProperties": {
+        "primaryColor": "#4285f4"
+      },
+      "useLocaleFromApp": true,
+      "homepageTrigger": {
+        "runFunction": "onAddonHomepage"
+      }
+    },
+    "sheets": {
+      "onFileScopeGrantedTrigger": {
+        "runFunction": "onOpen"
+      }
+    }
+  }
 }

@@ -30,74 +30,51 @@ function onOpen() {
 
   const ui = SpreadsheetApp.getUi();
   const menu = ui.createMenu('🧊 GELATAMI')
-    .addItem('🎛️ Pannello', App.ui.fn.openSidebar)
+    .addItem('🎛️ Pannello di Controllo', App.ui.fn.openSidebar)
     .addSeparator();
 
   // --- Importazione ---
-  menu.addSubMenu(ui.createMenu('📥 Import')
-    .addItem('▶️ Continua', App.ui.fn.runContinue)
+  menu.addSubMenu(ui.createMenu('📥 Import Fatture')
+    .addItem('▶️ Continua Import', App.ui.fn.runContinue)
     .addSeparator()
-    .addItem('Intestazioni', App.ui.fn.runImportHeaders)
-    .addItem('Righe', App.ui.fn.runImportRows)
+    .addItem('📋 Import Intestazioni', App.ui.fn.runImportHeaders)
+    .addItem('📦 Import Righe Prodotti', App.ui.fn.runImportRows)
     .addSeparator()
-    .addItem('PDF', App.ui.fn.runCreatePdfs)
-    .addItem('Riprendi PDF', 'runResumePdfs')
+    .addItem('📄 Genera PDF', App.ui.fn.runCreatePdfs)
   );
 
   // --- Report e Analisi ---
-  menu.addSubMenu(ui.createMenu('📊 Analisi')
-    .addItem('Dashboard', App.ui.fn.runCreateDashboard)
-    .addItem('P&L', App.ui.fn.runCreatePnlSheet)
-    .addItem('📊 Confronto Gemma-Zaffiro', 'runCreatePnlConfrontoGemmaZaffiro')
+  menu.addSubMenu(ui.createMenu('📊 Report')
+    .addItem('📈 Dashboard Finanziaria', App.ui.fn.runCreateDashboard)
+    .addItem('💰 Conto Economico (P&L)', App.ui.fn.runCreatePnlSheet)
+    .addItem('📊 Confronto Sedi', 'runCreatePnlConfrontoGemmaZaffiro')
     .addSeparator()
-    .addItem('Magazzino', 'buildMagazzinoByYear')
-    .addItem('Mag. Ingredienti', 'buildMagazzinoIngredientiByYear')
+    .addItem('📦 Magazzino Prodotti', 'buildMagazzinoByYear')
+    .addItem('🧪 Magazzino Ingredienti', 'buildMagazzinoIngredientiByYear')
     .addSeparator()
-    .addItem('Aggiorna Prezzi Medi', 'updatePrezziMediMagazzino')
-    .addSeparator()
-    .addItem('Audit', App.ui.fn.runReconciliationReport)
+    .addItem('🔍 Audit Integrità Dati', App.ui.fn.runReconciliationReport)
+    .addItem('✅ Validazione Dati Completa', App.ui.fn.runDataValidation)
   );
 
   // --- Manutenzione ---
   menu.addSubMenu(ui.createMenu('🔧 Manutenzione')
-    .addItem('✨ Completa', App.ui.fn.runCompleteMaintenance)
+    .addItem('✨ Manutenzione Completa', App.ui.fn.runCompleteMaintenance)
     .addSeparator()
-    .addItem('Fornitori', App.ui.fn.runSyncSuppliers)
-    .addItem('Categorie', App.ui.fn.runSyncCategoriesRetroactive)
+    .addItem('👥 Aggiorna Fornitori', App.ui.fn.runSyncSuppliers)
+    .addItem('🏷️ Riallinea Categorie', App.ui.fn.runSyncCategoriesRetroactive)
+    .addItem('📦 Sincronizza Prodotti', 'runSyncProdotti')
     .addSeparator()
-    .addItem('Sync Prodotti da Righe', 'runSyncProdotti')
-    .addItem('Suggerisci UM', 'runSuggestUnitsFromDescription')
-    .addItem('🔧 Recupera Codici Mancanti', 'runBackfillProductCodes')
-    .addItem('🧼 Pulisci Descrizioni', 'runCleanProductDescriptions')
-    .addSeparator()
-    .addItem('🧹 Disattiva Prodotti Spazzatura', 'runMarkJunkProducts')
-    .addItem('🔍 Preview Duplicati Prodotti', 'previewProdottiDuplicati')
-    .addItem('🗑️ Pulisci Duplicati Prodotti', 'cleanupProdottiDuplicati')
-    .addItem('🔬 Diagnostica Causa Duplicati', 'runDiagnosticaDuplicati')
-    .addSeparator()
-    .addItem('⚠️ Preview Duplicati ESATTI', 'previewExactDuplicates')
-    .addItem('🗑️ Cancella Duplicati ESATTI', 'cleanupExactDuplicates')
-    .addSeparator()
-    .addItem('Duplicati', App.ui.fn.runMarkDuplicateInvoices)
-    .addItem('Cache', App.ui.fn.runClearCache)
-    .addItem('🗑️ Pulisci Log Vecchi', 'runCleanupLogs')
-  );
-
-  // --- Debug Tools ---
-  menu.addSubMenu(ui.createMenu('🐛 Debug')
-    .addItem('🏨 Diagnosi Costi Hotel', 'runDiagnoseHotelCosts')
-    .addItem('📊 Confronta Hotel: Fatture vs P&L', 'runCompareHotelCostsWithPnL')
-    .addItem('🔍 Ispeziona Aggregazione Costi', 'runInspectAggregatedCosts')
-    .addItem('🐛 Debug Loop Hotel', 'runDebugCostiHotelLoop')
+    .addItem('🔄 Duplicati Fatture', App.ui.fn.runMarkDuplicateInvoices)
+    .addItem('🗑️ Pulisci Cache', App.ui.fn.runClearCache)
   );
 
   // --- Configurazione ---
-  menu.addSubMenu(ui.createMenu('⚙️ Config')
-    .addItem('Setup', App.ui.fn.runInitialSetup)
-    .addItem('Impostazioni', runConfigDialog)
+  menu.addSubMenu(ui.createMenu('⚙️ Configurazione')
+    .addItem('🚀 Setup Iniziale', App.ui.fn.runInitialSetup)
+    .addItem('⚙️ Impostazioni', runConfigDialog)
     .addSeparator()
-    .addItem('▶️ Attiva Auto', App.ui.fn.runCreateTrigger)
-    .addItem('⏸️ Disattiva Auto', App.ui.fn.runDeleteTriggers)
+    .addItem('▶️ Attiva Import Auto', App.ui.fn.runCreateTrigger)
+    .addItem('⏸️ Disattiva Import Auto', App.ui.fn.runDeleteTriggers)
   );
 
   menu.addToUi();
@@ -124,19 +101,25 @@ function onInstall(e) {
 function openSidebar() {
   const ui = SpreadsheetApp.getUi();
   try {
-    const template = HtmlService.createTemplateFromFile('Sidebar');
-    template.App = App; // Passa l'oggetto App al template
-    const html = template.evaluate()
-      .setTitle('Pannello di Controllo')
-      .setWidth(300);
+    // Verifica esistenza file prima di caricarlo
+    let html;
+    try {
+      html = HtmlService.createHtmlOutputFromFile('Sidebar')
+        .setTitle('Pannello di Controllo')
+        .setWidth(300);
+    } catch (fileErr) {
+      // Se fallisce, prova con un messaggio di debug
+      LOG?.error('UI', 'File Sidebar.html non trovato', { error: fileErr.message });
+      throw new Error('File Sidebar.html non accessibile: ' + fileErr.message);
+    }
     ui.showSidebar(html);
   } catch (e) {
     ui.alert(
       'Errore',
-      'Impossibile aprire la Sidebar. File "Sidebar.html" mancante nel progetto?',
+      'Impossibile aprire la Sidebar. Dettagli: ' + e.message,
       ui.ButtonSet.OK
     );
-    LOG?.error('UI', 'Apertura Sidebar fallita', { error: e.message });
+    LOG?.error('UI', 'Apertura Sidebar fallita', { error: e.message, stack: e.stack });
   }
 }
 
@@ -245,7 +228,15 @@ function runCompleteMaintenance() {
 }
 
 /** Pulisce la cache e azzera i cursori di ripresa import. @returns {void} */
-function runClearCache() { _runSafely(() => DEBUG.clearCache(), 'Debug', 'Pulizia cache e cursori...', 'Cache e cursori azzerati.'); }
+function runClearCache() { 
+  // Esecuzione diretta senza lock (operazione veloce read-only cache)
+  const ui = SpreadsheetApp.getUi();
+  try {
+    DEBUG.clearCache();
+  } catch (e) {
+    ui.alert('Errore', `Impossibile pulire cache: ${e.message}`, ui.ButtonSet.OK);
+  }
+}
 
 /** Aggiorna la dashboard finanziaria con i dati più recenti. @returns {void} */
 function runCreateDashboard() { _runSafely(() => DASHBOARD.create(), 'Dashboard', 'Aggiornamento dashboard...', 'Dashboard aggiornata.'); }
@@ -394,6 +385,20 @@ function runCreatePnlConfrontoGemmaZaffiro() {
     LOG?.error('UI', 'Errore creazione confronto Gemma-Zaffiro', { error: e.message });
     SpreadsheetApp.getUi().alert('Errore durante la creazione del confronto: ' + e.message);
   }
+}
+
+/**
+ * Esegue validazione completa di tutti i dati (Fatture, Righe, Prodotti, Magazzino).
+ * Mostra report dettagliato con integrità, coerenza e completezza dei dati.
+ * @returns {void}
+ */
+function runDataValidation() {
+  _runSafely(
+    () => DATA_VALIDATOR.runCompleteValidation(),
+    'DataValidation',
+    'Validazione dati completa in corso...',
+    'Validazione completata! Controlla i log per il report dettagliato.'
+  );
 }
 
 // =============================================================

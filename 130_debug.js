@@ -759,30 +759,42 @@ const DEBUG = (function () {
     if (res !== ui.Button.YES) { UTIL.showToast('Pulizia cache annullata.', 'Info'); return; }
 
     UTIL.showToast('Pulizia cache e cursori in corso...', 'Debug', -1);
-    LOG.warn('DEBUG_CACHE', 'Avvio pulizia completa cache e properties.');
 
-    const scriptProperties = PropertiesService.getScriptProperties();
-    const keys = scriptProperties.getKeys();
-    scriptProperties.deleteAllProperties();
+    // 1. Pulisci ScriptProperties (più veloce: deleteAllProperties)
+    try {
+      const scriptProperties = PropertiesService.getScriptProperties();
+      scriptProperties.deleteAllProperties();
+    } catch (e) {
+      // Ignora errori, continua comunque
+    }
 
+    // 2. Pulisci CacheService (limitato a chiavi note per velocità)
     try {
       const scriptCache = CacheService.getScriptCache();
       if (scriptCache) {
-        const knownBases = [MARK_DATA_CACHE_BASE_KEY, 'HEADERS_EXTRACTED_DATA_V23']; // V21 rimossa per pulizia
-        const removeKeys = new Set([...knownBases, ...keys]);
-        knownBases.forEach(base => { for (let i = 0; i < 100; i++) removeKeys.add(`${base}_${i}`); });
-        scriptCache.removeAll(Array.from(removeKeys));
-        LOG.info('DEBUG_CACHE', `Rimosse fino a ${removeKeys.size} chiavi cache.`);
+        // Solo chiavi conosciute - evita loop 100 iterazioni
+        const knownKeys = [
+          'MARK_DATA_CACHE_BASE_KEY',
+          'HEADERS_EXTRACTED_DATA_V23',
+          'IMPORT_PROGRESS',
+          'FINANCIAL_GOLDEN_TOTAL',
+          'LAST_AUTOMATED_RUN_TIMESTAMP'
+        ];
+        scriptCache.removeAll(knownKeys);
       }
     } catch (e) {
-      LOG.error('DEBUG_CACHE', 'Errore pulizia CacheService.', { error: e.message });
+      // Ignora errori CacheService
     }
 
-    SHEETS.invalidateHeaderIndexCache();
-    CONFIG.invalidateCache();
+    // 3. Invalida cache moduli (veloce - solo in-memory)
+    try {
+      SHEETS.invalidateHeaderIndexCache();
+      CONFIG.invalidateCache();
+    } catch (e) {
+      // Ignora se moduli non disponibili
+    }
 
-    LOG.info('DEBUG_CACHE', 'Cache e cursori azzerati.');
-    UTIL.showToast('Cache e cursori azzerati!', 'Fatto!', 5);
+    UTIL.showToast('Cache e cursori azzerati!', 'Completato', 3);
   }
 
 

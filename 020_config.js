@@ -25,6 +25,11 @@ const CONFIG = (function () {
       if (s === 'true' || s === 'vero') return true;
       if (s === 'false' || s === 'falso') return false;
 
+      // ID cartelle Drive (almeno 20 caratteri alfanumerici) - NON parsare come numero
+      if (/^[a-zA-Z0-9_-]{20,}$/.test(sRaw)) {
+        return sRaw; // Ritorna stringa intatta
+      }
+
       // numeri (usa UTIL.number.parse centralizzato)
       const parsedNum = UTIL.number.parse(sRaw);
       if (parsedNum !== 0 || sRaw === '0' || sRaw === '0.0' || sRaw === '0,0') {

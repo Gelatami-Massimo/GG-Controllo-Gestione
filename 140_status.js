@@ -28,7 +28,7 @@
  */
 function getSystemStatus() {
   try {
-    // 1. Controlla se un processo è in pausa (needsContinue)
+    // 1. Controlla se un processo è in pausa (needsContinue) - VELOCE
     const allCursors = App.config.keys.cursors;
     let needsContinue = false;
       for (const key in allCursors) {
@@ -40,33 +40,36 @@ function getSystemStatus() {
         }
       }
 
-    // 2. Conta i file processati (letti dal foglio Fatture)
-    const processedCount = SHEETS.getProcessedFileIds().size;
+    // 2. Conta i file processati - OTTIMIZZATO: Usa lastRow invece di Set
+    let processedCount = 0;
+    try {
+      const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
+      if (shF) {
+        const headerRow = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
+        processedCount = Math.max(0, shF.getLastRow() - headerRow);
+      }
+    } catch (e) {
+      // Ignora errore, lascia 0
+    }
 
-    // --- INIZIO CORREZIONE: Lettura conteggio da STATE ---
-    // 3. Legge il conteggio totale dei file (calcolato da m30_import_headers)
+    // 3. Legge il conteggio totale dei file (calcolato da import_headers) - VELOCE
     const totalXmlCountRaw = STATE.get(App.config.keys.auditTotalCount);
     let totalXmlCount = 0;
     
     if (totalXmlCountRaw !== null && totalXmlCountRaw !== undefined) {
        totalXmlCount = Number(totalXmlCountRaw);
        if (isNaN(totalXmlCount)) {
-           LOG.warn('STATUS', `Valore non numerico per auditTotalCount in STATE: ${totalXmlCountRaw}`);
-           totalXmlCount = 0; // Fallback
+           totalXmlCount = 0;
        }
-    } else {
-       // È normale se l'importazione non è mai stata completata
-       LOG.debug('STATUS', 'auditTotalCount non trovato in STATE. Eseguire Import Headers per calcolarlo.');
     }
-    // --- FINE CORREZIONE ---
 
-    // 4. Controlla se il trigger automatico è installato
+    // 4. Controlla se il trigger automatico è installato - VELOCE
     const triggerExists = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === App.config.triggerHandler);
 
-    // 5. Legge l'intervallo del trigger (per la UI)
-    const triggerMins = CONFIG.get('TRIGGER_EVERY_MIN', 15); // <-- AGGIUNTO PER LA SIDEBAR
+    // 5. Legge l'intervallo del trigger (per la UI) - VELOCE
+    const triggerMins = CONFIG.get('TRIGGER_EVERY_MIN', 15);
 
-    // 6. Calcola il tempo trascorso dall'ultima esecuzione
+    // 6. Calcola il tempo trascorso dall'ultima esecuzione - VELOCE
     const lastRunTimestamp = STATE.get(App.config.keys.lastRun);
     let lastRunInfo = "Mai eseguito";
     if (lastRunTimestamp) {
@@ -92,9 +95,9 @@ function getSystemStatus() {
       success: true,
       needsContinue: needsContinue,
       processedFiles: processedCount,
-      totalFiles: totalXmlCount, // Ora legge il valore veloce
+      totalFiles: totalXmlCount,
       triggerActive: triggerExists,
-      triggerEveryMinutes: triggerMins, // <-- DATO AGGIUNTO PER LA SIDEBAR
+      triggerEveryMinutes: triggerMins,
       lastRun: lastRunInfo
     };
   } catch (e) {

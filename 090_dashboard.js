@@ -295,71 +295,62 @@ const DASHBOARD = (function () {
   function _calculatePnlBySede() {
     const dataAggregata = new Map(); // K: Sede, V: Map<AnnoMese, {fatturato, personale, costoFornitoriNetto, costoFornitoriTotale}>
 
-    // 1) Dati Mensili (fatturato / personale)
+    // 1) Dati Mensili (fatturato / personale) - OTTIMIZZATO con SHEET_ITERATOR
     const shDM = SHEETS.get(SHEETS.SHEET_NAMES.Dati_Mensili);
     if (shDM) {
       try {
-        const headerRow = SHEETS._findHeaderRow(shDM, SHEETS.SHEET_NAMES.Dati_Mensili);
-        if (shDM.getLastRow() > headerRow) {
-          const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Dati_Mensili);
-          if (idx.Sede === undefined || idx.AnnoMese === undefined || idx.Fatturato === undefined) {
-            LOG?.error('DASHBOARD_CALC', 'Colonne Sede, AnnoMese o Fatturato mancanti in Dati Mensili.');
-          } else {
-            const idxPersonale = idx.Costo_Personale; // può essere undefined
-            const lastColDM = Math.max(idx.Sede, idx.AnnoMese, idx.Fatturato, idxPersonale ?? 0) + 1;
-            const dataDM = shDM.getRange(headerRow + 1, 1, shDM.getLastRow() - headerRow, lastColDM).getValues();
-
-            dataDM.forEach(row => {
-              const sedeKey  = String(row[idx.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
-              const annoMese = String(row[idx.AnnoMese] ?? '').trim();
-              if (/^\d{4}-\d{2}$/.test(annoMese)) {
-                if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
-                let cur = dataAggregata.get(sedeKey).get(annoMese)
-                  || { fatturato: 0, personale: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0 };
-                cur.fatturato += UTIL.parseNumSmart(row[idx.Fatturato]);
-                if (idxPersonale !== undefined) cur.personale += UTIL.parseNumSmart(row[idxPersonale]);
-                dataAggregata.get(sedeKey).set(annoMese, cur);
+        SHEET_ITERATOR.forEach('Dati_Mensili', {
+          columns: ['Sede', 'AnnoMese', 'Fatturato', 'Costo_Personale'],
+          skipEmpty: true,
+          processor: (row, rowNum, idx) => {
+            const sedeKey  = String(row[idx.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
+            const annoMese = String(row[idx.AnnoMese] ?? '').trim();
+            if (/^\d{4}-\d{2}$/.test(annoMese)) {
+              if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
+              let cur = dataAggregata.get(sedeKey).get(annoMese)
+                || { fatturato: 0, personale: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0 };
+              cur.fatturato += UTIL.number.parse(row[idx.Fatturato]);
+              if (idx.Costo_Personale !== undefined) {
+                cur.personale += UTIL.number.parse(row[idx.Costo_Personale]);
               }
-            });
+              dataAggregata.get(sedeKey).set(annoMese, cur);
+            }
           }
-        }
-      } catch (e) { LOG?.error('DASHBOARD_CALC', 'Errore lettura Dati Mensili.', { error: e.message }); }
+        });
+      } catch (e) { 
+        LOG?.error('DASHBOARD_CALC', 'Errore lettura Dati Mensili.', { error: e.message }); 
+      }
     } else {
       LOG?.warn('DASHBOARD_CALC', 'Foglio Dati Mensili non trovato.');
     }
 
-    // 2) Costi Fornitori da Fatture (imponibile = netto, documento = totale)
+    // 2) Costi Fornitori da Fatture (imponibile = netto, documento = totale) - OTTIMIZZATO
     const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
     if (shF) {
       try {
-        const headerRow = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
-        if (shF.getLastRow() > headerRow) {
-          const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
-          if (idx.Sede === undefined || idx.Data === undefined || idx.TotImponibile === undefined || idx.TotDocumento === undefined) {
-            LOG?.error('DASHBOARD_CALC', 'Colonne Sede, Data, TotImponibile o TotDocumento mancanti in Fatture.');
-          } else {
-            const lastColF = Math.max(idx.Sede, idx.Data, idx.TotImponibile, idx.TotDocumento) + 1;
-            const fattureData = shF.getRange(headerRow + 1, 1, shF.getLastRow() - headerRow, lastColF).getValues();
-
-            fattureData.forEach(row => {
-              const sedeKey = String(row[idx.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
-              const data    = row[idx.Data];
-              const costoNetto  = UTIL.parseNumSmart(row[idx.TotImponibile]);
-              const costoTotale = UTIL.parseNumSmart(row[idx.TotDocumento]);
-              if (UTIL.date.isValidDate(data)) {
-                const ymObj = UTIL.date.extractYearMonth(data);
-                const annoMese = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
-                if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
-                let cur = dataAggregata.get(sedeKey).get(annoMese)
-                  || { fatturato: 0, personale: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0 };
-                cur.costoFornitoriNetto  += costoNetto;
-                cur.costoFornitoriTotale += costoTotale;
-                dataAggregata.get(sedeKey).set(annoMese, cur);
-              }
-            });
+        SHEET_ITERATOR.forEach('Fatture', {
+          columns: ['Sede', 'Data', 'TotImponibile', 'TotDocumento'],
+          skipEmpty: true,
+          processor: (row, rowNum, idx) => {
+            const sedeKey = String(row[idx.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
+            const data    = row[idx.Data];
+            const costoNetto  = UTIL.number.parse(row[idx.TotImponibile]);
+            const costoTotale = UTIL.number.parse(row[idx.TotDocumento]);
+            if (UTIL.date.isValidDate(data)) {
+              const ymObj = UTIL.date.extractYearMonth(data);
+              const annoMese = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
+              if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
+              let cur = dataAggregata.get(sedeKey).get(annoMese)
+                || { fatturato: 0, personale: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0 };
+              cur.costoFornitoriNetto  += costoNetto;
+              cur.costoFornitoriTotale += costoTotale;
+              dataAggregata.get(sedeKey).set(annoMese, cur);
+            }
           }
-        }
-      } catch (e) { LOG?.error('DASHBOARD_CALC', 'Errore lettura Fatture.', { error: e.message }); }
+        });
+      } catch (e) { 
+        LOG?.error('DASHBOARD_CALC', 'Errore lettura Fatture.', { error: e.message }); 
+      }
     } else {
       LOG?.warn('DASHBOARD_CALC', 'Foglio Fatture non trovato.');
     }
