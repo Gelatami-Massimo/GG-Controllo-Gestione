@@ -3,17 +3,15 @@
 # Files/folders to exclude from Google Apps Script deployment
 # =============================================================
 
-# Development tools
-tools/**
-
-# Backup files
-smoke_test_*.js.bak
-**/*.bak
-*_OLD.js
+# Archive folder (development docs)
+archive/**
 
 # Documentation (keep in repo, don't deploy)
 **/*.md
 **/*.txt
+README.md
+QUICK_START.md
+TESTING_GUIDE.md
 
 # Version control
 .git/
@@ -28,5 +26,7 @@ node_modules/
 # TypeScript sources (deploy only compiled JS)
 **/*.ts
 
-# Test files
-smoke_test_*.js
+# Backup files
+**/*.bak
+*_OLD.*
+
