@@ -536,14 +536,14 @@ const MAGAZZINO_CORE = (() => {
   }
 
   /**
-   * Genera report Magazzino Ingredienti per INGREDIENTE (Anno+Ingrediente+Reparto)
+   * Genera report Magazzino Ingredienti per INGREDIENTE (Anno+Ingrediente+Categoria)
    * @public
    */
   /**
    * Costruisce report magazzino ingredienti per gelateria (filtro Ingrediente=TRUE).
    * 
    * Aggregazione:
-   * - Per Anno, Ingrediente, Reparto, UMBase
+   * - Per Anno, Ingrediente, CategoriaProdotto, UMBase
    * - Somma: PZ totali, KG totali, Costo Totale €
    * - Calcola: Costo Medio €/UMBase, % Incidenza su totale costi ingredienti
    * 
@@ -573,13 +573,13 @@ const MAGAZZINO_CORE = (() => {
       // 2. Aggrega per INGREDIENTE
       const aggregati = {};
       rowsBase.forEach(rb => {
-        const key = [rb.anno, rb.ingrediente, rb.reparto, rb.umBase].join('||');
+        const key = [rb.anno, rb.ingrediente, rb.categoriaProdotto, rb.umBase].join('||');
 
         if (!aggregati[key]) {
           aggregati[key] = {
             anno: rb.anno,
             ingrediente: rb.ingrediente,
-            reparto: rb.reparto,
+            categoria: rb.categoriaProdotto,
             umBase: rb.umBase,
             pzTot: 0,
             kgTot: 0,
@@ -630,7 +630,7 @@ const MAGAZZINO_CORE = (() => {
     const headers = [
       'Anno',
       'Ingrediente',
-      'Reparto',
+      'Categoria',
       'UMBase',
       'PZ TOT',
       'KG TOT',
@@ -649,7 +649,7 @@ const MAGAZZINO_CORE = (() => {
       rows.push([
         agg.anno,
         agg.ingrediente,
-        agg.reparto,
+        agg.categoria,
         agg.umBase,
         agg.pzTot,
         agg.kgTot,
@@ -659,7 +659,7 @@ const MAGAZZINO_CORE = (() => {
       ]);
     }
 
-    // Ordina per Anno, Ingrediente, Reparto
+    // Ordina per Anno, Ingrediente, Categoria
     rows.sort((a, b) => {
       const annoCompare = a[0] - b[0];
       if (annoCompare !== 0) return annoCompare;
