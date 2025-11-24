@@ -11,9 +11,31 @@ const SYNC_PRODOTTI = (() => {
    * Crea nuovi prodotti per codici mai visti, aggiorna soft i campi vuoti degli esistenti.
    * NON modifica MAI: Ingrediente, UMBase, PZxCT, KGxPZ, PZxFila, FilePerCT, Note, NonInUso.
    * 
+   * PROTEZIONE ANTI-RACE: Usa Lock per prevenire esecuzioni parallele
+   * 
    * @returns {{nuovi: number, aggiornati: number}} Statistiche sincronizzazione
    */
   function syncProdottiFromRighe() {
+    const lock = LockService.getScriptLock();
+    const lockAcquired = lock.tryLock(5000); // Prova ad acquisire lock per max 5 secondi
+    
+    if (!lockAcquired) {
+      LOG.warn('SYNC_PRODOTTI', 'Sync già in esecuzione, operazione annullata (lock non acquisito).');
+      return { nuovi: 0, aggiornati: 0, skipped: true };
+    }
+    
+    try {
+      return _syncProdottiFromRigheInternal();
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  /**
+   * Implementazione interna del sync (protetta da lock).
+   * @private
+   */
+  function _syncProdottiFromRigheInternal() {
     const stats = { nuovi: 0, aggiornati: 0 };
 
     // 1. Carica foglio Prodotti e crea mappa keyProd -> {rowIndex, data}
@@ -48,12 +70,15 @@ const SYNC_PRODOTTI = (() => {
 
     // Leggi Prodotti esistenti
     const prodottiMap = new Map(); // key -> {rowIndex, data}
+    const codiciInterniSet = new Set(); // Set di CodiciInterni già esistenti (per prevenire duplicati esatti)
     const lastRowProd = shProdotti.getLastRow();
     if (lastRowProd > headerRowProd) {
       const valuesProd = shProdotti.getRange(headerRowProd + 1, 1, lastRowProd - headerRowProd, shProdotti.getLastColumn()).getValues();
       valuesProd.forEach((row, i) => {
         const fornId = String(row[idxProd.FornitoreID] || '').trim();
         const codForn = String(row[idxProd.CodiceFornitore] || '').trim();
+        const codiceInterno = String(row[idxProd.CodiceInterno] || '').trim();
+        
         if (!fornId || !codForn) return;
         
         const key = `${fornId}||${codForn}`;
@@ -61,10 +86,15 @@ const SYNC_PRODOTTI = (() => {
           rowIndex: headerRowProd + 1 + i,
           data: row
         });
+        
+        // Traccia CodiceInterno per prevenire duplicati esatti
+        if (codiceInterno) {
+          codiciInterniSet.add(codiceInterno);
+        }
       });
     }
 
-    LOG.info('SYNC_PRODOTTI', `Caricati ${prodottiMap.size} prodotti esistenti.`);
+    LOG.info('SYNC_PRODOTTI', `Caricati ${prodottiMap.size} prodotti esistenti (${codiciInterniSet.size} codici interni).`);
 
     // 2. Leggi foglio Righe
     const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
@@ -115,8 +145,19 @@ const SYNC_PRODOTTI = (() => {
       const existing = prodottiMap.get(keyRiga);
 
       if (!existing) {
-        // NUOVO PRODOTTO
+        // NUOVO PRODOTTO - ma verifica che CodiceInterno non esista già
         const codiceInterno = `${fornId}-${codArticolo}`;
+        
+        // CONTROLLO ANTI-DUPLICATO ESATTO
+        if (codiciInterniSet.has(codiceInterno)) {
+          LOG.warn('SYNC_PRODOTTI', `CodiceInterno già esistente, skip creazione duplicato: ${codiceInterno}`, {
+            fornitoreID: fornId,
+            codiceFornitore: codArticolo,
+            descrizione: descrizione
+          });
+          return; // Skip questo prodotto, è già presente
+        }
+        
         const categoria = fornitoriMap.get(fornId) || '';
         const now = new Date();
 
@@ -144,6 +185,7 @@ const SYNC_PRODOTTI = (() => {
         });
 
         newProducts.push(newRow);
+        codiciInterniSet.add(codiceInterno); // Aggiungi al set per prevenire duplicati nella stessa esecuzione
         stats.nuovi++;
 
       } else {
@@ -642,6 +684,12 @@ function runSyncProdotti() {
     ss.toast('Sincronizzazione Prodotti in corso...', 'Attendere...', -1);
     
     const stats = SYNC_PRODOTTI.syncProdottiFromRighe();
+    
+    if (stats.skipped) {
+      ss.toast('⚠️ Sync già in esecuzione.\nRiprova tra qualche secondo.', 'Avviso', 5);
+      LOG.warn('SYNC_PRODOTTI', 'Sync saltato (già in esecuzione).');
+      return;
+    }
     
     LOG.info('SYNC_PRODOTTI', 'Sincronizzazione completata.', stats);
     ss.toast(
