@@ -9,6 +9,30 @@
 const FPA_NS = XmlService.getNamespace('', 'http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2');
 const FPA_NS10 = XmlService.getNamespace('', 'http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.0');
 
+/**
+ * Mostra una finestra di dialogo modale (popup) nella UI del foglio.
+ * Funzione globale per evitare problemi di caricamento con UTIL.
+ * 
+ * @param {string} title - Titolo della finestra
+ * @param {string} message - Messaggio da visualizzare (supporta \n per newline)
+ * @returns {void}
+ */
+function showModalDialog(title, message) {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    // Sostituisce i newline (\n) con <br> per l'HTML
+    const htmlMessage = `<p>${message.replace(/\n/g, '<br>')}</p>`;
+    ui.showModalDialog(HtmlService.createHtmlOutput(htmlMessage).setWidth(400).setHeight(250), title);
+  } catch (e) {
+    // Fallback a un alert semplice se la UI non è disponibile
+    try {
+      SpreadsheetApp.getUi().alert(`${title}\n\n${message}`);
+    } catch (e2) {
+      console.error(`[showModalDialog FAIL] Impossibile mostrare UI. Titolo: ${title}, Msg: ${message}`, { error: e.message, fallbackError: e2.message });
+    }
+  }
+}
+
 const LOG = (function () {
   const logBuffer = [];
   const MAX_BUFFER_SIZE = 100;
@@ -245,32 +269,36 @@ const UTIL = (function () {
     
     if (typeof value === 'string') {
       const cleaned = value.replace(/[€$£\s]/g, '').trim();
-      if (!cleaned) return failValue;
+      
+      // ✅ FIX: Rimuove TUTTE le virgolette (es. ""0"") prima del parsing
+      const unquoted = cleaned.replace(/["']/g, '');
+
+      if (!unquoted) return failValue;
       
       // Strict mode: validazione rigida (solo cifre, punto, virgola, segno opzionale)
       if (strictMode) {
         const strictPattern = allowNegative ? /^[-+]?\d+(?:[.,]\d+)?$/ : /^\d+(?:[.,]\d+)?$/;
-        if (!strictPattern.test(cleaned)) return failValue;
+        if (!strictPattern.test(unquoted)) return failValue;
       }
       
       // Gestione segno negativo
-      const isNegative = cleaned.startsWith('-');
+      const isNegative = unquoted.startsWith('-');
       if (isNegative && !allowNegative) return failValue;
       
       // Parsing formato IT/EN
       let num;
-      if (cleaned.includes('.') && cleaned.includes(',')) {
+      if (unquoted.includes('.') && unquoted.includes(',')) {
         // Formato misto: determina quale è separatore migliaia e quale decimale
-        if (cleaned.lastIndexOf('.') < cleaned.lastIndexOf(',')) {
+        if (unquoted.lastIndexOf('.') < unquoted.lastIndexOf(',')) {
           // Formato IT: 1.234,56
-          num = parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
+          num = parseFloat(unquoted.replace(/\./g, '').replace(',', '.'));
         } else {
           // Formato EN: 1,234.56
-          num = parseFloat(cleaned.replace(/,/g, ''));
+          num = parseFloat(unquoted.replace(/,/g, ''));
         }
       } else {
         // Un solo separatore o nessuno: tratta virgola come decimale
-        num = parseFloat(cleaned.replace(',', '.'));
+        num = parseFloat(unquoted.replace(',', '.'));
       }
       
       return (isNaN(num) || !Number.isFinite(num)) ? failValue : num;

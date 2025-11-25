@@ -141,7 +141,7 @@ const IMPORT_HEADERS = (function () {
         if (!isSilent) {
           STATE.clear(App.config.keys.progress);
           const message = `Importazione intestazioni completata.\n\nNuove fatture importate: ${writeStats.fatture}\nNuovi fornitori creati: ${writeStats.fornitori}`;
-          UTIL.showModalDialog('Importazione Completata', message);
+          showModalDialog('Importazione Completata', message);
         }
         _clearAllStates(false);
       }

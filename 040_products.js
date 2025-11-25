@@ -216,7 +216,17 @@ const PRODUCTS = (() => {
     const normFornId = String(fornitoreId || '').trim();
     const normCodForn = String(codFornitore || '').trim().replace(/^'+/, '');
     const normDesc = String(descrizione || '').trim();
-    const normUM = String(um || '').trim();
+    let normUM = String(um || '').trim();
+
+    // ✅ FIX: Se UM è vuota, assegna 'PZ' come default e logga un warning
+    if (!normUM) {
+      normUM = 'PZ';
+      LOG.warn('PRODUCTS_UM_FIX', `UM mancante per prodotto, assegnato default 'PZ'.`, {
+        fornitoreId: normFornId,
+        codFornitore: normCodForn,
+        descrizione: normDesc
+      });
+    }
 
     // 1. Cerca by CodiceFornitore (se presente)
     if (normFornId && normCodForn) {

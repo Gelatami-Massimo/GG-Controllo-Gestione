@@ -554,7 +554,7 @@ const SHEETS = (function () {
           cols: [
             'FileID', 'Sede', 'FileName', 'LinkXML', 'LinkPDF', 'PDFStato', 'StatoPDF',
             'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
-            'Reparto',
+            'Reparto', 'Destinazione',
             'RegimeFiscale', 'Anno', 'Mese', 'NumeroDoc', 'TipoDoc',
             'Valuta', 'RigheImportate', 'ImportaRigheSrc'
           ]
@@ -571,9 +571,11 @@ const SHEETS = (function () {
         {
           format: '@',
           cols: [
-            'FileID', 'Sede', 'Anno', 'Mese', 'NumeroDoc', 'FornitoreID', 'DenominazioneFornitore',
-            'Famiglia', 'Categoria', 'NumeroLinea', 'CodiceInternoBreve', 'Codice Articolo Fornitore',
-            'CodiceTipo', 'CodiceValore', 'Descrizione', 'Reparto', 'TipoRiga'
+            'FileID', 'Sede', 'DataDoc', 'Anno', 'Mese', 'NumeroDoc',
+            'FornitoreID', 'DenominazioneFornitore', 'Famiglia', 'Categoria',
+            'NumeroLinea', 'CodiceInternoBreve', 'Codice Articolo Fornitore',
+            'CodiceTipo', 'CodiceValore', 'Descrizione',
+            'Reparto', 'TipoRiga'
           ]
         }
       ],
@@ -581,8 +583,10 @@ const SHEETS = (function () {
         {
           format: '@',
           cols: [
-            'CodiceInterno', 'CodiceFornitore', 'Descrizione', 'UM', 'UMBase', 'UMCosto',
-            'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto', 'Note', 'Ingrediente'
+            'CodiceInterno', 'CodiceInternoBreve', 'ChiaveDescrizione', 'CodiceFornitore', 'Descrizione', 'UM',
+            'FornitoreID', 'DenominazioneFornitore', 'CategoriaProdotto',
+            'Note', 'Ingrediente', 'NonInUso',
+            'UMBase', 'UMCosto'
           ]
         },
         { format: 'dd/mm/yyyy hh:mm:ss', cols: ['CreatoIl', 'UltimoAgg'] },
@@ -592,7 +596,7 @@ const SHEETS = (function () {
       [SHEET_NAMES.Fornitori]: [
         {
           format: '@',
-          cols: ['FornitoreID', 'Denominazione', 'Famiglia', 'Categoria', 'Reparto']
+          cols: ['FornitoreID', 'Denominazione', 'Famiglia', 'Categoria', 'Reparto', 'ImportaRighe']
         }
       ],
       [SHEET_NAMES.Log]: [
