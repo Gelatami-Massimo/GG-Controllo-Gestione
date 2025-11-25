@@ -63,8 +63,16 @@ function getSystemStatus() {
        }
     }
 
-    // 4. Controlla se il trigger automatico è installato - VELOCE
-    const triggerExists = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === App.config.triggerHandler);
+    // 4. Controlla se il trigger automatico è installato - AFFIDABILE
+    const triggerExists = ScriptApp.getProjectTriggers().some(t => {
+      try {
+        return t.getHandlerFunction() === App.config.triggerHandler &&
+               t.getEventType() === ScriptApp.EventType.CLOCK;
+      } catch (e) {
+        // Ignora trigger che non possono essere ispezionati (es. installabili)
+        return false;
+      }
+    });
 
     // 5. Legge l'intervallo del trigger (per la UI) - VELOCE
     const triggerMins = CONFIG.get('TRIGGER_EVERY_MIN', 15);
