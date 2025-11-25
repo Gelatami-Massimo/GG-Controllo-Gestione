@@ -711,3 +711,23 @@ function deleteTriggers() {
   }
   LOG.info('TRIGGER', 'Rimossi ' + toDelete.length + ' attivatori.');
 }
+
+/**
+ * Funzione di utility per elencare tutti i trigger del progetto corrente.
+ * Eseguire manualmente dall'editor di script.
+ */
+function listTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  if (triggers.length === 0) {
+    Logger.log("Nessun trigger trovato per questo progetto.");
+    return;
+  }
+  Logger.log(`Trovati ${triggers.length} trigger:`);
+  triggers.forEach((trigger, i) => {
+    Logger.log(`--- Trigger ${i + 1} ---`);
+    Logger.log(`ID Unico: ${trigger.getUniqueId()}`);
+    Logger.log(`Funzione Eseguita: ${trigger.getHandlerFunction()}`);
+    Logger.log(`Tipo di Evento: ${trigger.getEventType()}`);
+    Logger.log(`Sorgente Evento: ${trigger.getTriggerSource()}`);
+  });
+}
