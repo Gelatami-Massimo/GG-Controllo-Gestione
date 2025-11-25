@@ -731,3 +731,38 @@ function listTriggers() {
     Logger.log(`Sorgente Evento: ${trigger.getTriggerSource()}`);
   });
 }
+
+/**
+ * Sincronizza lo stato visualizzato nella dashboard con lo stato reale dei trigger.
+ * Utile se la dashboard e lo stato reale dei trigger non sono allineati.
+ * Eseguire manualmente dall'editor di script.
+ */
+function syncTriggerStatus() {
+  const handler = App.config.triggerHandler;
+  if (!handler) {
+    Logger.log("Handler del trigger non definito, impossibile sincronizzare.");
+    return;
+  }
+
+  const triggers = ScriptApp.getProjectTriggers();
+  const isTriggerActive = triggers.some(function (t) {
+    try {
+      return t.getHandlerFunction && t.getHandlerFunction() === handler;
+    } catch (e) {
+      return false;
+    }
+  });
+
+  if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
+    TRIGGER_DASHBOARD.updateTriggerStatus(isTriggerActive);
+    const message = `Stato dashboard sincronizzato. Il trigger per '${handler}' risulta: ${isTriggerActive ? 'ATTIVO' : 'INATTIVO'}.`;
+    Logger.log(message);
+    try {
+      SpreadsheetApp.getUi().alert('Sincronizzazione completata', message, SpreadsheetApp.getUi().ButtonSet.OK);
+    } catch(e) {
+      // UI non disponibile
+    }
+  } else {
+    Logger.log("Modulo TRIGGER_DASHBOARD non trovato.");
+  }
+}
