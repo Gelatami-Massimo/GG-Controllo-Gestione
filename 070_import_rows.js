@@ -525,7 +525,8 @@ const IMPORT_ROWS = (function () {
     if (!isSilent) {
       STATE.clear(App.config.keys.progress);
       const message = `Importazione righe completata.\n\nFatture processate: ${processedInvoices}\nFatture saltate: ${skippedInvoices}`;
-      UTIL.showModalDialog('Importazione Completata', message);
+      // UTIL.showModalDialog('Importazione Completata', message); // Rimosso per evitare errori in esecuzione non interattiva
+      LOG?.info('ROWS_COMPLETE', message);
     }
 
     LOG?.info('ROWS', `Importazione righe completata. Processate: ${processedInvoices}, Saltate: ${skippedInvoices}.`);
