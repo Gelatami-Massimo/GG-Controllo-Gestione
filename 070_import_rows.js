@@ -546,9 +546,10 @@ const IMPORT_ROWS = (function () {
     const famigliaFornitore = invData[idxF.Famiglia];
     const categoriaFornitore = invData[idxF.Categoria];
 
-    let sommaRigheNetto = 0;
+    let sommaRigheImportate = 0; // Somma solo delle righe che verranno scritte
+    let sommaTotaleRighe = 0; // Somma di TUTTE le righe, per il controllo finale
     let importedRowsCount = 0;
-    let skippedDuplicates = 0;  // ✅ Conta duplicati skippati
+    let skippedDuplicates = 0;
     const imponibileFattura = UTIL.parseNumSmart(invData[idxF.TotImponibile]);
     const TOLLERANZA_EURO = Number(CONFIG.get('ROWS_TOLLERANZA_EURO', 1.00)) || 1.00;
 
@@ -576,6 +577,7 @@ const IMPORT_ROWS = (function () {
       } else {
         // Converti il Set in Array una sola volta per usare .some()
         const junkKeywordsArray = Array.from(junkKeywordsSet);
+        const tipiDaEscludere = ['SCONTO', 'TESTO', 'OMAGGIO'];
 
         for (const linea of dettaglioLinee) {
           const descrizione = UTIL.firstText(linea, 'Descrizione') || '';
@@ -602,7 +604,8 @@ const IMPORT_ROWS = (function () {
           const prezzoTotaleRiga = UTIL.parseNumSmart(UTIL.firstText(linea, 'PrezzoTotale'));
           const aliquota = UTIL.parseNumSmart(UTIL.firstText(linea, 'AliquotaIVA'));
 
-          sommaRigheNetto += prezzoTotaleRiga;
+          // Somma sempre al totale per il controllo di coerenza
+          sommaTotaleRighe += prezzoTotaleRiga;
 
           // ✅ CONTROLLO DUPLICATI: Skip se riga già esiste
           const numeroLinea = UTIL.firstText(linea, 'NumeroLinea');
@@ -616,10 +619,22 @@ const IMPORT_ROWS = (function () {
           // ✅ CALCOLO TIPORIGA - LOGICA ROBUSTA MULTI-FORNITORE
           const tipoRiga = _classifyRowType(qta, prezzoTotaleRiga, descrizione, codiceTipo);
 
-          // ✅ Gestione Prodotti (SOLO per ARTICOLO/OMAGGIO e se non è spazzatura)
+          // >>> NUOVA LOGICA DI ESCLUSIONE <<<
+          // Escludi righe spazzatura o tipi non desiderati (SCONTO, TESTO, OMAGGIO)
+          const deveEssereEsclusa = isJunk || tipiDaEscludere.includes(tipoRiga);
+
+          if (deveEssereEsclusa) {
+            continue; // Salta la riga, non verrà importata
+          }
+          // >>> FINE LOGICA DI ESCLUSIONE <<<
+
+          // Da qui in poi, la riga è valida e verrà importata.
+          sommaRigheImportate += prezzoTotaleRiga;
+
+          // ✅ Gestione Prodotti (SOLO per ARTICOLO e se non è spazzatura - controllo già fatto)
           let codiceInterno = null;
           let codiceInternoBreve = null;
-          if (!isJunk && (tipoRiga === 'ARTICOLO' || tipoRiga === 'OMAGGIO')) {
+          if (tipoRiga === 'ARTICOLO') { // Omaggio è già escluso sopra
             const prodResult = PRODUCTS.findOrCreateProduct(
               invData[idxF.FornitoreID], invData[idxF.DenominazioneFornitore],
               codiceValoreConFallback, // Usa il codice con fallback
@@ -676,11 +691,11 @@ const IMPORT_ROWS = (function () {
         } // fine loop for
 
         // Controllo totali
-        if (Math.abs(sommaRigheNetto - imponibileFattura) > TOLLERANZA_EURO) {
+        if (Math.abs(sommaTotaleRighe - imponibileFattura) > TOLLERANZA_EURO) {
           statusSrc = 'total_mismatch';
           LOG?.warn(
             'ROWS_TOTAL_CHECK',
-            `Mismatch > ${TOLLERANZA_EURO}€. Somma righe=${sommaRigheNetto}, Imponibile fattura=${imponibileFattura}`,
+            `Mismatch > ${TOLLERANZA_EURO}€. Somma TUTTE le righe=${sommaTotaleRighe}, Imponibile fattura=${imponibileFattura}`,
             { fileId }
           );
         }
@@ -705,7 +720,7 @@ const IMPORT_ROWS = (function () {
     }
 
     const hasImportedRows = importedRowsCount > 0;
-    return { statusSrc, hasImportedRows, importedRowsCount, sommaRigheNetto };
+    return { statusSrc, hasImportedRows, importedRowsCount, sommaRigheNetto: sommaRigheImportate };
   }
 
   // Scrive buffer righe + aggiorna flag + flush prodotti
