@@ -155,54 +155,60 @@ const IMPORT_ROWS = (function () {
 
       const lastRow = sh.getLastRow();
       const lastCol = sh.getLastColumn();
-      const values = sh.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol).getValues();
+      const range = sh.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol);
+      const values = range.getValues();
 
       for (let i = 0; i < values.length; i++) {
-        const row = values[i];
-        if (String(row[idx.CodiceInterno] || '').trim() === codiceInterno) {
+        const rowData = values[i];
+        if (String(rowData[idx.CodiceInterno] || '').trim() === codiceInterno) {
           const targetRow = headerRow + 1 + i;
-          const updates = [];
+          let hasChanged = false;
 
           // Aggiorna CostoUnitario
           if (costoUnitario !== null && idx.CostoUnitario !== undefined) {
-            updates.push({ col: idx.CostoUnitario + 1, value: costoUnitario });
+            // Arrotonda a 4 decimali per evitare scritture inutili per micro-differenze
+            const roundedNewCost = parseFloat(costoUnitario.toFixed(4));
+            const roundedOldCost = parseFloat(Number(rowData[idx.CostoUnitario] || 0).toFixed(4));
+            if (roundedNewCost !== roundedOldCost) {
+              rowData[idx.CostoUnitario] = roundedNewCost;
+              hasChanged = true;
+            }
           }
 
           // Aggiorna UMCosto
           if (umCosto && idx.UMCosto !== undefined) {
-            updates.push({ col: idx.UMCosto + 1, value: umCosto });
+            if (rowData[idx.UMCosto] !== umCosto) {
+              rowData[idx.UMCosto] = umCosto;
+              hasChanged = true;
+            }
           }
 
-          // Aggiorna RichiedeSetup
-          if (idx.RichiedeSetup !== undefined) {
-            updates.push({ col: idx.RichiedeSetup + 1, value: costData.richiedeSetup });
+          // Aggiorna UltimoAgg solo se ci sono state modifiche
+          if (hasChanged && idx.UltimoAgg !== undefined) {
+            rowData[idx.UltimoAgg] = new Date();
           }
 
-          // Aggiorna UltimoAgg
-          if (idx.UltimoAgg !== undefined) {
-            updates.push({ col: idx.UltimoAgg + 1, value: new Date() });
+          // Scrivi l'intera riga in una sola operazione, solo se necessario
+          if (hasChanged) {
+            sh.getRange(targetRow, 1, 1, lastCol).setValues([rowData]);
+            LOG?.debug('ROWS_UNIT_COST', `Aggiornato costo unitario per ${codiceInterno}`, {
+              costoUnitario: rowData[idx.CostoUnitario],
+              umCosto: rowData[idx.UMCosto]
+            });
           }
 
-          // Scrivi tutti gli aggiornamenti
-          updates.forEach(update => {
-            sh.getRange(targetRow, update.col).setValue(update.value);
-          });
-
-          LOG?.debug('ROWS_UNIT_COST', `Aggiornato costo unitario per ${codiceInterno}`, {
-            costoUnitario: costData.costoUnitario,
-            umCosto: costData.umCosto,
-            richiedeSetup: costData.richiedeSetup
-          });
-
-          break;
+          break; // Prodotto trovato, esci dal loop
         }
       }
     } catch (e) {
+      // Aggiunge più contesto all'errore
       LOG?.error('ROWS_UNIT_COST', 'Errore aggiornamento costo unitario.', {
         codiceInterno,
         error: e.message,
-        stack: e.stack
+        stack: e.stack,
+        details: 'Questo errore può verificarsi per problemi di accesso concorrente al foglio. Il refactoring batch dovrebbe risolverlo.'
       });
+      // Non rilanciare l'errore per non bloccare l'intero processo di importazione
     }
   }
 
