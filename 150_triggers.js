@@ -643,73 +643,73 @@ function createTimeBasedTrigger() {
  * deleteTriggers();
  */
 function deleteTriggers() {
-  // Try to get UI, but don't fail if not available
   let ui = null;
   try {
     ui = SpreadsheetApp.getUi();
   } catch (e) {
-    // UI not available (e.g., called from trigger context)
     LOG.debug('TRIGGER_DELETE', 'UI non disponibile, modalità silent');
   }
 
   const handler = App.config.triggerHandler;
-
   if (!handler || typeof handler !== 'string') {
-    if (ui) {
-      ui.alert(
-        'Errore configurazione',
-        'Handler del trigger non definito in App.config.triggerHandler.',
-        ui.ButtonSet.OK
-      );
-    }
-    LOG.error('TRIGGER_CFG', 'App.config.triggerHandler non definito.');
+    const errorMsg = 'Handler del trigger non definito in App.config.triggerHandler.';
+    if (ui) ui.alert('Errore configurazione', errorMsg, ui.ButtonSet.OK);
+    LOG.error('TRIGGER_CFG', errorMsg);
     return;
   }
 
+  LOG.info('TRIGGER_DELETE', `Avvio eliminazione trigger per handler: '${handler}'`);
   const triggers = ScriptApp.getProjectTriggers();
+  
   const toDelete = triggers.filter(function (t) {
     try {
-      return t.getHandlerFunction && t.getHandlerFunction() === handler;
+      const triggerHandler = t.getHandlerFunction();
+      const eventType = t.getEventType();
+      const isMatch = triggerHandler === handler && eventType === ScriptApp.EventType.CLOCK;
+      if (isMatch) {
+        LOG.debug('TRIGGER_DELETE', `Trovato trigger corrispondente. ID: ${t.getUniqueId()}`);
+      }
+      return isMatch;
     } catch (e) {
+      LOG.warn('TRIGGER_DELETE', `Impossibile ispezionare un trigger. ID: ${t.getUniqueId()}`, { error: e.message });
       return false;
     }
   });
 
   if (toDelete.length === 0) {
-    if (ui) {
-      ui.alert(
-        'Nessun attivatore trovato',
-        'Non sono presenti attivatori installati.',
-        ui.ButtonSet.OK
-      );
+    const msg = `Nessun attivatore di tipo 'CLOCK' trovato per la funzione '${handler}'.`;
+    if (ui) ui.alert('Nessun attivatore trovato', msg, ui.ButtonSet.OK);
+    LOG.info('TRIGGER_DELETE', msg);
+    // Forzo comunque l'aggiornamento della dashboard per coerenza
+    if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
+      TRIGGER_DASHBOARD.updateTriggerStatus(false);
     }
-    LOG.info('TRIGGER', 'Nessun attivatore da rimuovere.');
     return;
   }
 
+  let deletedCount = 0;
   toDelete.forEach(function (t) {
+    const triggerId = t.getUniqueId();
     try {
       ScriptApp.deleteTrigger(t);
+      deletedCount++;
+      LOG.info('TRIGGER_DELETE', `Trigger ${triggerId} eliminato con successo.`);
     } catch (e) {
-      LOG.warn('TRIGGER_DELETE', 'Errore rimozione trigger', {
-        error: e.message,
-      });
+      LOG.warn('TRIGGER_DELETE', `Errore durante l'eliminazione del trigger ${triggerId}`, { error: e.message });
     }
   });
 
   // Aggiorna dashboard: trigger inattivo
   if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.updateTriggerStatus) {
     TRIGGER_DASHBOARD.updateTriggerStatus(false);
+    LOG.info('TRIGGER_DELETE', 'Stato dashboard aggiornato a INATTIVO.');
   }
 
+  const finalMsg = `Eliminazione completata. Rimossi ${deletedCount} su ${toDelete.length} attivatori trovati. L'importazione automatica è disattivata.`;
   if (ui) {
-    ui.alert(
-      'Attivatori rimossi',
-      "L'importazione automatica è stata disattivata.",
-      ui.ButtonSet.OK
-    );
+    ui.alert('Attivatori rimossi', finalMsg, ui.ButtonSet.OK);
   }
-  LOG.info('TRIGGER', 'Rimossi ' + toDelete.length + ' attivatori.');
+  LOG.info('TRIGGER_DELETE', finalMsg);
 }
 
 /**
