@@ -79,6 +79,12 @@ function onOpen() {
     .addItem('⏸️ Disattiva Import Auto', App.ui.fn.runDeleteTriggers)
   );
 
+  // --- Strumenti Avanzati (PERICOLOSI) ---
+  menu.addSeparator();
+  menu.addSubMenu(ui.createMenu('🛠️ Strumenti Avanzati')
+    .addItem('🔥 Reset e Re-importa Tutto', 'runResetAndReimportAll')
+  );
+
   menu.addToUi();
 }
 
@@ -411,6 +417,21 @@ function runDeleteEmptyRowsFromRigheSheet() {
     'Pulizia righe vuote dal foglio "Righe" in corso...',
     'Pulizia del foglio "Righe" completata!'
   );
+}
+
+/**
+ * Esegue il reset completo del sistema e la re-importazione.
+ * Funzione ad alto rischio, da usare con cautela.
+ * @returns {void}
+ */
+function runResetAndReimportAll() {
+  try {
+    // La funzione `resetAndReimportAll` gestisce internamente UI e lock.
+    resetAndReimportAll();
+  } catch (e) {
+    LOG?.error('RESET', `Errore durante l'avvio del reset: ${e.message}`, { stack: e.stack });
+    SpreadsheetApp.getUi().alert(`Impossibile avviare il processo di reset: ${e.message}`);
+  }
 }
 
 // =============================================================

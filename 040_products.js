@@ -228,41 +228,51 @@ const PRODUCTS = (() => {
       });
     }
 
-    // 1. Cerca by CodiceFornitore (se presente)
+    // 1. Ricerca multi-chiave: cerca sia per codice che per descrizione
+    let foundByCode = null;
     if (normFornId && normCodForn) {
       const keyCode = `${normFornId}|${normCodForn.toUpperCase()}`;
-      const found = cache.byFornitoreCodice.get(keyCode);
-      if (found) {
-        return {
-          codiceInternoBreve: found.codiceInternoBreve,
-          codiceInterno: found.codiceInterno,
-          isNew: false
-        };
-      }
+      foundByCode = cache.byFornitoreCodice.get(keyCode);
     }
 
-    // 2. Cerca by ChiaveDescrizione (fallback)
-    if (normFornId && normDesc) {
-      const chiaveDesc = normalizeDescrizione(normDesc);
+    let foundByDesc = null;
+    const chiaveDesc = normalizeDescrizione(normDesc);
+    if (normFornId && chiaveDesc) {
       const keyDesc = `${normFornId}|${chiaveDesc}`;
-      const found = cache.byFornitoreDescrizione.get(keyDesc);
-      
-      if (found) {
-        // Se trovato con descrizione ma ora arriva codice → aggiorna CodiceFornitore
-        if (normCodForn && !found.codiceFornitore) {
-          _updateProductField(found.codiceInternoBreve, 'CodiceFornitore', UTIL.forceText(normCodForn));
-          found.codiceFornitore = normCodForn;
-          // Aggiorna anche mappa byFornitoreCodice
-          const keyCode = `${normFornId}|${normCodForn.toUpperCase()}`;
-          cache.byFornitoreCodice.set(keyCode, found);
-        }
-        
-        return {
-          codiceInternoBreve: found.codiceInternoBreve,
-          codiceInterno: found.codiceInterno,
-          isNew: false
-        };
+      foundByDesc = cache.byFornitoreDescrizione.get(keyDesc);
+    }
+
+    // 2. Logica di risoluzione
+    // Priorità al match su codice
+    if (foundByCode) {
+      // Se il prodotto trovato per codice non ha una chiave descrizione, aggiornala.
+      if (!foundByCode.chiaveDescrizione && chiaveDesc) {
+        _updateProductField(foundByCode.codiceInternoBreve, 'ChiaveDescrizione', chiaveDesc);
+        foundByCode.chiaveDescrizione = chiaveDesc;
+        const keyDesc = `${normFornId}|${chiaveDesc}`;
+        cache.byFornitoreDescrizione.set(keyDesc, foundByCode);
       }
+      return {
+        codiceInternoBreve: foundByCode.codiceInternoBreve,
+        codiceInterno: foundByCode.codiceInterno,
+        isNew: false
+      };
+    }
+
+    // Se non trovato per codice, usa il match su descrizione
+    if (foundByDesc) {
+      // Se il prodotto trovato per descrizione non ha un codice e ora ne viene fornito uno, aggiornalo.
+      if (normCodForn && !foundByDesc.codiceFornitore) {
+        _updateProductField(foundByDesc.codiceInternoBreve, 'CodiceFornitore', UTIL.forceText(normCodForn));
+        foundByDesc.codiceFornitore = normCodForn;
+        const keyCode = `${normFornId}|${normCodForn.toUpperCase()}`;
+        cache.byFornitoreCodice.set(keyCode, foundByDesc);
+      }
+      return {
+        codiceInternoBreve: foundByDesc.codiceInternoBreve,
+        codiceInterno: foundByDesc.codiceInterno,
+        isNew: false
+      };
     }
 
     // 3. Non trovato → crea nuovo prodotto

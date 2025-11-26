@@ -172,20 +172,29 @@ const DEBUG = (function () {
             let needsUpdate = false;
             let rowUpdates = {}; // Aggiornamenti solo per questa riga
 
-            // Condizione 1: Famiglia diversa dal fornitore → aggiorna sempre
-            if (curr.famiglia && existingFamiglia !== curr.famiglia) {
+            const hasFamiglia = curr.famiglia !== undefined && curr.famiglia !== null;
+            const hasCategoria = curr.categoria !== undefined && curr.categoria !== null;
+            const hasReparto = curr.reparto !== undefined && curr.reparto !== null;
+
+            // Condizione 1: Famiglia diversa dal fornitore -> aggiorna sempre, anche se vuota
+            if (hasFamiglia && existingFamiglia !== curr.famiglia) {
               rowUpdates[idx.Famiglia] = curr.famiglia;
               needsUpdate = true;
             }
 
-            // Condizione 2: Categoria diversa dal fornitore → aggiorna sempre
-            if (curr.categoria && existingCategoria !== curr.categoria) {
+            // Condizione 2: Categoria diversa dal fornitore -> aggiorna sempre, anche se vuota
+            if (hasCategoria && existingCategoria !== curr.categoria) {
               rowUpdates[idx.Categoria] = curr.categoria;
               needsUpdate = true;
             }
             
-            // Condizione 3: Reparto diverso dal fornitore → aggiorna sempre (solo per Fatture)
-            if (existingReparto !== null && curr.reparto && curr.reparto !== '' && existingReparto !== curr.reparto && sheetName === SHEETS.SHEET_NAMES.Fatture) {
+            // Condizione 3: Reparto diverso dal fornitore -> aggiorna sempre (solo per Fatture)
+            if (
+              sheetName === SHEETS.SHEET_NAMES.Fatture &&
+              existingReparto !== null &&
+              hasReparto &&
+              existingReparto !== curr.reparto
+            ) {
               rowUpdates[idx.Reparto] = curr.reparto;
               needsUpdate = true;
             }
@@ -346,7 +355,8 @@ const DEBUG = (function () {
           const denom = String(row[idxF.DenominazioneFornitore] ?? '').trim();
           if (!idNorm || !denom) return;
           if (!existingIds.has(idNorm)) {
-            newRowsBatch.push([idNorm, denom, '', '', defaultImportRows]);
+            const importFlag = defaultImportRows === true || String(defaultImportRows).trim().toLowerCase() === 'true';
+            newRowsBatch.push([idNorm, denom, '', '', '', importFlag]);
             existingIds.add(idNorm);
           }
         });
@@ -550,6 +560,7 @@ const DEBUG = (function () {
       });
 
       const duplicateCount = dupSet.size;
+      STATE.set(DUPLICATE_COUNT_KEY, duplicateCount);
       
       if (duplicateCount === 0) {
         LOG?.info('DUPLICATE_MGMT', '✅ Nessuna fattura duplicata trovata.');
@@ -674,13 +685,14 @@ const DEBUG = (function () {
    */
   function markDuplicateInvoices() {
     try {
-      DUPLICATE_MANAGER.findAndMark('Fatture', (row, idx) => {
+      const result = DUPLICATE_MANAGER.findAndMark('Fatture', (row, idx) => {
         const fornitoreId = String(row[idx.FornitoreID] || '').trim();
         const numeroDoc = String(row[idx.NumeroDoc] || '').trim();
         const data = row[idx.Data];
         const dataStr = data instanceof Date ? data.toISOString().split('T')[0] : String(data);
         return `${fornitoreId}_${numeroDoc}_${dataStr}`;
       }, { silent: false, markColor: '#FFFF00' });
+      STATE.set(DUPLICATE_COUNT_KEY, result?.found ?? 0);
     } catch (e) {
       LOG.error('DEBUG_MARK_DUPLICATES', 'Errore marca duplicati fatture.', { error: e.message });
       UTIL.showToast('Errore durante marcatura duplicati. Vedi Log.', 'Errore');
@@ -744,6 +756,7 @@ const DEBUG = (function () {
     STATE.clear(CLEAR_CURSOR_KEY);
     UTIL.showToast('Marcatura duplicati rimossa.', 'Fatto!');
     LOG.info('DEBUG_CLEAR_MARKING', 'Pulizia marcatura completata.');
+    STATE.set(DUPLICATE_COUNT_KEY, 0);
   }
 
   /**
@@ -1414,7 +1427,7 @@ const DEBUG = (function () {
    * Mostra esattamente cosa viene aggregato prima del filtraggio Hotel.
    */
   function DEV_InspectAggregatedCosts() {
-    LOG.info('DEV_INSPECT_AGG', '=== ISPEZIONE AGGREGAZIONE COSTI ===');
+    LOG.info('DEV_INSPECT_AGG', '=== ISPEZIONE AGGREGAZIONE COSTI P&L ===');
     
     const ui = SpreadsheetApp.getUi();
     let report = '🔍 ISPEZIONE AGGREGAZIONE COSTI P&L\n\n';
@@ -1617,30 +1630,27 @@ const DEBUG = (function () {
         const data = r[idxF.Data];
         if (!(data instanceof Date) || isNaN(data.getTime())) return;
         
-        const ym = `${data.getFullYear()}-${('0' + (data.getMonth() + 1)).slice(-2)}`;
+        const anno = data.getFullYear();
+        const mese = data.getMonth() + 1;
+        const ym = `${anno}-${('0' + mese).slice(-2)}`;
+        
         const idNorm = UTIL.normKey(r[idxF.FornitoreID]).replace(/^0+/, '');
         const infoFornitore = famiglieFornitori.get(idNorm) || { famiglia: 'Non Categorizzato', reparto: null };
-        const famiglia = infoFornitore.famiglia;
         
         const repartoFattura = idxF.Reparto !== undefined ? String(r[idxF.Reparto] ?? '').trim() : null;
         const reparto = repartoFattura || infoFornitore.reparto;
         const azienda = aziendaMap.get(sede) || infoFornitore.azienda;
         const costoNetto = UTIL.parseNumSmart(r[idxF.TotImponibile]);
         
-        if (!costiAggregati.has(sede)) costiAggregati.set(sede, new Map());
-        const m = costiAggregati.get(sede);
-        if (!m.has(ym)) m.set(ym, new Map());
-        const famMap = m.get(ym);
+        const key = `${sede}|${ym}|${reparto}|${azienda}`;
         
-        // CHIAVE: Famiglia + Reparto (come nel P&L fixato)
-        const chiaveAggregazione = `${famiglia}|${reparto || 'NoReparto'}`;
-        
-        if (!famMap.has(chiaveAggregazione)) {
-          famMap.set(chiaveAggregazione, { costoNetto: 0, reparto, azienda, famiglia });
+        if (!costiAggregati.has(key)) {
+          costiAggregati.set(key, { sede, anno, mese, reparto, azienda, costo: 0, count: 0 });
         }
-        const curr = famMap.get(chiaveAggregazione);
-        curr.costoNetto += costoNetto;
-        // Non sovrascrivere reparto/azienda
+        
+        const curr = costiAggregati.get(key);
+        curr.costo += costoNetto;
+        curr.count++;
       });
       
       // 3. Simula il loop del P&L
@@ -1839,6 +1849,87 @@ const DEBUG = (function () {
     DEV_DebugCostiHotelLoop: DEV_DebugCostiHotelLoop
   };
 })();
+
+/**
+ * Esegue un reset completo dei dati importati e lancia una re-importazione totale.
+ * - Chiede conferma all'utente.
+ * - Pulisce i fogli: Fatture, Righe, Report Controllo, Prodotti.
+ * - Resetta il cursore di importazione.
+ * - Avvia l'importazione dalla cartella "Da Lavorare".
+ */
+function resetAndReimportAll() {
+  // 1. Chiedi conferma
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    'CONFERMA RESET TOTALE',
+    'Stai per cancellare TUTTI i dati importati (Fatture, Righe, Prodotti, Report) e rieseguire l\'importazione da zero. L\'operazione potrebbe richiedere molto tempo.\n\nSei assolutamente sicuro di voler procedere?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (response !== ui.Button.YES) {
+    ui.alert('Operazione annullata.');
+    return;
+  }
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    ss.toast('Reset in corso... Pulizia dei fogli di dati.', 'Reset in corso', -1);
+
+    // 2. Pulisci i fogli di dati
+    const sheetsToClear = [
+      SHEETS.SHEET_NAMES.Fatture,
+      SHEETS.SHEET_NAMES.Righe,
+      SHEETS.SHEET_NAMES.ReportControllo,
+      SHEETS.SHEET_NAMES.Prodotti
+    ];
+
+    sheetsToClear.forEach(sheetName => {
+      try {
+        LOG.info('RESET', `Pulizia del foglio: ${sheetName}`);
+        SHEETS.clearSheetContent(sheetName);
+      } catch (e) {
+        LOG.error('RESET', `Errore durante la pulizia del foglio ${sheetName}.`, e);
+      }
+    });
+    
+    // 3. Resetta il cursore di importazione
+    LOG.info('RESET', 'Reset del cursore di importazione.');
+    STATE.resetImportCursor();
+    
+    // Pulisce la cache per sicurezza
+    CacheService.getScriptCache().removeAll(['state.importCursor', 'state.importFileIterator']);
+
+    ss.toast('Pulizia completata. Avvio della re-importazione in background...', 'Importazione avviata', 10);
+    
+    // 4. Avvia la re-importazione in background
+    runInBackground('importAllInvoicesFromDrive');
+
+    LOG.info('RESET', 'Trigger per la re-importazione creato con successo.');
+    ui.alert('Reset completato. L\'importazione totale è stata avviata in background e potrebbe richiedere diversi minuti. Controlla il foglio "Log" per monitorare l\'avanzamento.');
+
+  } catch (e) {
+    LOG.error('RESET_FATAL', 'Errore irreversibile durante il processo di reset.', e);
+    ui.alert(`Errore critico durante il reset: ${e.message}. Controlla il Log per i dettagli.`);
+  }
+}
+
+/**
+ * Avvia una funzione in background creando un trigger temporaneo che si auto-distrugge.
+ * Utile per operazioni lunghe per evitare timeout dell'esecuzione manuale.
+ * @param {string} functionName Il nome della funzione globale da eseguire.
+ */
+function runInBackground(functionName) {
+  try {
+    const trigger = ScriptApp.newTrigger(functionName)
+      .timeBased()
+      .after(1000) // 1 secondo di ritardo
+      .create();
+    LOG.info('BACKGROUND_RUNNER', `Trigger creato per la funzione '${functionName}' con ID: ${trigger.getUniqueId()}`);
+  } catch (e) {
+    LOG.error('BACKGROUND_RUNNER', `Impossibile creare il trigger per '${functionName}'.`, e);
+    throw new Error(`Impossibile avviare l'operazione in background: ${e.message}`);
+  }
+}
 
 // Registra DEBUG nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {

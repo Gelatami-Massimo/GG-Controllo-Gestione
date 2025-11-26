@@ -747,7 +747,12 @@ function syncTriggerStatus() {
   const triggers = ScriptApp.getProjectTriggers();
   const isTriggerActive = triggers.some(function (t) {
     try {
-      return t.getHandlerFunction && t.getHandlerFunction() === handler;
+      return (
+        t.getHandlerFunction &&
+        t.getHandlerFunction() === handler &&
+        t.getEventType &&
+        t.getEventType() === ScriptApp.EventType.CLOCK
+      );
     } catch (e) {
       return false;
     }
