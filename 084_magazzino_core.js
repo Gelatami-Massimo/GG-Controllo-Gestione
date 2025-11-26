@@ -10,9 +10,10 @@ const MAGAZZINO_CORE = (() => {
   /**
    * Funzione interna: costruisce array base di righe da Righe + Prodotti.
    * @private
+   * @param {Object} [dateFilter] - Filtro opzionale: {startDate: Date, endDate: Date}
    * @returns {Array} Array di oggetti rowBase con campi normalizzati
    */
-  function buildMagazzinoBaseRows_() {
+  function buildMagazzinoBaseRows_(dateFilter = null) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
     // 1. Leggi foglio Prodotti
@@ -42,7 +43,7 @@ const MAGAZZINO_CORE = (() => {
     LOG?.info('MAG_CORE', `Mappa prodotti costruita: ${prodottiByKey.size} con codice, ${prodottiByKeyNoCode.size} senza codice.`);
 
     // 4. Processa righe fattura
-    const rowsBase = _processRighe(shRighe, lastRowRighe, prodottiByKey, prodottiByKeyNoCode);
+    const rowsBase = _processRighe(shRighe, lastRowRighe, prodottiByKey, prodottiByKeyNoCode, dateFilter);
     LOG?.info('MAG_CORE', `Righe base generate: ${rowsBase.length} righe.`);
 
     return rowsBase;
@@ -128,8 +129,9 @@ const MAGAZZINO_CORE = (() => {
   /**
    * Processa righe fattura e genera array base
    * @private
+   * @param {Object} [dateFilter] - Filtro opzionale: {startDate: Date, endDate: Date}
    */
-  function _processRighe(shRighe, lastRow, prodottiByKey, prodottiByKeyNoCode) {
+  function _processRighe(shRighe, lastRow, prodottiByKey, prodottiByKeyNoCode, dateFilter = null) {
     const headers = shRighe.getRange(1, 1, 1, shRighe.getLastColumn()).getValues()[0];
     const idx = {};
     headers.forEach((h, i) => {
@@ -141,7 +143,7 @@ const MAGAZZINO_CORE = (() => {
     const requiredCols = [
       'Anno', 'FornitoreID', 'DenominazioneFornitore', 'NumeroDoc',
       'Codice Articolo Fornitore', 'Descrizione',
-      'Quantita', 'PrezzoTotale', 'Reparto'
+      'Quantita', 'PrezzoTotale', 'Reparto', 'DataDoc'
     ];
     const missingCols = requiredCols.filter(col => idx[col] === undefined);
     if (missingCols.length > 0) {
@@ -160,6 +162,7 @@ const MAGAZZINO_CORE = (() => {
 
     data.forEach(row => {
       const anno = row[idx.Anno];
+      const dataDoc = row[idx.DataDoc];
       const fornitoreID = String(row[idx.FornitoreID] || '').trim();
       const codiceArticolo = String(row[idx['Codice Articolo Fornitore']] || '').trim();
       const descrizione = String(row[idx.Descrizione] || '').trim();
@@ -169,10 +172,18 @@ const MAGAZZINO_CORE = (() => {
       const reparto = String(row[idx.Reparto] || '').trim();
       const denominazioneFornitore = String(row[idx.DenominazioneFornitore] || '').trim();
 
-      // Filtri
+      // Filtri base
       if (!anno || quantita <= 0 || prezzoTotale === 0) {
         skippedInvalidData++;
         return;
+      }
+
+      // Filtro per data (se specificato)
+      if (dateFilter && dataDoc) {
+        const docDate = new Date(dataDoc);
+        if (docDate < dateFilter.startDate || docDate > dateFilter.endDate) {
+          return; // Salta questa riga, fuori dall'intervallo
+        }
       }
 
       // JOIN con prodotti
@@ -386,10 +397,60 @@ const MAGAZZINO_CORE = (() => {
    */
   function buildMagazzinoByYear() {
     try {
-      UTIL.showToast('Creazione Report Magazzino per Prodotto...', 'Magazzino', 10);
+      // Richiedi intervallo di mesi all'utente
+      const ui = SpreadsheetApp.getUi();
+      const responseStart = ui.prompt(
+        'Filtro Magazzino Prodotti',
+        'Inserisci MESE/ANNO di INIZIO (es: 01/2025):',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (responseStart.getSelectedButton() !== ui.Button.OK) {
+        ui.alert('Operazione annullata.');
+        return;
+      }
+      
+      const responseEnd = ui.prompt(
+        'Filtro Magazzino Prodotti',
+        'Inserisci MESE/ANNO di FINE (es: 11/2025):',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (responseEnd.getSelectedButton() !== ui.Button.OK) {
+        ui.alert('Operazione annullata.');
+        return;
+      }
+      
+      // Parse date
+      const startParts = responseStart.getResponseText().trim().split('/');
+      const endParts = responseEnd.getResponseText().trim().split('/');
+      
+      if (startParts.length !== 2 || endParts.length !== 2) {
+        ui.alert('Formato data non valido. Usa MM/AAAA (es: 01/2025)');
+        return;
+      }
+      
+      const startMonth = parseInt(startParts[0], 10);
+      const startYear = parseInt(startParts[1], 10);
+      const endMonth = parseInt(endParts[0], 10);
+      const endYear = parseInt(endParts[1], 10);
+      
+      if (isNaN(startMonth) || isNaN(startYear) || isNaN(endMonth) || isNaN(endYear) ||
+          startMonth < 1 || startMonth > 12 || endMonth < 1 || endMonth > 12) {
+        ui.alert('Mese o anno non valido.');
+        return;
+      }
+      
+      // Costruisci date filtro (primo giorno del mese iniziale, ultimo giorno del mese finale)
+      const startDate = new Date(startYear, startMonth - 1, 1);
+      const endDate = new Date(endYear, endMonth, 0); // Ultimo giorno del mese
+      
+      const dateFilter = { startDate, endDate };
+      
+      UTIL.showToast(`Creazione Report Magazzino (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino', 10);
 
-      // 1. Ottieni righe base
-      const rowsBase = buildMagazzinoBaseRows_();
+      // 1. Ottieni righe base con filtro
+      const rowsBase = buildMagazzinoBaseRows_(dateFilter);
 
       if (rowsBase.length === 0) {
         UTIL.showToast('Nessun dato da elaborare.', 'Avviso', 5);
@@ -560,10 +621,60 @@ const MAGAZZINO_CORE = (() => {
    */
   function buildMagazzinoIngredientiByYear() {
     try {
-      UTIL.showToast('Creazione Report Magazzino Ingredienti...', 'Magazzino Ingredienti', 10);
+      // Richiedi intervallo di mesi all'utente
+      const ui = SpreadsheetApp.getUi();
+      const responseStart = ui.prompt(
+        'Filtro Magazzino Ingredienti',
+        'Inserisci MESE/ANNO di INIZIO (es: 01/2025):',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (responseStart.getSelectedButton() !== ui.Button.OK) {
+        ui.alert('Operazione annullata.');
+        return;
+      }
+      
+      const responseEnd = ui.prompt(
+        'Filtro Magazzino Ingredienti',
+        'Inserisci MESE/ANNO di FINE (es: 11/2025):',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (responseEnd.getSelectedButton() !== ui.Button.OK) {
+        ui.alert('Operazione annullata.');
+        return;
+      }
+      
+      // Parse date
+      const startParts = responseStart.getResponseText().trim().split('/');
+      const endParts = responseEnd.getResponseText().trim().split('/');
+      
+      if (startParts.length !== 2 || endParts.length !== 2) {
+        ui.alert('Formato data non valido. Usa MM/AAAA (es: 01/2025)');
+        return;
+      }
+      
+      const startMonth = parseInt(startParts[0], 10);
+      const startYear = parseInt(startParts[1], 10);
+      const endMonth = parseInt(endParts[0], 10);
+      const endYear = parseInt(endParts[1], 10);
+      
+      if (isNaN(startMonth) || isNaN(startYear) || isNaN(endMonth) || isNaN(endYear) ||
+          startMonth < 1 || startMonth > 12 || endMonth < 1 || endMonth > 12) {
+        ui.alert('Mese o anno non valido.');
+        return;
+      }
+      
+      // Costruisci date filtro (primo giorno del mese iniziale, ultimo giorno del mese finale)
+      const startDate = new Date(startYear, startMonth - 1, 1);
+      const endDate = new Date(endYear, endMonth, 0); // Ultimo giorno del mese
+      
+      const dateFilter = { startDate, endDate };
+      
+      UTIL.showToast(`Creazione Report Magazzino Ingredienti (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino Ingredienti', 10);
 
-      // 1. Ottieni righe base
-      const rowsBase = buildMagazzinoBaseRows_();
+      // 1. Ottieni righe base con filtro
+      const rowsBase = buildMagazzinoBaseRows_(dateFilter);
 
       if (rowsBase.length === 0) {
         UTIL.showToast('Nessun dato da elaborare.', 'Avviso', 5);
