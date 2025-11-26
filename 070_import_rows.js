@@ -600,11 +600,19 @@ const IMPORT_ROWS = (function () {
           const codiceValoreRaw = codiceArticolo ? UTIL.firstText(codiceArticolo, 'CodiceValore') : '';
           const codiceTipo = codiceArticolo ? (UTIL.firstText(codiceArticolo, 'CodiceTipo') || '') : '';
 
-          // Se CodiceFornitore non è presente, assegna un placeholder
-          const codiceValoreConFallback = codiceValoreRaw || 'DA_ATTRIBUIRE';
+          // >>> NUOVA LOGICA: Generazione codice temporaneo se mancante <<<
+          let codiceValore;
+          if (codiceValoreRaw) {
+            codiceValore = codiceValoreRaw;
+          } else {
+            // Se il CodiceArticolo è assente, genera un codice stabile basato sulla descrizione.
+            const descrizionePulita = (descrizione || '').replace(/\s/g, '').toUpperCase();
+            codiceValore = `TEMP_${descrizionePulita.substring(0, 15)}`;
+          }
+          // >>> FINE NUOVA LOGICA <<<
 
           const um = UTIL.firstText(linea, 'UnitaMisura');
-          const codiceValoreForzato = UTIL.forceText(codiceValoreRaw);
+          const codiceValoreForzato = UTIL.forceText(codiceValore);
 
           const qta = UTIL.parseNumSmart(UTIL.firstText(linea, 'Quantita'));
           const prezzoUnit = UTIL.parseNumSmart(UTIL.firstText(linea, 'PrezzoUnitario'));
@@ -644,7 +652,7 @@ const IMPORT_ROWS = (function () {
           if (tipoRiga === 'ARTICOLO') { // Omaggio è già escluso sopra
             const prodResult = PRODUCTS.findOrCreateProduct(
               invData[idxF.FornitoreID], invData[idxF.DenominazioneFornitore],
-              codiceValoreConFallback, // Usa il codice con fallback
+              codiceValore, // Usa il codice (reale o generato)
               descrizione, um, productCache, categoriaFornitore
             );
             codiceInterno = prodResult.codiceInterno; // Legacy (per compatibilità)

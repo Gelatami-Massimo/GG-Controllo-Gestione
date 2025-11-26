@@ -230,7 +230,8 @@ const PRODUCTS = (() => {
 
     // 1. Ricerca multi-chiave: cerca sia per codice che per descrizione
     let foundByCode = null;
-    if (normFornId && normCodForn) {
+    // Cerca per codice solo se non è un codice temporaneo
+    if (normFornId && normCodForn && !normCodForn.startsWith('TEMP_')) {
       const keyCode = `${normFornId}|${normCodForn.toUpperCase()}`;
       foundByCode = cache.byFornitoreCodice.get(keyCode);
     }
@@ -243,9 +244,10 @@ const PRODUCTS = (() => {
     }
 
     // 2. Logica di risoluzione
-    // Priorità al match su codice
+    
+    // Caso 1: Trovato per codice reale. Questo è il match più forte.
     if (foundByCode) {
-      // Se il prodotto trovato per codice non ha una chiave descrizione, aggiornala.
+      // Se il prodotto trovato non ha ancora una chiave descrizione, la aggiungiamo.
       if (!foundByCode.chiaveDescrizione && chiaveDesc) {
         _updateProductField(foundByCode.codiceInternoBreve, 'ChiaveDescrizione', chiaveDesc);
         foundByCode.chiaveDescrizione = chiaveDesc;
@@ -259,14 +261,22 @@ const PRODUCTS = (() => {
       };
     }
 
-    // Se non trovato per codice, usa il match su descrizione
+    // Caso 2: Non trovato per codice reale, ma trovato per descrizione.
     if (foundByDesc) {
-      // Se il prodotto trovato per descrizione non ha un codice e ora ne viene fornito uno, aggiornalo.
-      if (normCodForn && !foundByDesc.codiceFornitore) {
+      // Ora abbiamo un codice reale per un prodotto che prima era identificato solo dalla descrizione (o da un TEMP_ code).
+      // Questo è il momento dell'"auto-correzione".
+      const isTempCode = foundByDesc.codiceFornitore && foundByDesc.codiceFornitore.startsWith('TEMP_');
+      const hasNewRealCode = normCodForn && !normCodForn.startsWith('TEMP_');
+
+      if (hasNewRealCode && (!foundByDesc.codiceFornitore || isTempCode)) {
         _updateProductField(foundByDesc.codiceInternoBreve, 'CodiceFornitore', UTIL.forceText(normCodForn));
+        
+        // Aggiorna la cache in memoria
         foundByDesc.codiceFornitore = normCodForn;
         const keyCode = `${normFornId}|${normCodForn.toUpperCase()}`;
         cache.byFornitoreCodice.set(keyCode, foundByDesc);
+        
+        LOG.info('PRODUCTS_AUTOCORRECT', `Auto-correzione: Prodotto ${foundByDesc.codiceInternoBreve} aggiornato con codice reale ${normCodForn}.`);
       }
       return {
         codiceInternoBreve: foundByDesc.codiceInternoBreve,
@@ -279,7 +289,7 @@ const PRODUCTS = (() => {
     return _createNewProduct(
       normFornId,
       denominazioneFornitore,
-      normCodForn,
+      normCodForn, // Può essere un codice reale o un TEMP_
       normDesc,
       normUM,
       cache,
