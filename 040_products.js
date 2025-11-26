@@ -39,6 +39,27 @@ const PRODUCTS = (() => {
       .trim();
   }
 
+  /**
+   * Normalizza un codice fornitore per matching robusto.
+   * - Rimuove tutti i caratteri non alfanumerici
+   * - Converte in maiuscolo
+   * 
+   * @param {string} codFornitore - Codice fornitore raw
+   * @returns {string} Codice fornitore normalizzato
+   * 
+   * @example
+   * normalizeCodiceFornitore(" 5043+341-24 ")
+   * // → "504334124"
+   */
+  function normalizeCodiceFornitore(codFornitore) {
+    if (!codFornitore) return '';
+    
+    return String(codFornitore)
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, ''); // Rimuove tutto ciò che non è lettera o numero
+  }
+
   // ============================================================
   // GENERAZIONE CODICE INTERNO BREVE
   // ============================================================
@@ -214,7 +235,8 @@ const PRODUCTS = (() => {
    */
   function findOrCreateProduct(fornitoreId, denominazioneFornitore, codFornitore, descrizione, um, cache, categoriaFornitore = '') {
     const normFornId = String(fornitoreId || '').trim();
-    const normCodForn = String(codFornitore || '').trim().replace(/^'+/, '');
+    // >>> USA LA NUOVA NORMALIZZAZIONE <<<
+    const normCodForn = normalizeCodiceFornitore(codFornitore);
     const normDesc = String(descrizione || '').trim();
     let normUM = String(um || '').trim();
 
@@ -467,7 +489,8 @@ const PRODUCTS = (() => {
     flushNewRows, 
     normalizeDescrizione,
     generateSupplierSigla: _generateSupplierSigla,  // Esposta per riuso in tools
-    isProductActive
+    isProductActive,
+    normalizeCodiceFornitore // Esponi per test e riuso
   };
 })();
 

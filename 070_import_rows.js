@@ -679,9 +679,9 @@ const IMPORT_ROWS = (function () {
             'Reparto': invData[idxF.Reparto],
             'NumeroLinea': numeroLinea,
             'CodiceInternoBreve': codiceInternoBreve || '',
-            'Codice Articolo Fornitore': codiceValoreForzato,
+            'Codice Articolo Fornitore': codiceValoreForzato, // Mantiene il codice originale per tracciabilità
             'CodiceTipo': codiceTipo,
-            'CodiceValore': codiceValoreForzato,
+            'CodiceValore': codiceValoreForzato, // Mantiene il codice originale per tracciabilità
             'Descrizione': descrizione,
             'Quantita': qta,
             'PrezzoUnitario': prezzoUnit,
