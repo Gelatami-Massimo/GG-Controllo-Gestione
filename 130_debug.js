@@ -1894,7 +1894,8 @@ function resetAndReimportAll() {
     
     // 3. Resetta il cursore di importazione
     LOG.info('RESET', 'Reset del cursore di importazione.');
-    STATE.resetImportCursor();
+    STATE.clear(App.config.keys.cursors.importHeaders);
+    STATE.clear(App.config.keys.cursors.importRows);
     
     // Pulisce la cache per sicurezza
     CacheService.getScriptCache().removeAll(['state.importCursor', 'state.importFileIterator']);
