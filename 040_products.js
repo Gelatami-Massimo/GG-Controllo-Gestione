@@ -275,14 +275,6 @@ const PRODUCTS = (() => {
         });
       }
     }
-      if (runId) {
-        ENHANCED_LOGGER.debug(runId, 'PRODUCTS_SEARCH_BY_CODE', 'Ricerca per codice fornitore', {
-          keyCode,
-          found: !!foundByCode,
-          codiceInternoBreve: foundByCode?.codiceInternoBreve
-        });
-      }
-    }
 
     let foundByDesc = null;
     const chiaveDesc = normalizeDescrizione(normDesc);
