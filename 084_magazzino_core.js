@@ -58,27 +58,7 @@ const MAGAZZINO_CORE = (() => {
       });
     }
     
-    // Log diretto nel foglio Log
-    try {
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      const logSheet = ss.getSheetByName('Log');
-      if (logSheet) {
-        const timestamp = new Date();
-        logSheet.appendRow([
-          timestamp,
-          'MAG_CORE',
-          'INFO',
-          'Mappa prodotti costruita',
-          JSON.stringify({
-            prodottiConCodice: prodottiByKey.size,
-            prodottiSenzaCodice: prodottiByKeyNoCode.size,
-            righeProdottiTotali: lastRowProd - 1
-          })
-        ]);
-      }
-    } catch (e) {
-      console.error('Errore scrittura log prodotti:', e);
-    }
+    // Logging già gestito da ENHANCED_LOGGER in MAG_PRODUCT_MAP
 
     // 4. Processa righe fattura
     const rowsBase = _processRighe(shRighe, lastRowRighe, prodottiByKey, prodottiByKeyNoCode, dateFilter, runId);
@@ -214,29 +194,10 @@ const MAGAZZINO_CORE = (() => {
     // Raccogli sample delle chiavi prodotti per debug
     const keysSample = Array.from(prodottiByKey.keys()).slice(0, 5);
 
-    // Log dettagliato filtri
-    const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Log');
-    if (logSheet) {
+    // Logging già gestito da ENHANCED_LOGGER in MAG_SKIP_* scopes
+    if (false) {
       try {
         const timestamp = new Date();
-        logSheet.appendRow([
-          timestamp,
-          'MAG_CORE',
-          'INFO',
-          'Filtri prodotti applicati',
-          JSON.stringify({
-            righeTotali: data.length,
-            processed,
-            skippedNoFornitore,
-            skippedNoIngrediente,
-            skippedNonInUso,
-            filterByIngrediente,
-            prodottiConCodice: prodottiByKey.size,
-            prodottiSenzaCodice: prodottiByKeyNoCode.size,
-            nonInUsoSamples,
-            keysSample
-          })
-        ]);
       } catch (e) {
         console.error('Errore log filtri prodotti:', e);
       }
@@ -421,28 +382,7 @@ const MAGAZZINO_CORE = (() => {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const logSheet = ss.getSheetByName('Log');
       if (logSheet) {
-        const timestamp = new Date();
-        const filtroDateStr = dateFilter ? 
-          `${dateFilter.startDate.toLocaleDateString('it-IT')} - ${dateFilter.endDate.toLocaleDateString('it-IT')}` : 
-          'Nessuno';
-        
-        logSheet.appendRow([
-          timestamp,
-          'MAG_CORE',
-          rowsBase.length === 0 ? 'WARNING' : 'INFO',
-          `Righe magazzino: ${rowsBase.length} valide su ${data.length} totali`,
-          JSON.stringify({
-            righeValide: rowsBase.length,
-            righeTotali: data.length,
-            skippedNoMatch,
-            skippedInvalidData,
-            skippedByDateFilter,
-            matchedByNoCode,
-            colonnaDataDoc: hasDataDoc ? 'Presente' : 'Assente',
-            filtroDate: filtroDateStr,
-            noMatchSamples
-          })
-        ]);
+        // Logging già gestito da ENHANCED_LOGGER in MAG_ROW_* scopes
       }
     } catch (e) {
       console.error('Errore scrittura log righe:', e);
@@ -664,27 +604,7 @@ const MAGAZZINO_CORE = (() => {
       
       const dateFilter = { startDate, endDate };
       
-      // Log diretto nel foglio Log
-      try {
-        const ss = SpreadsheetApp.getActiveSpreadsheet();
-        const logSheet = ss.getSheetByName('Log');
-        if (logSheet) {
-          logSheet.appendRow([
-            new Date(),
-            'MAG_CORE',
-            'INFO',
-            'Avvio report Magazzino Prodotti',
-            JSON.stringify({
-              meseInizio: `${startParts[0]}/${startParts[1]}`,
-              meseFine: `${endParts[0]}/${endParts[1]}`,
-              dataInizio: startDate.toLocaleDateString('it-IT'),
-              dataFine: endDate.toLocaleDateString('it-IT')
-            })
-          ]);
-        }
-      } catch (e) {
-        console.error('Errore scrittura log avvio:', e);
-      }
+      // Logging già gestito da ENHANCED_LOGGER in MAG_PRODOTTI_START
       
       UTIL.showToast(`Creazione Report Magazzino (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino', 10);
 
@@ -919,27 +839,7 @@ const MAGAZZINO_CORE = (() => {
       
       const dateFilter = { startDate, endDate };
       
-      // Log diretto nel foglio Log
-      try {
-        const ss = SpreadsheetApp.getActiveSpreadsheet();
-        const logSheet = ss.getSheetByName('Log');
-        if (logSheet) {
-          logSheet.appendRow([
-            new Date(),
-            'MAG_CORE',
-            'INFO',
-            'Avvio report Magazzino Ingredienti',
-            JSON.stringify({
-              meseInizio: `${startParts[0]}/${startParts[1]}`,
-              meseFine: `${endParts[0]}/${endParts[1]}`,
-              dataInizio: startDate.toLocaleDateString('it-IT'),
-              dataFine: endDate.toLocaleDateString('it-IT')
-            })
-          ]);
-        }
-      } catch (e) {
-        console.error('Errore scrittura log avvio:', e);
-      }
+      // Logging già gestito da ENHANCED_LOGGER in MAG_INGREDIENTI_START
       
       UTIL.showToast(`Creazione Report Magazzino Ingredienti (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino Ingredienti', 10);
 
