@@ -240,6 +240,20 @@ const MAGAZZINO_CORE = (() => {
       hasDataDoc,
       dateFilterActive: !!dateFilter
     });
+    
+    // Scrivi riepilogo nel foglio Log per visibilità utente
+    if (typeof SHEET_LOGGER !== 'undefined') {
+      SHEET_LOGGER.log('MAG_CORE', 'INFO', `Processamento righe magazzino completato: ${rowsBase.length} righe valide su ${data.length} totali`, {
+        righeValide: rowsBase.length,
+        righeTotali: data.length,
+        skippedNoMatch,
+        skippedInvalidData,
+        skippedByDateFilter,
+        matchedByNoCode,
+        colonnaDataDoc: hasDataDoc ? 'Presente' : 'Assente',
+        filtroDate: dateFilter ? `${dateFilter.startDate.toLocaleDateString()} - ${dateFilter.endDate.toLocaleDateString()}` : 'Nessuno'
+      });
+    }
 
     return rowsBase;
   }
