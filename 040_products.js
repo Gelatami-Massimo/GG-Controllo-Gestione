@@ -231,14 +231,24 @@ const PRODUCTS = (() => {
    * @param {string} um - Unità di misura
    * @param {Object} cache - Cache da primeCache()
    * @param {string} [categoriaFornitore=''] - Categoria fornitore
+   * @param {string} [runId=''] - RunId per logging granulare
    * @returns {{codiceInternoBreve: string, codiceInterno: string, isNew: boolean}} Prodotto trovato/creato
    */
-  function findOrCreateProduct(fornitoreId, denominazioneFornitore, codFornitore, descrizione, um, cache, categoriaFornitore = '') {
+  function findOrCreateProduct(fornitoreId, denominazioneFornitore, codFornitore, descrizione, um, cache, categoriaFornitore = '', runId = '') {
     const normFornId = String(fornitoreId || '').trim();
     // >>> USA LA NUOVA NORMALIZZAZIONE <<<
     const normCodForn = normalizeCodiceFornitore(codFornitore);
     const normDesc = String(descrizione || '').trim();
     let normUM = String(um || '').trim();
+    
+    if (runId) {
+      ENHANCED_LOGGER.debug(runId, 'PRODUCTS_FIND_START', 'Inizio ricerca prodotto', {
+        fornitoreId: normFornId,
+        codFornitore,
+        normCodForn,
+        descrizione: normDesc.substring(0, 50)
+      });
+    }
 
     // ✅ FIX: Se UM è vuota, assegna 'PZ' come default e logga un warning
     if (!normUM) {
@@ -256,6 +266,22 @@ const PRODUCTS = (() => {
     if (normFornId && normCodForn && !normCodForn.startsWith('TEMP_')) {
       const keyCode = `${normFornId}|${normCodForn.toUpperCase()}`;
       foundByCode = cache.byFornitoreCodice.get(keyCode);
+      
+      if (runId) {
+        ENHANCED_LOGGER.debug(runId, 'PRODUCTS_SEARCH_CODE', foundByCode ? 'Prodotto trovato by code' : 'Prodotto NON trovato by code', {
+          keyCode,
+          found: !!foundByCode,
+          codiceInternoBreve: foundByCode?.codiceInternoBreve
+        });
+      }
+    }
+      if (runId) {
+        ENHANCED_LOGGER.debug(runId, 'PRODUCTS_SEARCH_BY_CODE', 'Ricerca per codice fornitore', {
+          keyCode,
+          found: !!foundByCode,
+          codiceInternoBreve: foundByCode?.codiceInternoBreve
+        });
+      }
     }
 
     let foundByDesc = null;
@@ -263,6 +289,14 @@ const PRODUCTS = (() => {
     if (normFornId && chiaveDesc) {
       const keyDesc = `${normFornId}|${chiaveDesc}`;
       foundByDesc = cache.byFornitoreDescrizione.get(keyDesc);
+      
+      if (runId) {
+        ENHANCED_LOGGER.debug(runId, 'PRODUCTS_SEARCH_BY_DESC', 'Ricerca per descrizione', {
+          keyDesc: keyDesc.substring(0, 60),
+          found: !!foundByDesc,
+          codiceInternoBreve: foundByDesc?.codiceInternoBreve
+        });
+      }
     }
 
     // 2. Logica di risoluzione
@@ -275,7 +309,21 @@ const PRODUCTS = (() => {
         foundByCode.chiaveDescrizione = chiaveDesc;
         const keyDesc = `${normFornId}|${chiaveDesc}`;
         cache.byFornitoreDescrizione.set(keyDesc, foundByCode);
+        
+        if (runId) {
+          ENHANCED_LOGGER.info(runId, 'PRODUCTS_UPDATE_DESC_KEY', 'Aggiunta chiave descrizione a prodotto esistente', {
+            codiceInternoBreve: foundByCode.codiceInternoBreve,
+            chiaveDesc: chiaveDesc.substring(0, 50)
+          });
+        }
       }
+      
+      if (runId) {
+        ENHANCED_LOGGER.info(runId, 'PRODUCTS_FOUND_BY_CODE', 'Prodotto trovato per codice', {
+          codiceInternoBreve: foundByCode.codiceInternoBreve
+        });
+      }
+      
       return {
         codiceInternoBreve: foundByCode.codiceInternoBreve,
         codiceInterno: foundByCode.codiceInterno,
@@ -298,8 +346,23 @@ const PRODUCTS = (() => {
         const keyCode = `${normFornId}|${normCodForn.toUpperCase()}`;
         cache.byFornitoreCodice.set(keyCode, foundByDesc);
         
+        if (runId) {
+          ENHANCED_LOGGER.info(runId, 'PRODUCTS_AUTOCORRECT', 'Auto-correzione TEMP→real applicata', {
+            codiceInternoBreve: foundByDesc.codiceInternoBreve,
+            oldCode: isTempCode ? foundByDesc.codiceFornitore : '(vuoto)',
+            newCode: normCodForn
+          });
+        }
+        
         LOG.info('PRODUCTS_AUTOCORRECT', `Auto-correzione: Prodotto ${foundByDesc.codiceInternoBreve} aggiornato con codice reale ${normCodForn}.`);
       }
+      
+      if (runId) {
+        ENHANCED_LOGGER.info(runId, 'PRODUCTS_FOUND_BY_DESC', 'Prodotto trovato per descrizione', {
+          codiceInternoBreve: foundByDesc.codiceInternoBreve
+        });
+      }
+      
       return {
         codiceInternoBreve: foundByDesc.codiceInternoBreve,
         codiceInterno: foundByDesc.codiceInterno,
@@ -308,6 +371,14 @@ const PRODUCTS = (() => {
     }
 
     // 3. Non trovato → crea nuovo prodotto
+    if (runId) {
+      ENHANCED_LOGGER.info(runId, 'PRODUCTS_CREATE_NEW', 'Nessun match - creazione nuovo prodotto', {
+        fornitoreId: normFornId,
+        codFornitore: normCodForn,
+        descrizione: normDesc.substring(0, 50)
+      });
+    }
+    
     return _createNewProduct(
       normFornId,
       denominazioneFornitore,
@@ -315,7 +386,8 @@ const PRODUCTS = (() => {
       normDesc,
       normUM,
       cache,
-      categoriaFornitore
+      categoriaFornitore,
+      runId  // Propaga runId
     );
   }
 
@@ -323,9 +395,20 @@ const PRODUCTS = (() => {
    * Crea un nuovo prodotto nel foglio Prodotti.
    * @private
    */
-  function _createNewProduct(fornitoreId, denominazioneFornitore, codFornitore, descrizione, um, cache, categoriaFornitore) {
+  function _createNewProduct(fornitoreId, denominazioneFornitore, codFornitore, descrizione, um, cache, categoriaFornitore, runId) {
+    runId = runId || '';
     const chiaveDescrizione = normalizeDescrizione(descrizione);
     const codiceInternoBreve = _generateCodiceInternoBreve(fornitoreId, denominazioneFornitore, cache.shortCodes);
+    
+    if (runId) {
+      ENHANCED_LOGGER.info(runId, 'PRODUCTS_CREATED', 'Nuovo prodotto creato', {
+        codiceInternoBreve,
+        fornitoreId,
+        codFornitore,
+        descrizione: descrizione.substring(0, 50),
+        um
+      });
+    }
     
     // Genera anche CodiceInterno legacy (per compatibilità)
     const codiceInterno = codFornitore 

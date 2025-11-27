@@ -349,6 +349,9 @@ const IMPORT_ROWS = (function () {
   }
 
   function _mainLoop(isSilent) {
+    const runId = ENHANCED_LOGGER.generateRunId();
+    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_START', 'Inizio import righe', { isSilent });
+
     const startTime = new Date();
     const maxSec = CONFIG.get('MAX_RUNTIME_SEC', 240);
 
@@ -363,6 +366,11 @@ const IMPORT_ROWS = (function () {
     if (!righeHeaders || righeHeaders.length === 0) {
       throw new Error("Schema Righe non trovato in SHEETS.SCHEMAS.");
     }
+    
+    ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_SETUP', 'Header caricati', { 
+      headerRowF, 
+      righeHeadersCount: righeHeaders.length 
+    });
 
     // Validazione indici critici
     const requiredKeys = [
@@ -385,9 +393,15 @@ const IMPORT_ROWS = (function () {
 
     // Carica filtro dinamico
     const junkKeywordsSet = _getJunkKeywords();
+    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_JUNK_FILTER', 'Filtro spazzatura caricato', { 
+      junkKeywordsCount: junkKeywordsSet.size 
+    });
 
     // Carica cache righe esistenti (prevenzione duplicati)
     const existingRows = _loadExistingRowsCache();
+    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_DUP_CACHE', 'Cache duplicati caricata', { 
+      existingRowsCount: existingRows.size 
+    });
     LOG?.info('ROWS_SETUP', `Prevenzione duplicati attiva. Righe esistenti in cache: ${existingRows.size}`);
 
     // Fornitori abilitati
@@ -397,6 +411,10 @@ const IMPORT_ROWS = (function () {
       if (data.importaRighe === true) {
         enabledSupplierIds.add(String(id).trim().replace(/^IT/i, '').replace(/^0+/, ''));
       }
+    });
+    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_SUPPLIERS', 'Fornitori abilitati caricati', { 
+      totalSuppliers: suppliersData.size,
+      enabledSuppliers: enabledSupplierIds.size 
     });
     LOG?.info('ROWS', `Fornitori abilitati: ${enabledSupplierIds.size}`);
 
@@ -450,6 +468,11 @@ const IMPORT_ROWS = (function () {
         }
       },
       processChunk: (invoicesChunk, chunkStartRow) => {
+        ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_CHUNK_START', 'Inizio elaborazione chunk', {
+          chunkStartRow,
+          chunkSize: invoicesChunk.length
+        });
+
         // Elabora blocco
         for (let i = 0; i < invoicesChunk.length; i++) {
           const invData = invoicesChunk[i];
@@ -480,8 +503,17 @@ const IMPORT_ROWS = (function () {
             rowsBuffer,
             righeHeaders,
             junkKeywordsSet,
-            existingRows  // ✅ Aggiungo cache duplicati
+            existingRows,  // ✅ Aggiungo cache duplicati
+            runId  // ✅ Propago runId per logging interno
           );
+
+          ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_INVOICE_PROCESSED', 'Fattura processata', {
+            invRowNum,
+            fileId: invData[idxF.FileID],
+            statusSrc,
+            importedRowsCount,
+            sommaRigheNetto
+          });
 
           _addFlagUpdate(flagUpdates, invRowNum, idxF, {
             RigheImportate: !!hasImportedRows,
@@ -495,6 +527,11 @@ const IMPORT_ROWS = (function () {
           // Fornitore DISABILITATO.
           // Marca come 'skipped' ma lascia RigheImportate = FALSE
           // (TRUE significa sempre "righe esistono in Righe").
+          ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_SKIP_DISABLED', 'Fattura fornitore disabilitato', {
+            invRowNum,
+            fileId: invData[idxF.FileID],
+            fornitoreId
+          });
           _addFlagUpdate(flagUpdates, invRowNum, idxF, {
             RigheImportate: false,
             ImportaRigheSrc: 'skipped'
@@ -528,6 +565,13 @@ const IMPORT_ROWS = (function () {
     // Scrittura finale
     _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF);
     STATE.clear(CURSOR_KEY);
+    
+    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_COMPLETE', 'Importazione righe completata', {
+      processedInvoices,
+      skippedInvoices,
+      totalInvoices: processedInvoices + skippedInvoices
+    });
+
     if (!isSilent) {
       STATE.clear(App.config.keys.progress);
       const message = `Importazione righe completata.\n\nFatture processate: ${processedInvoices}\nFatture saltate: ${skippedInvoices}`;
@@ -546,8 +590,14 @@ const IMPORT_ROWS = (function () {
    *  - importedRowsCount: numero di righe scritte nel buffer per quella fattura
    *  - sommaRigheNetto: somma PrezzoTotale delle righe importate
    */
-  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsSet, existingRows) {
+  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsSet, existingRows, runId) {
     const fileId = invData[idxF.FileID];
+    
+    ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_INVOICE_START', 'Inizio processamento fattura', {
+      invRowNum,
+      fileId
+    });
+
     let statusSrc = 'imported'; // Default a successo
 
     const famigliaFornitore = invData[idxF.Famiglia];
@@ -602,12 +652,20 @@ const IMPORT_ROWS = (function () {
 
           // >>> NUOVA LOGICA: Generazione codice temporaneo se mancante <<<
           let codiceValore;
+          let isTempGenerated = false;
           if (codiceValoreRaw) {
             codiceValore = codiceValoreRaw;
           } else {
             // Se il CodiceArticolo è assente, genera un codice stabile basato sulla descrizione.
             const descrizionePulita = (descrizione || '').replace(/\s/g, '').toUpperCase();
             codiceValore = `TEMP_${descrizionePulita.substring(0, 15)}`;
+            isTempGenerated = true;
+            
+            ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_TEMP_CODE', 'Codice TEMP generato', {
+              fileId,
+              descrizione: descrizione.substring(0, 50),
+              codiceValore
+            });
           }
           // >>> FINE NUOVA LOGICA <<<
 
@@ -628,17 +686,35 @@ const IMPORT_ROWS = (function () {
           
           if (existingRows && existingRows.has(duplicateKey)) {
             skippedDuplicates++;
+            ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_DUP_SKIP', 'Riga duplicata skippata', {
+              fileId,
+              numeroLinea
+            });
             continue; // ✅ Salta questa riga (già importata in precedenza)
           }
 
           // ✅ CALCOLO TIPORIGA - LOGICA ROBUSTA MULTI-FORNITORE
           const tipoRiga = _classifyRowType(qta, prezzoTotaleRiga, descrizione, codiceTipo);
+          
+          ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_CLASSIFY', 'TipoRiga classificato', {
+            fileId,
+            numeroLinea,
+            tipoRiga,
+            qta,
+            prezzoTotaleRiga
+          });
 
           // >>> NUOVA LOGICA DI ESCLUSIONE <<<
           // Escludi righe spazzatura o tipi non desiderati (SCONTO, TESTO, OMAGGIO)
           const deveEssereEsclusa = isJunk || tipiDaEscludere.includes(tipoRiga);
 
           if (deveEssereEsclusa) {
+            ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_EXCLUDED', 'Riga esclusa', {
+              fileId,
+              numeroLinea,
+              reason: isJunk ? 'junk' : tipoRiga,
+              descrizione: descrizione.substring(0, 50)
+            });
             continue; // Salta la riga, non verrà importata
           }
           // >>> FINE LOGICA DI ESCLUSIONE <<<
@@ -653,10 +729,19 @@ const IMPORT_ROWS = (function () {
             const prodResult = PRODUCTS.findOrCreateProduct(
               invData[idxF.FornitoreID], invData[idxF.DenominazioneFornitore],
               codiceValore, // Usa il codice (reale o generato)
-              descrizione, um, productCache, categoriaFornitore
+              descrizione, um, productCache, categoriaFornitore,
+              runId  // ✅ Passa runId per logging Products
             );
             codiceInterno = prodResult.codiceInterno; // Legacy (per compatibilità)
             codiceInternoBreve = prodResult.codiceInternoBreve; // Nuovo
+            
+            ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_PRODUCT_MATCH', 'Prodotto trovato/creato', {
+              fileId,
+              numeroLinea,
+              codiceValore,
+              codiceInternoBreve,
+              wasCreated: prodResult.isNew || false
+            });
           }
 
           // ✅ CALCOLO COSTO UNITARIO (solo per ARTICOLO con prezzo positivo)
@@ -707,11 +792,25 @@ const IMPORT_ROWS = (function () {
           );
           
           if (!isValidRow) {
-            LOG?.warn('ROWS_SKIP_EMPTY', `Riga vuota o invalida saltata per fattura ${fileId}, NumeroLinea: ${numeroLinea}`);
+            ENHANCED_LOGGER.warn(runId, 'IMPORT_ROWS_INVALID', 'Riga invalida skippata', {
+              fileId,
+              numeroLinea,
+              tipoRiga,
+              hasCodiceInterno: !!codiceInternoBreve,
+              hasDescrizione: !!descrizione,
+              qta
+            });
             continue; // Salta questa riga vuota
           }
           
-          // Logging centralizzato: nessun console.log, logs solo su foglio Log
+          // Logging centralizzato: riga valida aggiunta al buffer
+          ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_ROW_ADDED', 'Riga aggiunta al buffer', {
+            fileId,
+            numeroLinea,
+            codiceInternoBreve,
+            prezzoTotaleRiga,
+            isTempCode: isTempGenerated
+          });
           
           rowsBuffer.push(row);
           importedRowsCount++;
@@ -748,8 +847,20 @@ const IMPORT_ROWS = (function () {
 
     // ✅ Log duplicati skippati
     if (skippedDuplicates > 0) {
+      ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_DUP_SUMMARY', 'Duplicati skippati totali per fattura', {
+        fileId,
+        skippedDuplicates
+      });
       LOG?.info('ROWS_DUP_SKIP', `Skippate ${skippedDuplicates} righe duplicate per fattura ${fileId}`);
     }
+
+    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_INVOICE_END', 'Fine processamento fattura', {
+      fileId,
+      statusSrc,
+      importedRowsCount,
+      sommaRigheNetto: sommaRigheImportate,
+      skippedDuplicates
+    });
 
     const hasImportedRows = importedRowsCount > 0;
     return { statusSrc, hasImportedRows, importedRowsCount, sommaRigheNetto: sommaRigheImportate };

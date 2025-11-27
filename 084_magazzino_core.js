@@ -12,9 +12,17 @@ const MAGAZZINO_CORE = (() => {
    * @private
    * @param {Object} [dateFilter] - Filtro opzionale: {startDate: Date, endDate: Date}
    * @param {boolean} [filterByIngrediente=true] - Se TRUE filtra solo prodotti con Ingrediente valorizzato
+   * @param {string} [runId=''] - RunId per logging granulare
    * @returns {Array} Array di oggetti rowBase con campi normalizzati
    */
-  function buildMagazzinoBaseRows_(dateFilter = null, filterByIngrediente = true) {
+  function buildMagazzinoBaseRows_(dateFilter = null, filterByIngrediente = true, runId = '') {
+    if (runId) {
+      ENHANCED_LOGGER.info(runId, 'MAG_BUILD_START', 'Inizio costruzione righe magazzino', {
+        filterByIngrediente,
+        hasDateFilter: !!dateFilter
+      });
+    }
+
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
     // 1. Leggi foglio Prodotti
@@ -40,8 +48,15 @@ const MAGAZZINO_CORE = (() => {
     }
 
     // 3. Costruisci mappa prodotti
-    const { prodottiByKey, prodottiByKeyNoCode } = _buildProdottiMap(shProdotti, lastRowProd, filterByIngrediente);
+    const { prodottiByKey, prodottiByKeyNoCode } = _buildProdottiMap(shProdotti, lastRowProd, filterByIngrediente, runId);
     LOG?.info('MAG_CORE', `Mappa prodotti costruita: ${prodottiByKey.size} con codice, ${prodottiByKeyNoCode.size} senza codice.`);
+    
+    if (runId) {
+      ENHANCED_LOGGER.info(runId, 'MAG_PRODUCT_MAP', 'Mappa prodotti costruita', {
+        prodottiConCodice: prodottiByKey.size,
+        prodottiSenzaCodice: prodottiByKeyNoCode.size
+      });
+    }
     
     // Log diretto nel foglio Log
     try {
@@ -66,7 +81,7 @@ const MAGAZZINO_CORE = (() => {
     }
 
     // 4. Processa righe fattura
-    const rowsBase = _processRighe(shRighe, lastRowRighe, prodottiByKey, prodottiByKeyNoCode, dateFilter);
+    const rowsBase = _processRighe(shRighe, lastRowRighe, prodottiByKey, prodottiByKeyNoCode, dateFilter, runId);
     LOG?.info('MAG_CORE', `Righe base generate: ${rowsBase.length} righe.`);
 
     return rowsBase;
@@ -76,9 +91,10 @@ const MAGAZZINO_CORE = (() => {
    * Costruisce mappa prodotti da foglio Prodotti
    * @private
    * @param {boolean} [filterByIngrediente=true] - Se TRUE filtra solo prodotti con Ingrediente
+   * @param {string} [runId=''] - RunId per logging
    * @returns {Object} { prodottiByKey: Map, prodottiByKeyNoCode: Map }
    */
-  function _buildProdottiMap(shProdotti, lastRow, filterByIngrediente = true) {
+  function _buildProdottiMap(shProdotti, lastRow, filterByIngrediente = true, runId = '') {
     const headers = shProdotti.getRange(1, 1, 1, shProdotti.getLastColumn()).getValues()[0];
     const idx = {};
     headers.forEach((h, i) => {
@@ -131,14 +147,32 @@ const MAGAZZINO_CORE = (() => {
       // Filtri base con contatori
       if (!fornitoreID) {
         skippedNoFornitore++;
+        if (runId) {
+          ENHANCED_LOGGER.debug(runId, 'MAG_SKIP_NO_SUPPLIER', 'Prodotto senza FornitoreID', {
+            codiceInterno,
+            descrizione: descrizione.substring(0, 30)
+          });
+        }
         return;
       }
       if (filterByIngrediente && !ingrediente) {
         skippedNoIngrediente++;
+        if (runId) {
+          ENHANCED_LOGGER.debug(runId, 'MAG_SKIP_NO_INGREDIENT', 'Prodotto senza Ingrediente', {
+            codiceInterno,
+            descrizione: descrizione.substring(0, 30)
+          });
+        }
         return;
       }
       if (nonInUso === true || String(nonInUso).toLowerCase() === 'true' || String(nonInUso).toLowerCase() === 'vero') {
         skippedNonInUso++;
+        if (runId) {
+          ENHANCED_LOGGER.debug(runId, 'MAG_SKIP_DISABLED', 'Prodotto disabilitato (NonInUso)', {
+            codiceInterno,
+            descrizione: descrizione.substring(0, 30)
+          });
+        }
         return;
       }
 
@@ -215,8 +249,9 @@ const MAGAZZINO_CORE = (() => {
    * Processa righe fattura e genera array base
    * @private
    * @param {Object} [dateFilter] - Filtro opzionale: {startDate: Date, endDate: Date}
+   * @param {string} [runId=''] - RunId per logging
    */
-  function _processRighe(shRighe, lastRow, prodottiByKey, prodottiByKeyNoCode, dateFilter = null) {
+  function _processRighe(shRighe, lastRow, prodottiByKey, prodottiByKeyNoCode, dateFilter = null, runId = '') {
     const headers = shRighe.getRange(1, 1, 1, shRighe.getLastColumn()).getValues()[0];
     const idx = {};
     headers.forEach((h, i) => {
@@ -263,6 +298,14 @@ const MAGAZZINO_CORE = (() => {
       // Filtri base
       if (!anno || quantita <= 0 || prezzoTotale === 0) {
         skippedInvalidData++;
+        if (runId) {
+          ENHANCED_LOGGER.debug(runId, 'MAG_ROW_SKIP_INVALID', 'Riga invalida', {
+            anno,
+            quantita,
+            prezzoTotale,
+            descrizione: descrizione.substring(0, 30)
+          });
+        }
         return;
       }
 
@@ -271,24 +314,36 @@ const MAGAZZINO_CORE = (() => {
         const docDate = new Date(dataDoc);
         if (isNaN(docDate.getTime()) || docDate < dateFilter.startDate || docDate > dateFilter.endDate) {
           skippedByDateFilter++;
+          if (runId) {
+            ENHANCED_LOGGER.debug(runId, 'MAG_ROW_SKIP_DATE', 'Riga fuori intervallo date', {
+              dataDoc,
+              filterStart: dateFilter.startDate.toISOString().substring(0, 10),
+              filterEnd: dateFilter.endDate.toISOString().substring(0, 10)
+            });
+          }
           return; // Salta questa riga, fuori dall'intervallo
         }
       }
 
       // JOIN con prodotti
       let prod = null;
+      let matchReason = '';
 
       if (codiceArticolo) {
         // Normalizza codice articolo (rimuove underscore, trattini, ecc.)
         const codiceNorm = codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase();
         const keyRiga = `${fornitoreID}||${codiceNorm}`;
         prod = prodottiByKey.get(keyRiga);
+        matchReason = prod ? 'matched_by_code' : 'no_match_code';
       } else if (descrizione && um) {
         // Cerca con KeyNoCode (FornitoreID + Descrizione + UM)
         const keyNoCode = `${fornitoreID}||${descrizione.toUpperCase()}||${um.toUpperCase()}`;
         prod = prodottiByKeyNoCode.get(keyNoCode);
         if (prod) {
           matchedByNoCode++;
+          matchReason = 'matched_by_desc';
+        } else {
+          matchReason = 'no_match_desc';
         }
       }
 
@@ -308,7 +363,26 @@ const MAGAZZINO_CORE = (() => {
             hasCode: !!codiceArticolo
           });
         }
+        
+        if (runId) {
+          ENHANCED_LOGGER.debug(runId, 'MAG_ROW_NO_MATCH', 'Riga non trova prodotto', {
+            fornitoreID,
+            codiceArticolo,
+            descrizione: descrizione.substring(0, 30),
+            um,
+            matchReason
+          });
+        }
         return;
+      } else {
+        if (runId) {
+          ENHANCED_LOGGER.debug(runId, 'MAG_ROW_MATCHED', 'Riga matched con prodotto', {
+            fornitoreID,
+            codiceArticolo,
+            codiceInterno: prod.codiceInterno,
+            matchReason
+          });
+        }
       }
 
       // Calcola quantità base
@@ -535,6 +609,9 @@ const MAGAZZINO_CORE = (() => {
    * MAGAZZINO_CORE.buildMagazzinoByYear();
    */
   function buildMagazzinoByYear() {
+    const runId = ENHANCED_LOGGER.generateRunId();
+    ENHANCED_LOGGER.info(runId, 'MAG_PRODOTTI_START', 'Inizio report Magazzino Prodotti');
+
     try {
       // Richiedi intervallo di mesi all'utente
       const ui = SpreadsheetApp.getUi();
@@ -546,6 +623,7 @@ const MAGAZZINO_CORE = (() => {
       
       if (responseStart.getSelectedButton() !== ui.Button.OK) {
         ui.alert('Operazione annullata.');
+        ENHANCED_LOGGER.info(runId, 'MAG_PRODOTTI_CANCELLED', 'Operazione annullata dall\'utente');
         return;
       }
       
@@ -611,10 +689,15 @@ const MAGAZZINO_CORE = (() => {
       UTIL.showToast(`Creazione Report Magazzino (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino', 10);
 
       // 1. Ottieni righe base con filtro (SENZA filtro Ingrediente per vedere tutti i prodotti)
-      const rowsBase = buildMagazzinoBaseRows_(dateFilter, false);
+      const rowsBase = buildMagazzinoBaseRows_(dateFilter, false, runId);
+      
+      ENHANCED_LOGGER.info(runId, 'MAG_PRODOTTI_ROWS', 'Righe base generate', {
+        rowCount: rowsBase.length
+      });
 
       if (rowsBase.length === 0) {
         UTIL.showToast('Nessun dato da elaborare.', 'Avviso', 5);
+        ENHANCED_LOGGER.warn(runId, 'MAG_PRODOTTI_NO_DATA', 'Nessun dato trovato per intervallo selezionato');
         return;
       }
 
@@ -781,6 +864,9 @@ const MAGAZZINO_CORE = (() => {
    * MAGAZZINO_CORE.buildMagazzinoIngredientiByYear();
    */
   function buildMagazzinoIngredientiByYear() {
+    const runId = ENHANCED_LOGGER.generateRunId();
+    ENHANCED_LOGGER.info(runId, 'MAG_INGREDIENTI_START', 'Inizio report Magazzino Ingredienti');
+
     try {
       // Richiedi intervallo di mesi all'utente
       const ui = SpreadsheetApp.getUi();
@@ -792,6 +878,7 @@ const MAGAZZINO_CORE = (() => {
       
       if (responseStart.getSelectedButton() !== ui.Button.OK) {
         ui.alert('Operazione annullata.');
+        ENHANCED_LOGGER.info(runId, 'MAG_INGREDIENTI_CANCELLED', 'Operazione annullata dall\'utente');
         return;
       }
       
@@ -857,10 +944,15 @@ const MAGAZZINO_CORE = (() => {
       UTIL.showToast(`Creazione Report Magazzino Ingredienti (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino Ingredienti', 10);
 
       // 1. Ottieni righe base con filtro (CON filtro Ingrediente per vedere solo ingredienti)
-      const rowsBase = buildMagazzinoBaseRows_(dateFilter, true);
+      const rowsBase = buildMagazzinoBaseRows_(dateFilter, true, runId);
+      
+      ENHANCED_LOGGER.info(runId, 'MAG_INGREDIENTI_ROWS', 'Righe base generate', {
+        rowCount: rowsBase.length
+      });
 
       if (rowsBase.length === 0) {
         UTIL.showToast('Nessun dato da elaborare.', 'Avviso', 5);
+        ENHANCED_LOGGER.warn(runId, 'MAG_INGREDIENTI_NO_DATA', 'Nessun dato trovato per intervallo selezionato');
         return;
       }
 
