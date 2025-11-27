@@ -178,7 +178,7 @@ const SHEETS = (function () {
       'UMBase', 'PZxCT', 'KGxPZ', 'PZxFila', 'FilePerCT', 'RichiedeSetup',
       'CostoUnitario', 'UMCosto'
     ],
-    'Log': ['Timestamp', 'Level', 'Scope', 'Message', 'Context'],
+    'Log': ['Timestamp', 'RunId', 'Scope', 'Level', 'Message', 'Context'],
     'Regole_UM': ['CodiceInterno', 'Pezzi per Unità', 'Peso per Pezzo (KG)', 'UM Finale', 'Note'],
     'Magazzino': [
       'Codice Interno', 'Denominazione Fornitore', 'Codice Articolo Fornitore', 'Descrizione',
