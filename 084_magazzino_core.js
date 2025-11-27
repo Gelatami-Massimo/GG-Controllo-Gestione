@@ -143,26 +143,28 @@ const MAGAZZINO_CORE = (() => {
     const requiredCols = [
       'Anno', 'FornitoreID', 'DenominazioneFornitore', 'NumeroDoc',
       'Codice Articolo Fornitore', 'Descrizione',
-      'Quantita', 'PrezzoTotale', 'Reparto', 'DataDoc'
+      'Quantita', 'PrezzoTotale', 'Reparto'
     ];
     const missingCols = requiredCols.filter(col => idx[col] === undefined);
     if (missingCols.length > 0) {
       throw new Error(`Colonne mancanti in Righe: ${missingCols.join(', ')}`);
     }
 
-    // Colonna UM è opzionale (potrebbe non esistere in Righe)
+    // Colonne opzionali
     const hasUM = idx['UM'] !== undefined;
+    const hasDataDoc = idx['DataDoc'] !== undefined;
 
     const data = shRighe.getRange(2, 1, lastRow - 1, headers.length).getValues();
     const rowsBase = [];
 
     let skippedNoMatch = 0;
     let skippedInvalidData = 0;
+    let skippedByDateFilter = 0;
     let matchedByNoCode = 0;
 
     data.forEach(row => {
       const anno = row[idx.Anno];
-      const dataDoc = row[idx.DataDoc];
+      const dataDoc = hasDataDoc ? row[idx.DataDoc] : null;
       const fornitoreID = String(row[idx.FornitoreID] || '').trim();
       const codiceArticolo = String(row[idx['Codice Articolo Fornitore']] || '').trim();
       const descrizione = String(row[idx.Descrizione] || '').trim();
@@ -178,10 +180,11 @@ const MAGAZZINO_CORE = (() => {
         return;
       }
 
-      // Filtro per data (se specificato)
-      if (dateFilter && dataDoc) {
+      // Filtro per data (se specificato e se la colonna esiste)
+      if (dateFilter && hasDataDoc && dataDoc) {
         const docDate = new Date(dataDoc);
-        if (docDate < dateFilter.startDate || docDate > dateFilter.endDate) {
+        if (isNaN(docDate.getTime()) || docDate < dateFilter.startDate || docDate > dateFilter.endDate) {
+          skippedByDateFilter++;
           return; // Salta questa riga, fuori dall'intervallo
         }
       }
@@ -231,8 +234,11 @@ const MAGAZZINO_CORE = (() => {
       totalRows: data.length,
       skippedNoMatch,
       skippedInvalidData,
+      skippedByDateFilter,
       matchedByNoCode,
-      validRows: rowsBase.length
+      validRows: rowsBase.length,
+      hasDataDoc,
+      dateFilterActive: !!dateFilter
     });
 
     return rowsBase;
