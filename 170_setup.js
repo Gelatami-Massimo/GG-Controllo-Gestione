@@ -128,6 +128,53 @@ const SETUP = (function () {
     LOG.info('SETUP', 'Setup completato con manutenzione automatica.');
   }
 
+  /**
+   * Verifica allineamento fogli rispetto a SHEETS.SCHEMAS e corregge intestazioni mancanti.
+   * Logga un riepilogo dettagliato su `Log` usando ENHANCED_LOGGER.
+   */
+  function verifyAlignment() {
+    const runId = ENHANCED_LOGGER?.generateRunId ? ENHANCED_LOGGER.generateRunId() : Utilities.getUuid();
+    try {
+      ENHANCED_LOGGER?.info(runId, 'SETUP_VERIFY', 'Avvio verifica allineamento fogli');
+      const schemas = SHEETS.SCHEMAS;
+      const names = SHEETS.SHEET_NAMES;
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const summary = [];
+
+      Object.keys(names).forEach(safeName => {
+        const realName = names[safeName];
+        const expectedHeaders = (schemas[realName] || []).map(h => String(h).trim());
+        const sh = ss.getSheetByName(realName);
+        if (!sh) {
+          summary.push({ sheet: realName, status: 'MISSING', action: 'CREATE' });
+          return;
+        }
+        const headerRow = SHEETS._findHeaderRow(sh, realName);
+        const headers = headerRow > 0 ? sh.getRange(headerRow, 1, 1, sh.getLastColumn()).getValues()[0].map(h => String(h).trim()) : [];
+        const missing = expectedHeaders.filter(h => !headers.includes(h));
+        const extra = headers.filter(h => h && !expectedHeaders.includes(h));
+        if (missing.length || extra.length) {
+          summary.push({ sheet: realName, status: 'MISALIGNED', missing, extra });
+          // Riallinea intestazioni se possibile
+          try {
+            SHEETS._ensureHeaders(sh, realName);
+            ENHANCED_LOGGER?.info(runId, 'SETUP_VERIFY_FIX', `Riallineate intestazioni`, { sheet: realName });
+          } catch (e) {
+            ENHANCED_LOGGER?.warn(runId, 'SETUP_VERIFY_FIX_FAIL', `Errore riallineamento`, { sheet: realName, error: e.message });
+          }
+        } else {
+          summary.push({ sheet: realName, status: 'OK' });
+        }
+      });
+
+      ENHANCED_LOGGER?.info(runId, 'SETUP_VERIFY_SUMMARY', 'Verifica completata', { summary });
+      return summary;
+    } catch (e) {
+      ENHANCED_LOGGER?.error(runId, 'SETUP_VERIFY_ERROR', 'Errore verifica allineamento', { error: e.message });
+      throw e;
+    }
+  }
+
   function _extractIdFromInput(input) {
     const trimmed = (input || '').trim();
     let match = trimmed.match(/\/folders\/([a-zA-Z0-9_-]{20,})/);
@@ -187,7 +234,7 @@ const SETUP = (function () {
     }
   }
 
-  return { run };
+  return { run, verifyAlignment };
 })();
 
 // Registra SETUP nel ModuleRegistry
