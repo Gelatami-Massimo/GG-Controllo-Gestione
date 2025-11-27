@@ -101,6 +101,13 @@ const MAGAZZINO_CORE = (() => {
     const prodottiByKey = new Map();
     const prodottiByKeyNoCode = new Map();
 
+    // Contatori debug
+    let skippedNoFornitore = 0;
+    let skippedNoIngrediente = 0;
+    let skippedNonInUso = 0;
+    let processed = 0;
+    const nonInUsoSamples = []; // Sample di valori NonInUso per debug
+
     data.forEach(row => {
       const fornitoreID = String(row[idx.FornitoreID] || '').trim();
       const codiceFornitore = String(row[idx.CodiceFornitore] || '').trim();
@@ -110,10 +117,32 @@ const MAGAZZINO_CORE = (() => {
       const ingrediente = String(row[idx.Ingrediente] || '').trim();
       const nonInUso = row[idx.NonInUso];
 
-      // Filtri base
-      if (!fornitoreID) return;
-      if (filterByIngrediente && !ingrediente) return; // Filtra solo se richiesto
-      if (nonInUso === true || String(nonInUso).toLowerCase() === 'true' || String(nonInUso).toLowerCase() === 'vero') return;
+      // Raccolta sample per debug (primi 5)
+      if (nonInUsoSamples.length < 5) {
+        nonInUsoSamples.push({
+          codiceInterno,
+          descrizione: descrizione.substring(0, 20),
+          nonInUso,
+          type: typeof nonInUso,
+          stringValue: String(nonInUso)
+        });
+      }
+
+      // Filtri base con contatori
+      if (!fornitoreID) {
+        skippedNoFornitore++;
+        return;
+      }
+      if (filterByIngrediente && !ingrediente) {
+        skippedNoIngrediente++;
+        return;
+      }
+      if (nonInUso === true || String(nonInUso).toLowerCase() === 'true' || String(nonInUso).toLowerCase() === 'vero') {
+        skippedNonInUso++;
+        return;
+      }
+
+      processed++;
 
       // Normalizza UMBase
       let umBaseNorm = String(row[idx.UMBase] || 'PZ').trim().toUpperCase();
@@ -136,7 +165,8 @@ const MAGAZZINO_CORE = (() => {
 
       // Mappa con codice fornitore
       if (codiceFornitore) {
-        const key = `${fornitoreID}||${codiceFornitore}`;
+        const codiceNorm = codiceFornitore.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        const key = `${fornitoreID}||${codiceNorm}`;
         prodottiByKey.set(key, prodData);
       }
 
@@ -146,6 +176,37 @@ const MAGAZZINO_CORE = (() => {
         prodottiByKeyNoCode.set(keyNoCode, prodData);
       }
     });
+
+    // Raccogli sample delle chiavi prodotti per debug
+    const keysSample = Array.from(prodottiByKey.keys()).slice(0, 5);
+
+    // Log dettagliato filtri
+    const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Log');
+    if (logSheet) {
+      try {
+        const timestamp = new Date();
+        logSheet.appendRow([
+          timestamp,
+          'MAG_CORE',
+          'INFO',
+          'Filtri prodotti applicati',
+          JSON.stringify({
+            righeTotali: data.length,
+            processed,
+            skippedNoFornitore,
+            skippedNoIngrediente,
+            skippedNonInUso,
+            filterByIngrediente,
+            prodottiConCodice: prodottiByKey.size,
+            prodottiSenzaCodice: prodottiByKeyNoCode.size,
+            nonInUsoSamples,
+            keysSample
+          })
+        ]);
+      } catch (e) {
+        console.error('Errore log filtri prodotti:', e);
+      }
+    }
 
     return { prodottiByKey, prodottiByKeyNoCode };
   }
@@ -185,6 +246,7 @@ const MAGAZZINO_CORE = (() => {
     let skippedInvalidData = 0;
     let skippedByDateFilter = 0;
     let matchedByNoCode = 0;
+    const noMatchSamples = []; // Sample di righe che non matchano
 
     data.forEach(row => {
       const anno = row[idx.Anno];
@@ -217,8 +279,9 @@ const MAGAZZINO_CORE = (() => {
       let prod = null;
 
       if (codiceArticolo) {
-        // Cerca con codice fornitore
-        const keyRiga = `${fornitoreID}||${codiceArticolo}`;
+        // Normalizza codice articolo (rimuove underscore, trattini, ecc.)
+        const codiceNorm = codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        const keyRiga = `${fornitoreID}||${codiceNorm}`;
         prod = prodottiByKey.get(keyRiga);
       } else if (descrizione && um) {
         // Cerca con KeyNoCode (FornitoreID + Descrizione + UM)
@@ -231,6 +294,20 @@ const MAGAZZINO_CORE = (() => {
 
       if (!prod) {
         skippedNoMatch++;
+        // Raccogli sample (primi 10)
+        if (noMatchSamples.length < 10) {
+          const keyAttempted = codiceArticolo 
+            ? `${fornitoreID}||${codiceArticolo}`
+            : `${fornitoreID}||${descrizione.toUpperCase()}||${um.toUpperCase()}`;
+          noMatchSamples.push({
+            fornitoreID,
+            codiceArticolo,
+            descrizione: descrizione.substring(0, 30),
+            um,
+            keyAttempted,
+            hasCode: !!codiceArticolo
+          });
+        }
         return;
       }
 
@@ -288,7 +365,8 @@ const MAGAZZINO_CORE = (() => {
             skippedByDateFilter,
             matchedByNoCode,
             colonnaDataDoc: hasDataDoc ? 'Presente' : 'Assente',
-            filtroDate: filtroDateStr
+            filtroDate: filtroDateStr,
+            noMatchSamples
           })
         ]);
       }
