@@ -11,9 +11,10 @@ const MAGAZZINO_CORE = (() => {
    * Funzione interna: costruisce array base di righe da Righe + Prodotti.
    * @private
    * @param {Object} [dateFilter] - Filtro opzionale: {startDate: Date, endDate: Date}
+   * @param {boolean} [filterByIngrediente=true] - Se TRUE filtra solo prodotti con Ingrediente valorizzato
    * @returns {Array} Array di oggetti rowBase con campi normalizzati
    */
-  function buildMagazzinoBaseRows_(dateFilter = null) {
+  function buildMagazzinoBaseRows_(dateFilter = null, filterByIngrediente = true) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
     // 1. Leggi foglio Prodotti
@@ -39,7 +40,7 @@ const MAGAZZINO_CORE = (() => {
     }
 
     // 3. Costruisci mappa prodotti
-    const { prodottiByKey, prodottiByKeyNoCode } = _buildProdottiMap(shProdotti, lastRowProd);
+    const { prodottiByKey, prodottiByKeyNoCode } = _buildProdottiMap(shProdotti, lastRowProd, filterByIngrediente);
     LOG?.info('MAG_CORE', `Mappa prodotti costruita: ${prodottiByKey.size} con codice, ${prodottiByKeyNoCode.size} senza codice.`);
     
     // Log diretto nel foglio Log
@@ -74,9 +75,10 @@ const MAGAZZINO_CORE = (() => {
   /**
    * Costruisce mappa prodotti da foglio Prodotti
    * @private
+   * @param {boolean} [filterByIngrediente=true] - Se TRUE filtra solo prodotti con Ingrediente
    * @returns {Object} { prodottiByKey: Map, prodottiByKeyNoCode: Map }
    */
-  function _buildProdottiMap(shProdotti, lastRow) {
+  function _buildProdottiMap(shProdotti, lastRow, filterByIngrediente = true) {
     const headers = shProdotti.getRange(1, 1, 1, shProdotti.getLastColumn()).getValues()[0];
     const idx = {};
     headers.forEach((h, i) => {
@@ -110,7 +112,7 @@ const MAGAZZINO_CORE = (() => {
 
       // Filtri base
       if (!fornitoreID) return;
-      if (!ingrediente) return;
+      if (filterByIngrediente && !ingrediente) return; // Filtra solo se richiesto
       if (nonInUso === true || String(nonInUso).toLowerCase() === 'true' || String(nonInUso).toLowerCase() === 'vero') return;
 
       // Normalizza UMBase
@@ -530,8 +532,8 @@ const MAGAZZINO_CORE = (() => {
       
       UTIL.showToast(`Creazione Report Magazzino (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino', 10);
 
-      // 1. Ottieni righe base con filtro
-      const rowsBase = buildMagazzinoBaseRows_(dateFilter);
+      // 1. Ottieni righe base con filtro (SENZA filtro Ingrediente per vedere tutti i prodotti)
+      const rowsBase = buildMagazzinoBaseRows_(dateFilter, false);
 
       if (rowsBase.length === 0) {
         UTIL.showToast('Nessun dato da elaborare.', 'Avviso', 5);
@@ -776,8 +778,8 @@ const MAGAZZINO_CORE = (() => {
       
       UTIL.showToast(`Creazione Report Magazzino Ingredienti (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino Ingredienti', 10);
 
-      // 1. Ottieni righe base con filtro
-      const rowsBase = buildMagazzinoBaseRows_(dateFilter);
+      // 1. Ottieni righe base con filtro (CON filtro Ingrediente per vedere solo ingredienti)
+      const rowsBase = buildMagazzinoBaseRows_(dateFilter, true);
 
       if (rowsBase.length === 0) {
         UTIL.showToast('Nessun dato da elaborare.', 'Avviso', 5);
