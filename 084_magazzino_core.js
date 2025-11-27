@@ -41,6 +41,15 @@ const MAGAZZINO_CORE = (() => {
     // 3. Costruisci mappa prodotti
     const { prodottiByKey, prodottiByKeyNoCode } = _buildProdottiMap(shProdotti, lastRowProd);
     LOG?.info('MAG_CORE', `Mappa prodotti costruita: ${prodottiByKey.size} con codice, ${prodottiByKeyNoCode.size} senza codice.`);
+    
+    // Log visibile nel foglio Log
+    if (typeof SHEET_LOGGER !== 'undefined') {
+      SHEET_LOGGER.log('MAG_CORE', 'INFO', `Mappa prodotti costruita`, {
+        prodottiConCodice: prodottiByKey.size,
+        prodottiSenzaCodice: prodottiByKeyNoCode.size,
+        righeProdottiTotali: lastRowProd - 1
+      });
+    }
 
     // 4. Processa righe fattura
     const rowsBase = _processRighe(shRighe, lastRowRighe, prodottiByKey, prodottiByKeyNoCode, dateFilter);
@@ -467,6 +476,16 @@ const MAGAZZINO_CORE = (() => {
       
       const dateFilter = { startDate, endDate };
       
+      // Log filtro date nel foglio Log
+      if (typeof SHEET_LOGGER !== 'undefined') {
+        SHEET_LOGGER.log('MAG_CORE', 'INFO', `Avvio report Magazzino Prodotti con filtro date`, {
+          dataInizio: startDate.toLocaleDateString('it-IT'),
+          dataFine: endDate.toLocaleDateString('it-IT'),
+          meseInizio: `${startParts[0]}/${startParts[1]}`,
+          meseFine: `${endParts[0]}/${endParts[1]}`
+        });
+      }
+      
       UTIL.showToast(`Creazione Report Magazzino (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino', 10);
 
       // 1. Ottieni righe base con filtro
@@ -690,6 +709,16 @@ const MAGAZZINO_CORE = (() => {
       const endDate = new Date(endYear, endMonth, 0); // Ultimo giorno del mese
       
       const dateFilter = { startDate, endDate };
+      
+      // Log filtro date nel foglio Log
+      if (typeof SHEET_LOGGER !== 'undefined') {
+        SHEET_LOGGER.log('MAG_CORE', 'INFO', `Avvio report Magazzino Ingredienti con filtro date`, {
+          dataInizio: startDate.toLocaleDateString('it-IT'),
+          dataFine: endDate.toLocaleDateString('it-IT'),
+          meseInizio: `${startParts[0]}/${startParts[1]}`,
+          meseFine: `${endParts[0]}/${endParts[1]}`
+        });
+      }
       
       UTIL.showToast(`Creazione Report Magazzino Ingredienti (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino Ingredienti', 10);
 
