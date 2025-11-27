@@ -82,61 +82,17 @@ const SYNC_PRODOTTI = (() => {
         if (!fornId || !codForn) return;
         
         const key = `${fornId}||${codForn}`;
-        prodottiMap.set(key, {
-          rowIndex: headerRowProd + 1 + i,
-          data: row
-        });
-        
-        // Traccia CodiceInterno per prevenire duplicati esatti
-        if (codiceInterno) {
-          codiciInterniSet.add(codiceInterno);
-        }
-      });
-    }
-
-    LOG.info('SYNC_PRODOTTI', `Caricati ${prodottiMap.size} prodotti esistenti (${codiciInterniSet.size} codici interni).`);
-
-    // 2. Leggi foglio Righe
-    const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
-    if (!shRighe) {
-      LOG.error('SYNC_PRODOTTI', 'Foglio Righe non trovato.');
-      return stats;
-    }
-
-    const headerRowRighe = SHEETS._findHeaderRow(shRighe, SHEETS.SHEET_NAMES.Righe);
-    const idxRighe = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
-
-    // Verifica colonne essenziali Righe
-    const requiredRighe = ['FornitoreID', 'Codice Articolo Fornitore', 'Descrizione', 'Quantita'];
-    const missingRighe = requiredRighe.filter(k => idxRighe[k] === undefined);
-    if (missingRighe.length) {
-      LOG.error('SYNC_PRODOTTI', 'Intestazioni mancanti in Righe.', { missing: missingRighe });
-      return stats;
-    }
-
-    const lastRowRighe = shRighe.getLastRow();
-    if (lastRowRighe <= headerRowRighe) {
-      LOG.info('SYNC_PRODOTTI', 'Foglio Righe vuoto. Nessun sync necessario.');
-      return stats;
-    }
-
-    // Carica mappa Fornitori per CategoriaProdotto
-    const fornitoriMap = _loadFornitoriMap();
-
-    // 3. Processa righe e identifica nuovi/esistenti
-    const valuesRighe = shRighe.getRange(headerRowRighe + 1, 1, lastRowRighe - headerRowRighe, shRighe.getLastColumn()).getValues();
-    const newProducts = [];
-    const updates = {}; // rowIndex -> {colIndex: newValue}
-
-    valuesRighe.forEach(row => {
-      const quantita = Number(row[idxRighe.Quantita]) || 0;
-      const codArticolo = String(row[idxRighe['Codice Articolo Fornitore']] || '').trim();
-      
-      if (quantita <= 0 || !codArticolo) return;
-
-      const fornId = String(row[idxRighe.FornitoreID] || '').trim();
-      const descrizione = String(row[idxRighe.Descrizione] || '').trim();
-      const um = String(row[idxRighe.UM] || '').trim();
+        return [
+          d.codiceFornitore,
+          d.righe[0].descrizione,
+          d.righe[0].fornId,
+          d.count,
+          attivi,
+          nonInUsoCount,
+          causa,
+          codiciInterni,
+          date
+        ];
       const fornName = String(row[idxRighe.DenominazioneFornitore] || '').trim();
 
       if (!fornId) return;
@@ -275,6 +231,85 @@ const SYNC_PRODOTTI = (() => {
     return stats;
   }
 
+  /**
+   * Riempie CodiceFornitore mancante nei prodotti usando le righe fattura.
+   * Implementazione interna, invocata da API pubblica.
+   */
+  function _fixMissingSupplierCodesInternal() {
+    const shProd = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+    const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
+    if (!shProd || !shRighe) {
+      LOG?.error('SYNC_CODES', 'Foglio Prodotti/Righe non trovato');
+      return 0;
+    }
+
+    const hdrRowProd = SHEETS._findHeaderRow(shProd, SHEETS.SHEET_NAMES.Prodotti);
+    const idxP = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+    const lastRowP = shProd.getLastRow();
+    const lastColP = shProd.getLastColumn();
+    const prodData = shProd.getRange(hdrRowProd + 1, 1, lastRowP - hdrRowProd, lastColP).getValues();
+
+    const hdrRowR = SHEETS._findHeaderRow(shRighe, SHEETS.SHEET_NAMES.Righe);
+    const idxR = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
+    const lastRowR = shRighe.getLastRow();
+    const lastColR = shRighe.getLastColumn();
+    const righeData = shRighe.getRange(hdrRowR + 1, 1, lastRowR - hdrRowR, lastColR).getValues();
+
+    // Costruisci mappa: CodiceInternoBreve -> frequenza codici fornitore dalle righe
+    const freqMap = new Map();
+    righeData.forEach(r => {
+      const tipo = String(r[idxR.TipoRiga] || '').trim();
+      if (tipo !== 'ARTICOLO') return;
+      const codiceBreve = String(r[idxR.CodiceInternoBreve] || '').trim();
+      const codiceFornRiga = String(r[idxR['Codice Articolo Fornitore']] || '').trim();
+      if (!codiceBreve || !codiceFornRiga) return;
+      const norm = PRODUCTS.normalizeCodiceFornitore(codiceFornRiga);
+      if (!norm || norm.startsWith('TEMP_')) return;
+      const m = freqMap.get(codiceBreve) || new Map();
+      m.set(norm, (m.get(norm) || 0) + 1);
+      freqMap.set(codiceBreve, m);
+    });
+
+    // Applica aggiornamenti a Prodotti
+    let updates = 0;
+    for (let i = 0; i < prodData.length; i++) {
+      const row = prodData[i];
+      const codiceBreve = String(row[idxP.CodiceInternoBreve] || '').trim();
+      let codiceForn = String(row[idxP.CodiceFornitore] || '').trim();
+      if (!codiceBreve) continue;
+      const isMissing = !codiceForn || codiceForn.toUpperCase().startsWith('TEMP_');
+      const candidates = freqMap.get(codiceBreve);
+      if (!isMissing || !candidates) continue;
+      // Scegli il codice con massima frequenza
+      let bestCode = null, bestFreq = -1;
+      for (const [code, f] of candidates.entries()) {
+        if (f > bestFreq) { bestFreq = f; bestCode = code; }
+      }
+      if (bestCode) {
+        const targetRow = hdrRowProd + 1 + i;
+        shProd.getRange(targetRow, idxP.CodiceFornitore + 1).setValue(bestCode);
+        shProd.getRange(targetRow, idxP.UltimoAgg + 1).setValue(new Date());
+        updates++;
+      }
+    }
+    LOG?.info('SYNC_CODES', `Aggiornati ${updates} CodiceFornitore mancanti da Righe.`);
+    return updates;
+  }
+
+  /** API pubblica: fix codici fornitore mancanti */
+  function fixMissingSupplierCodes() {
+    const lock = LockService.getScriptLock();
+    const ok = lock.tryLock(5000);
+    if (!ok) {
+      LOG?.warn('SYNC_CODES', 'Operazione già in esecuzione.');
+      return 0;
+    }
+    try {
+      return _fixMissingSupplierCodesInternal();
+    } finally {
+      lock.releaseLock();
+    }
+  }
   /**
    * Suggerisce UMBase e KGxPZ leggendo la Descrizione dei prodotti con RichiedeSetup=TRUE.
    * SOLO per pattern PESO affidabili (kg, gr).
@@ -461,7 +496,8 @@ const SYNC_PRODOTTI = (() => {
   // ========== API PUBBLICA ==========
   return {
     syncProdottiFromRighe,
-    suggestUnitsFromDescription
+    suggestUnitsFromDescription,
+    fixMissingSupplierCodes
   };
 })();
 
@@ -636,6 +672,70 @@ function _createDuplicatiDiagnosisSheet(ss, duplicati) {
     
     return [
       d.codiceFornitore,
+      /**
+       * Riempie CodiceFornitore mancante nei prodotti usando le righe fattura.
+       * Per ogni prodotto con CodiceFornitore vuoto/TEMP, cerca nelle righe ARTICOLO
+       * il campo `Codice Articolo Fornitore` più frequente (normalizzato) e aggiorna.
+       */
+      fixMissingSupplierCodes: function () {
+        const shProd = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+        const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
+        if (!shProd || !shRighe) {
+          LOG?.error('SYNC_CODES', 'Foglio Prodotti/Righe non trovato');
+          return;
+        }
+
+        const hdrRowProd = SHEETS._findHeaderRow(shProd, SHEETS.SHEET_NAMES.Prodotti);
+        const idxP = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Prodotti);
+        const lastRowP = shProd.getLastRow();
+        const lastColP = shProd.getLastColumn();
+        const prodData = shProd.getRange(hdrRowProd + 1, 1, lastRowP - hdrRowProd, lastColP).getValues();
+
+        const hdrRowR = SHEETS._findHeaderRow(shRighe, SHEETS.SHEET_NAMES.Righe);
+        const idxR = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
+        const lastRowR = shRighe.getLastRow();
+        const lastColR = shRighe.getLastColumn();
+        const righeData = shRighe.getRange(hdrRowR + 1, 1, lastRowR - hdrRowR, lastColR).getValues();
+
+        // Costruisci mappa: CodiceInternoBreve -> frequenza di codici fornitore dalle righe
+        const freqMap = new Map();
+        righeData.forEach(r => {
+          const tipo = String(r[idxR.TipoRiga] || '').trim();
+          if (tipo !== 'ARTICOLO') return;
+          const codiceBreve = String(r[idxR.CodiceInternoBreve] || '').trim();
+          const codiceFornRiga = String(r[idxR['Codice Articolo Fornitore']] || '').trim();
+          if (!codiceBreve || !codiceFornRiga) return;
+          const norm = PRODUCTS.normalizeCodiceFornitore(codiceFornRiga);
+          if (!norm || norm.startsWith('TEMP_')) return;
+          const map = freqMap.get(codiceBreve) || new Map();
+          map.set(norm, (map.get(norm) || 0) + 1);
+          freqMap.set(codiceBreve, map);
+        });
+
+        // Applica aggiornamenti a Prodotti
+        let updates = 0;
+        for (let i = 0; i < prodData.length; i++) {
+          const row = prodData[i];
+          const codiceBreve = String(row[idxP.CodiceInternoBreve] || '').trim();
+          let codiceForn = String(row[idxP.CodiceFornitore] || '').trim();
+          if (!codiceBreve) continue;
+          const isMissing = !codiceForn || codiceForn.toUpperCase().startsWith('TEMP_');
+          const candidates = freqMap.get(codiceBreve);
+          if (!isMissing || !candidates) continue;
+          // Scegli il codice con massima frequenza
+          let bestCode = null, bestFreq = -1;
+          for (const [code, f] of candidates.entries()) {
+            if (f > bestFreq) { bestFreq = f; bestCode = code; }
+          }
+          if (bestCode) {
+            const targetRow = hdrRowProd + 1 + i;
+            shProd.getRange(targetRow, idxP.CodiceFornitore + 1).setValue(bestCode);
+            shProd.getRange(targetRow, idxP.UltimoAgg + 1).setValue(new Date());
+            updates++;
+          }
+        }
+        LOG?.info('SYNC_CODES', `Aggiornati ${updates} CodiceFornitore mancanti da Righe.`);
+      }
       d.righe[0].descrizione,
       d.righe[0].fornId,
       d.count,

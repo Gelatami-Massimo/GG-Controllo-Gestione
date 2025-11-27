@@ -692,12 +692,11 @@ const IMPORT_ROWS = (function () {
             'TipoRiga': tipoRiga
           };
 
-          const row = righeHeaders.map(header => {
-             // Pulisce il nome dell'header per farlo corrispondere alle chiavi
+              const row = righeHeaders.map(header => {
              const dataKey = String(header).replace(/ /g, '').replace('ArticoloFornitore', 'ArticoloFornitore');
              return (rowData[header] !== undefined) ? rowData[header] : 
-                   (rowData[dataKey] !== undefined ? rowData[dataKey] : '');
-          });
+               (rowData[dataKey] !== undefined ? rowData[dataKey] : '');
+              });
           
           // ✅ VALIDAZIONE FINALE: Verifica che la riga non sia vuota
           const isValidRow = (
@@ -712,10 +711,7 @@ const IMPORT_ROWS = (function () {
             continue; // Salta questa riga vuota
           }
           
-          // DEBUG: Log DataDoc per prima riga
-          if (importedRowsCount === 0 && dataDoc) {
-            console.log(`[DEBUG ROWS] Prima riga - DataDoc tipo: ${typeof dataDoc}, valore: ${dataDoc}, serialized: ${JSON.stringify(dataDoc)}`);
-          }
+          // Logging centralizzato: nessun console.log, logs solo su foglio Log
           
           rowsBuffer.push(row);
           importedRowsCount++;
