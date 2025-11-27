@@ -665,10 +665,12 @@ const IMPORT_ROWS = (function () {
           }
 
           // Mappa i dati secondo lo schema
+          const dataDoc = invData[idxF.Data];
+          
           const rowData = {
             'FileID': invData[idxF.FileID],
             'Sede': invData[idxF.Sede],
-            'DataDoc': invData[idxF.Data],
+            'DataDoc': dataDoc,
             'Anno': invData[idxF.Anno],
             'Mese': invData[idxF.Mese],
             'NumeroDoc': invData[idxF.NumeroDoc],
@@ -708,6 +710,11 @@ const IMPORT_ROWS = (function () {
           if (!isValidRow) {
             LOG?.warn('ROWS_SKIP_EMPTY', `Riga vuota o invalida saltata per fattura ${fileId}, NumeroLinea: ${numeroLinea}`);
             continue; // Salta questa riga vuota
+          }
+          
+          // DEBUG: Log DataDoc per prima riga
+          if (importedRowsCount === 0 && dataDoc) {
+            console.log(`[DEBUG ROWS] Prima riga - DataDoc tipo: ${typeof dataDoc}, valore: ${dataDoc}, serialized: ${JSON.stringify(dataDoc)}`);
           }
           
           rowsBuffer.push(row);
