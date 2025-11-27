@@ -696,6 +696,20 @@ const IMPORT_ROWS = (function () {
              return (rowData[header] !== undefined) ? rowData[header] : 
                    (rowData[dataKey] !== undefined ? rowData[dataKey] : '');
           });
+          
+          // ✅ VALIDAZIONE FINALE: Verifica che la riga non sia vuota
+          const isValidRow = (
+            tipoRiga === 'ARTICOLO' && 
+            codiceInternoBreve && 
+            descrizione && 
+            qta > 0
+          );
+          
+          if (!isValidRow) {
+            LOG?.warn('ROWS_SKIP_EMPTY', `Riga vuota o invalida saltata per fattura ${fileId}, NumeroLinea: ${numeroLinea}`);
+            continue; // Salta questa riga vuota
+          }
+          
           rowsBuffer.push(row);
           importedRowsCount++;
           
