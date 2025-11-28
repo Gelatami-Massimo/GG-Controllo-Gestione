@@ -81,13 +81,29 @@ const DEBUG = (function () {
 
   /**
    * Riallinea Famiglia e Categoria nei fogli storici (Fatture, Righe). Resumibile.
-   * AGGIORNATO: Sovrascrive SEMPRE i campi con i valori aggiornati dai Fornitori.
+   * OTTIMIZZATO: Cache fornitori 30min, CHUNK 1500, Skip righe complete, Safety check trigger.
    */
-  function syncCategoriesRetroactive() {
-    const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
-    const CHUNK_SIZE = 500;
+  function syncCategoriesRetroactive(e) {
+    // ========== SAFETY CHECK: Solo esecuzione manuale ==========
+    if (e && e.authMode) {
+      LOG.warn('SYNC_CATEGORIES', 'Tentativo esecuzione da trigger automatico bloccato. Solo manuale.');
+      return;
+    }
+    // Controllo alternativo: verifica se Session ha trigger context
+    try {
+      const trigger = Session.getEffectiveUser();
+      if (!trigger || trigger.getEmail() === '') {
+        LOG.warn('SYNC_CATEGORIES', 'Esecuzione da contesto non autenticato bloccata.');
+        return;
+      }
+    } catch (err) {
+      LOG.warn('SYNC_CATEGORIES', 'Impossibile verificare contesto esecuzione, procedo con cautela.');
+    }
 
-    // 1) Mappa fornitori aggiornata
+    const maxSec = Math.max(30, Number(CONFIG.get('MAX_RUNTIME_SEC', 240)) - 30);
+    const CHUNK_SIZE = 1500; // OTTIMIZZAZIONE: Da 500 a 1500 righe per chunk
+
+    // 1) Mappa fornitori aggiornata (con CACHE)
     const supplierMap = _getCurrentSupplierMap();
     if (supplierMap.size === 0) {
       LOG.warn('SYNC_CATEGORIES', 'Mappa fornitori vuota o non leggibile. Operazione annullata.');
@@ -157,17 +173,33 @@ const DEBUG = (function () {
             const rowData = chunkData[j];
             const rowNum = chunkStartRow + j;
 
-            const idNorm = UTIL.normKey(rowData[idx.FornitoreID]).replace(/^0+/, '');
-            if (!idNorm) continue;
-
-            const curr = supplierMap.get(idNorm);
-            if (!curr) continue; // Fornitore non in mappa
-
+            // OTTIMIZZAZIONE: Skip righe già complete
             const existingFamiglia = String(rowData[idx.Famiglia] ?? '').trim();
             const existingCategoria = String(rowData[idx.Categoria] ?? '').trim();
             const existingReparto = idx.Reparto !== undefined 
               ? String(rowData[idx.Reparto] ?? '').trim() 
               : null;
+            
+            // Se Famiglia E Categoria sono già compilate correttamente, skip
+            if (existingFamiglia && existingCategoria) {
+              // Verifica veloce: se match con fornitore, skip completo
+              const idNorm = UTIL.normKey(rowData[idx.FornitoreID]).replace(/^0+/, '');
+              if (idNorm) {
+                const curr = supplierMap.get(idNorm);
+                if (curr && 
+                    existingFamiglia === curr.famiglia && 
+                    existingCategoria === curr.categoria &&
+                    (existingReparto === null || existingReparto === curr.reparto)) {
+                  continue; // Riga già allineata, skip processing
+                }
+              }
+            }
+
+            const idNorm = UTIL.normKey(rowData[idx.FornitoreID]).replace(/^0+/, '');
+            if (!idNorm) continue;
+
+            const curr = supplierMap.get(idNorm);
+            if (!curr) continue; // Fornitore non in mappa
             
             let needsUpdate = false;
             let rowUpdates = {}; // Aggiornamenti solo per questa riga
@@ -242,11 +274,28 @@ const DEBUG = (function () {
   }
 
   /**
-   * Helper: Legge l'anagrafica fornitori corrente.
-   * Ritorna Map<FornitoreID_norm, { famiglia, categoria }>
+   * Helper: Legge l'anagrafica fornitori corrente con cache CacheService (TTL 30 min).
+   * Ritorna Map<FornitoreID_norm, { famiglia, categoria, reparto }>
    * @private
    */
   function _getCurrentSupplierMap() {
+    const CACHE_KEY = 'SUPPLIER_MAP_V1';
+    const CACHE_TTL_SEC = 1800; // 30 minuti
+    const cache = CacheService.getScriptCache();
+
+    // Tentativo lettura da cache
+    try {
+      const cached = cache.get(CACHE_KEY);
+      if (cached) {
+        LOG.info('DEBUG_SUPPLIER_MAP', 'Mappa fornitori caricata da cache.');
+        const parsed = JSON.parse(cached);
+        return new Map(Object.entries(parsed));
+      }
+    } catch (e) {
+      LOG.warn('DEBUG_SUPPLIER_MAP', 'Errore lettura cache, ricostruisco.', { error: e.message });
+    }
+
+    // Cache miss: costruisci mappa
     const map = new Map();
     try {
       const sh = SHEETS.get(SHEETS.SHEET_NAMES.Fornitori);
@@ -274,8 +323,13 @@ const DEBUG = (function () {
           reparto: idx.Reparto !== undefined ? String(r[idx.Reparto] ?? '').trim() : ''
         });
       });
+
+      // Salva in cache (converti Map a Object per JSON)
+      const mapObj = Object.fromEntries(map);
+      cache.put(CACHE_KEY, JSON.stringify(mapObj), CACHE_TTL_SEC);
+      LOG.info('DEBUG_SUPPLIER_MAP', `Mappa fornitori ricostruita e salvata in cache (${map.size} fornitori, TTL ${CACHE_TTL_SEC}s).`);
     } catch (e) {
-      LOG.error('DEBUG_SUPPLIER_MAP', 'Errore lettura Fornitori.', { error: e.message });
+      LOG.error('DEBUG_SUPPLIER_MAP', 'Errore costruzione mappa Fornitori.', { error: e.message });
     }
     return map;
   }

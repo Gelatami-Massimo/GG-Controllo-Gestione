@@ -1,8 +1,9 @@
 // =============================================================
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 030_globals.js
-// RUOLO: Utility globali - LOG, UTIL, XMLSAFE, STATE.
-// NOTE: Modulo monolite (969 righe) con helper date, string, XML, PropertiesService.
+// RUOLO: Globals - LOG, UTIL (core operations), XMLSAFE, STATE.
+// NOTE: Utility generiche MIGRATE a 018_shared_utils.js per separazione Dati/Logica.
+//       Qui rimangono solo: infrastruttura core, operations specifiche (XML, batch, Drive).
 // =============================================================
 
 /** Namespace FatturaPA (default v1.2 con fallback v1.0) */
@@ -204,13 +205,23 @@ if (typeof GG !== 'undefined') {
 }
 
 
-
 const UTIL = (function () {
 
   // Lazy load ERROR_HANDLER (declared later in GG namespace)
   const getErrorHandler = () => GG.get('ERROR_HANDLER');
 
+  // ============================================================
+  // LOCK MANAGEMENT (Script-level concurrency control)
+  // ============================================================
+  
   let activeLock = null;
+  
+  /**
+   * Acquisisce un lock globale per prevenire esecuzioni concorrenti.
+   * 
+   * @param {number} [timeoutMs=10000] - Timeout acquisizione in millisecondi
+   * @returns {boolean} True se lock acquisito, false se timeout o già locked
+   */
   function acquireLock(timeoutMs = 10000) {
     if (activeLock?.hasLock()) return true;
     try {
@@ -226,6 +237,11 @@ const UTIL = (function () {
       return false;
     }
   }
+  
+  /**
+   * Rilascia il lock globale precedentemente acquisito.
+   * @returns {void}
+   */
   function releaseLock() {
     if (activeLock?.hasLock()) {
       const ERROR_HANDLER = getErrorHandler();
@@ -237,6 +253,10 @@ const UTIL = (function () {
     activeLock = null;
   }
 
+  // ============================================================
+  // NUMBER PARSING (Advanced smart parsing for IT/EN formats)
+  // ============================================================
+  
   /**
    * Parsing robusto di numeri da stringhe con opzioni avanzate.
    * Supporta formati italiani (1.234,56), inglesi (1,234.56), valute (€ 123).
@@ -307,8 +327,18 @@ const UTIL = (function () {
     return failValue;
   }
 
-  // === XML HELPERS (Fix critico) ===
-  /** Ritorna getChild con priorità: namespace dell'elemento -> extraNs -> FPA_NS -> FPA_NS10 -> no ns */
+  // ============================================================
+  // XML HELPERS (FatturaPA-specific namespace handling)
+  // ============================================================
+  
+  /**
+   * Ritorna getChild con priorità: namespace dell'elemento -> extraNs -> FPA_NS -> FPA_NS10 -> no ns
+   * 
+   * @param {GoogleAppsScript.XML_Service.Element} element - Elemento XML genitore
+   * @param {string} name - Nome del child da cercare
+   * @param {GoogleAppsScript.XML_Service.Namespace} [extraNs] - Namespace aggiuntivo da provare
+   * @returns {GoogleAppsScript.XML_Service.Element|null} Primo child trovato o null
+   */
   function firstChild(element, name, extraNs) {
     if (!element) return null;
     const elNs = element.getNamespace();
@@ -328,12 +358,26 @@ const UTIL = (function () {
     try { found = element.getChild(name); } catch (_) {}
     return found;
   }
-  /** Testo sicuro: Apps Script non ha getTextTrim() → usa getText().trim() */
+  
+  /**
+   * Testo sicuro: Apps Script non ha getTextTrim() → usa getText().trim()
+   * 
+   * @param {GoogleAppsScript.XML_Service.Element} element - Elemento XML genitore
+   * @param {string} name - Nome del child da cercare
+   * @param {GoogleAppsScript.XML_Service.Namespace} [ns] - Namespace opzionale
+   * @returns {string} Testo del child o stringa vuota se non trovato
+   */
   function firstText(element, name, ns) {
     const child = firstChild(element, name, ns);
     return child ? String(child.getText()).trim() : '';
   }
-  /** Testo di un nodo generico (Element/Text/String), mai null */
+  
+  /**
+   * Testo di un nodo generico (Element/Text/String), mai null
+   * 
+   * @param {*} node - Nodo XML o valore da convertire
+   * @returns {string} Testo estratto o stringa vuota
+   */
   function textOf(node) {
     if (!node) return '';
     try {
@@ -343,6 +387,21 @@ const UTIL = (function () {
     return String(node).trim();
   }
 
+  // ============================================================
+  // BATCH OPERATIONS (Large data write operations)
+  // ============================================================
+  
+  /**
+   * Scrive dati in un foglio in modalità batch con chunking automatico.
+   * Gestisce automaticamente espansione righe/colonne se necessario.
+   * 
+   * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - Foglio di destinazione
+   * @param {number} startRow - Riga iniziale (1-based)
+   * @param {Array<Array>} data - Array 2D di dati da scrivere
+   * @param {number} [batchSize=200] - Dimensione chunk per scrittura
+   * @returns {void}
+   * @throws {Error} Se la scrittura fallisce
+   */
   function writeBatched(sheet, startRow, data, batchSize = 200) {
     if (!data || data.length === 0 || !data[0]) return;
     try {
@@ -369,6 +428,13 @@ const UTIL = (function () {
     }
   }
 
+  /**
+   * Ottiene tutti i file da una cartella Google Drive ricorsivamente.
+   * Attraversa tutte le sottocartelle e gestisce gracefully errori di permessi.
+   * 
+   * @param {GoogleAppsScript.Drive.Folder} folder - Cartella radice da esplorare
+   * @returns {Array<GoogleAppsScript.Drive.File>} Array di file trovati
+   */
   function getAllFilesRecursive(folder) {
     const fileList = [];
     function _search(subFolder) {
@@ -389,6 +455,22 @@ const UTIL = (function () {
     return fileList;
   }
 
+  /**
+   * Aggiorna celle specifiche in un foglio minimizzando le API calls.
+   * Legge tutto il range una volta, modifica in memoria, scrive in batch.
+   * 
+   * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - Foglio da aggiornare
+   * @param {Object<number, Object<number, *>>} updates - Mappa righe -> {colIndex: value}
+   * @param {number} [headerRows=1] - Numero righe header da saltare
+   * @returns {number} Numero celle effettivamente modificate
+   * 
+   * @example
+   * const updates = {
+   *   5: { 2: 'nuovo valore', 4: 123 },  // riga 5, colonne 2 e 4
+   *   8: { 1: 'altro valore' }           // riga 8, colonna 1
+   * };
+   * UTIL.updateSheetInPlace(sheet, updates, 1);
+   */
   function updateSheetInPlace(sheet, updates, headerRows = 1) {
     const rowNumbers = Object.keys(updates);
     if (rowNumbers.length === 0) return 0;
@@ -446,638 +528,147 @@ const UTIL = (function () {
     }
   }
 
-  function _looksNumericLike(str) {
-    const s = String(str ?? '').trim();
-    if (!s) return false;
-    const cleaned = s.replace(/[€$£\s]/g, '');
-    return /^-?[\d.,]+$/.test(cleaned) && !isNaN(parseNumSmart(s));
-  }
-  const forceText = (value) => {
-    const str = String(value ?? '');
-    if (!str) return '';
-    if (str.startsWith("'")) return str;
-    const trimmedStr = str.trim();
-    if (/^0\d+$/.test(trimmedStr) || _looksNumericLike(trimmedStr)) {
-      return "'" + str;
-    }
-    return str;
-  };
-
-  function getColumnLetter(colIndex) {
-    if (typeof colIndex !== 'number' || colIndex < 0) return '';
-    let letter = '';
-    let num = colIndex + 1;
-    while (num > 0) {
-      let rem = (num - 1) % 26;
-      letter = String.fromCharCode(65 + rem) + letter;
-      num = Math.floor((num - 1) / 26);
-    }
-    return letter;
-  }
-
-  // ============================================================================
-  // DATE_UTILS - Utility centralizzate per gestione date
-  // ============================================================================
+  // ============================================================
+  // BUSINESS-SPECIFIC UTILITIES (Supplier normalization)
+  // ============================================================
   
   /**
-   * DATE_UTILS
+   * Normalizza un ID fornitore (P.IVA) rimuovendo prefisso IT e zeri iniziali.
+   * Utility DRY per evitare duplicazione logica normalizzazione P.IVA.
    * 
-   * Centralizza tutte le operazioni date sparse nel progetto.
+   * @param {string} id - P.IVA da normalizzare
+   * @returns {string} P.IVA normalizzata (senza IT, senza zeri iniziali)
    * 
-   * ELIMINA DUPLICAZIONI IN:
-   * - 060_import_headers.js (parsing XML date)
-   * - 070_import_rows.js (formatting date)
-   * - 050_filters.js (regex date parsing)
-   * - 090_dashboard.js, 100_reporting.js, 120_pnl.js (formatting)
-   * - 080_pdf_export.js (Italian date display)
-   * - 092_dashboard_trigger.js (timestamp formatting)
-   * 
-   * PERFORMANCE: Usa Intl.DateTimeFormat per locale italiano.
-   * 
-   * @namespace DATE_UTILS
-   * @memberof UTIL
+   * @example
+   * normalizeSupplierId('IT01234567890'); // => '1234567890'
+   * normalizeSupplierId('00123456');      // => '123456'
    */
-  const DATE_UTILS = {
-    
-    /**
-     * Parsa data da stringa XML (formato ISO 8601).
-     * Supporta: YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, YYYY-MM-DDTHH:MM:SS.sssZ
-     * 
-     * @param {string|Date} dateInput - Data formato ISO o Date object
-     * @returns {Date|null} Date object o null se invalida
-     * 
-     * @example
-     * UTIL.date.parseXmlDate('2025-11-19') // => Date(2025, 10, 19)
-     * UTIL.date.parseXmlDate('2025-11-19T15:30:00') // => Date(2025, 10, 19, 15, 30)
-     */
-    parseXmlDate(dateInput) {
-      if (!dateInput) return null;
-      
-      // Se già Date object, valida e ritorna
-      if (dateInput instanceof Date) {
-        return isNaN(dateInput.getTime()) ? null : dateInput;
-      }
-      
-      if (typeof dateInput !== 'string') return null;
-      
-      const trimmed = dateInput.trim();
-      const isoMatch = trimmed.match(CONSTANTS.DATE_PATTERNS.ISO_DATE);
-      
-      if (!isoMatch) return null;
-      
-      const groups = CONSTANTS.DATE_REGEX_GROUPS.ISO;
-      const year = +isoMatch[groups.YEAR];
-      const month = +isoMatch[groups.MONTH] - 1; // JS months are 0-based
-      const day = +isoMatch[groups.DAY];
-      
-      const date = new Date(year, month, day);
-      
-      return isNaN(date.getTime()) ? null : date;
-    },
-
-    /**
-     * Formatta Date come stringa YYYY-MM-DD (ISO).
-     * 
-     * @param {Date} date - Date object
-     * @returns {string} Data formattata o stringa vuota se invalida
-     * 
-     * @example
-     * UTIL.date.formatIsoDate(new Date(2025, 10, 19)) // => '2025-11-19'
-     */
-    formatIsoDate(date) {
-      if (!(date instanceof Date) || isNaN(date.getTime())) return '';
-      
-      try {
-        return Utilities.formatDate(
-          date, 
-          Session.getScriptTimeZone(), 
-          CONSTANTS.DATE_FORMATS.ISO
-        );
-      } catch (e) {
-        LOG?.warn('DATE_UTILS', 'Error formatting ISO date', { error: e.message });
-        return '';
-      }
-    },
-
-    /**
-     * Formatta Date come stringa DD/MM/YYYY (locale IT).
-     * 
-     * @param {Date} date - Date object
-     * @returns {string} Data formattata italiana
-     * 
-     * @example
-     * UTIL.date.formatItalianDate(new Date(2025, 10, 19)) // => '19/11/2025'
-     */
-    formatItalianDate(date) {
-      if (!(date instanceof Date) || isNaN(date.getTime())) return '';
-      
-      try {
-        // Performance: usa Intl.DateTimeFormat (più veloce di formatDate)
-        const formatter = new Intl.DateTimeFormat('it-IT', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit'
-        });
-        return formatter.format(date);
-      } catch (e) {
-        // Fallback a Utilities.formatDate
-        try {
-          return Utilities.formatDate(
-            date, 
-            Session.getScriptTimeZone(), 
-            CONSTANTS.DATE_FORMATS.ITALIAN
-          );
-        } catch (e2) {
-          LOG?.warn('DATE_UTILS', 'Error formatting Italian date', { error: e2.message });
-          return '';
-        }
-      }
-    },
-
-    /**
-     * Formatta Date come timestamp completo (YYYY-MM-DD HH:MM:SS).
-     * 
-     * @param {Date} date - Date object (default: now)
-     * @returns {string} Timestamp formattato
-     * 
-     * @example
-     * UTIL.date.formatTimestamp(new Date(2025, 10, 19, 15, 30)) // => '2025-11-19 15:30:00'
-     * UTIL.date.formatTimestamp() // => timestamp corrente
-     */
-    formatTimestamp(date) {
-      const d = date || new Date();
-      if (!(d instanceof Date) || isNaN(d.getTime())) return '';
-      
-      try {
-        return Utilities.formatDate(
-          d, 
-          Session.getScriptTimeZone(), 
-          CONSTANTS.DATE_FORMATS.TIMESTAMP
-        );
-      } catch (e) {
-        LOG?.warn('DATE_UTILS', 'Error formatting timestamp', { error: e.message });
-        return '';
-      }
-    },
-
-    /**
-     * Estrae anno e mese da Date.
-     * 
-     * @param {Date} date - Date object
-     * @returns {{anno: string, mese: number}} Anno (YYYY) e mese (1-12)
-     * 
-     * @example
-     * UTIL.date.extractYearMonth(new Date(2025, 10, 19)) // => { anno: '2025', mese: 11 }
-     */
-    extractYearMonth(date) {
-      if (!(date instanceof Date) || isNaN(date.getTime())) {
-        return { anno: '', mese: 0 };
-      }
-      
-      return {
-        anno: String(date.getFullYear()),
-        mese: date.getMonth() + 1 // JS months are 0-based, business logic is 1-based
-      };
-    },
-
-    /**
-     * Ottiene nome mese italiano completo da numero (1-12).
-     * 
-     * @param {number} monthNumber - Numero mese (1-12)
-     * @param {string} [yearSuffix] - Suffisso anno opzionale (es: "'24")
-     * @returns {string} Nome mese italiano
-     * 
-     * @example
-     * UTIL.date.getItalianMonthName(1) // => 'Gennaio'
-     * UTIL.date.getItalianMonthName(11, "'25") // => "Novembre '25"
-     */
-    getItalianMonthName(monthNumber, yearSuffix = '') {
-      const monthNames = [
-        'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-        'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
-      ];
-      
-      const month = Number(monthNumber);
-      if (month < 1 || month > 12 || isNaN(month)) {
-        LOG?.warn('DATE_UTILS', `Invalid month number: ${monthNumber}`);
-        return 'N/A';
-      }
-      
-      const name = monthNames[month - 1];
-      return yearSuffix ? `${name} ${yearSuffix}` : name;
-    },
-
-    /**
-     * Ottiene nome mese italiano abbreviato da numero (1-12).
-     * 
-     * @param {number} monthNumber - Numero mese (1-12)
-     * @param {string} [yearSuffix] - Suffisso anno opzionale
-     * @returns {string} Nome mese abbreviato (3 lettere)
-     * 
-     * @example
-     * UTIL.date.getShortMonthName(1) // => 'Gen'
-     * UTIL.date.getShortMonthName(11, "'25") // => "Nov '25"
-     */
-    getShortMonthName(monthNumber, yearSuffix = '') {
-      const shortNames = [
-        'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
-        'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
-      ];
-      
-      const month = Number(monthNumber);
-      if (month < 1 || month > 12 || isNaN(month)) {
-        return 'N/A';
-      }
-      
-      const name = shortNames[month - 1];
-      return yearSuffix ? `${name} ${yearSuffix}` : name;
-    },
-
-    /**
-     * Verifica se valore è una Date valida.
-     * 
-     * @param {*} value - Valore da verificare
-     * @returns {boolean} True se è una Date valida
-     * 
-     * @example
-     * UTIL.date.isValidDate(new Date()) // => true
-     * UTIL.date.isValidDate('invalid') // => false
-     */
-    isValidDate(value) {
-      return value instanceof Date && !isNaN(value.getTime());
-    },
-
-    /**
-     * Parsa data italiana DD/MM/YYYY in Date object.
-     * 
-     * @param {string} italianDateStr - Data formato DD/MM/YYYY
-     * @returns {Date|null} Date object o null se invalida
-     * 
-     * @example
-     * UTIL.date.parseItalianDate('19/11/2025') // => Date(2025, 10, 19)
-     */
-    parseItalianDate(italianDateStr) {
-      if (!italianDateStr || typeof italianDateStr !== 'string') return null;
-      
-      const trimmed = italianDateStr.trim();
-      const match = trimmed.match(CONSTANTS.DATE_PATTERNS.ITALIAN_DATE);
-      
-      if (!match) return null;
-      
-      const groups = CONSTANTS.DATE_REGEX_GROUPS.ITALIAN;
-      const day = +match[groups.DAY];
-      const month = +match[groups.MONTH] - 1; // JS 0-based
-      const year = +match[groups.YEAR];
-      
-      const date = new Date(year, month, day);
-      
-      return isNaN(date.getTime()) ? null : date;
-    },
-
-    /**
-     * Formatta Date in formato lungo italiano.
-     * 
-     * @param {Date} date - Date object
-     * @returns {string} Formato: "19 novembre 2025"
-     * 
-     * @example
-     * UTIL.date.formatLongItalian(new Date(2025, 10, 19)) // => '19 novembre 2025'
-     */
-    formatLongItalian(date) {
-      if (!(date instanceof Date) || isNaN(date.getTime())) return '';
-      
-      try {
-        const formatter = new Intl.DateTimeFormat('it-IT', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-        return formatter.format(date);
-      } catch (e) {
-        LOG?.warn('DATE_UTILS', 'Error formatting long Italian date', { error: e.message });
-        return '';
-      }
-    },
-
-    /**
-     * Calcola differenza in giorni tra due date.
-     * 
-     * @param {Date} date1 - Prima data
-     * @param {Date} date2 - Seconda data
-     * @returns {number} Giorni di differenza (può essere negativo)
-     * 
-     * @example
-     * UTIL.date.daysBetween(new Date(2025, 0, 1), new Date(2025, 0, 10)) // => 9
-     */
-    daysBetween(date1, date2) {
-      if (!this.isValidDate(date1) || !this.isValidDate(date2)) return 0;
-      
-      const MS_PER_DAY = 1000 * 60 * 60 * 24;
-      const utc1 = Date.UTC(date1.getFullYear(), date1.getMonth(), date1.getDate());
-      const utc2 = Date.UTC(date2.getFullYear(), date2.getMonth(), date2.getDate());
-      
-      return Math.floor((utc2 - utc1) / MS_PER_DAY);
-    },
-
-    /**
-     * Ottiene primo giorno del mese per una data.
-     * 
-     * @param {Date} date - Date object
-     * @returns {Date|null} Primo giorno del mese
-     * 
-     * @example
-     * UTIL.date.getFirstDayOfMonth(new Date(2025, 10, 19)) // => Date(2025, 10, 1)
-     */
-    getFirstDayOfMonth(date) {
-      if (!this.isValidDate(date)) return null;
-      return new Date(date.getFullYear(), date.getMonth(), 1);
-    },
-
-    /**
-     * Ottiene ultimo giorno del mese per una data.
-     * 
-     * @param {Date} date - Date object
-     * @returns {Date|null} Ultimo giorno del mese
-     * 
-     * @example
-     * UTIL.date.getLastDayOfMonth(new Date(2025, 10, 19)) // => Date(2025, 10, 30)
-     */
-    getLastDayOfMonth(date) {
-      if (!this.isValidDate(date)) return null;
-      // Trick: giorno 0 del mese successivo = ultimo giorno del mese corrente
-      return new Date(date.getFullYear(), date.getMonth() + 1, 0);
-    }
-  };
-
-  // ============================================================================
-  // NUMBER_UTILS - Utility centralizzate per parsing numeri
-  // ============================================================================
-  
-  /**
-   * NUMBER_UTILS
-   * 
-   * Centralizza tutte le operazioni di parsing numerico sparse nel progetto.
-   * 
-   * ELIMINA DUPLICAZIONI IN:
-   * - 020_config.js (_parseValue con logica parsing money)
-   * - 050_filters.js (_parseNumberStrict)
-   * - 082_sync_prodotti.js (parsing inline peso/grammi)
-   * 
-   * PERFORMANCE: Gestione ottimizzata formati IT/EN con single-pass parsing.
-   * 
-   * @namespace NUMBER_UTILS
-   * @memberof UTIL
-   */
-  const NUMBER_UTILS = {
-    
-    /**
-     * Parsing standard con comportamento backward-compatible.
-     * Ritorna 0 se fallisce, supporta valute e formati IT/EN.
-     * 
-     * @param {*} value - Valore da parsare
-     * @returns {number} Numero parsato o 0
-     * 
-     * @example
-     * UTIL.number.parse('1.234,56'); // => 1234.56
-     * UTIL.number.parse('€ 45,99');   // => 45.99
-     */
-    parse(value) {
-      return parseNumSmart(value);
-    },
-
-    /**
-     * Parsing rigoroso per validazione input utente.
-     * Accetta solo numeri puri (con separatori decimali), rifiuta testo misto.
-     * Ritorna null se fallisce (non 0).
-     * 
-     * @param {*} value - Valore da parsare
-     * @returns {number|null} Numero parsato o null se invalido
-     * 
-     * @example
-     * UTIL.number.parseStrict('123.45');  // => 123.45
-     * UTIL.number.parseStrict('123,45');  // => 123.45
-     * UTIL.number.parseStrict('abc123');  // => null (testo non permesso)
-     * UTIL.number.parseStrict('€ 123');   // => null (simboli non permessi in strict)
-     */
-    parseStrict(value) {
-      return parseNumSmart(value, { 
-        strictMode: true, 
-        returnZeroOnFail: false 
-      });
-    },
-
-    /**
-     * Verifica se una stringa sembra un numero (anche con valute/separatori).
-     * 
-     * @param {*} value - Valore da verificare
-     * @returns {boolean} True se ha aspetto numerico
-     * 
-     * @example
-     * UTIL.number.isNumericLike('1.234,56'); // => true
-     * UTIL.number.isNumericLike('€ 123');     // => true
-     * UTIL.number.isNumericLike('abc');       // => false
-     */
-    isNumericLike(value) {
-      if (typeof value === 'number') return true;
-      if (typeof value !== 'string') return false;
-      
-      const s = String(value).trim();
-      if (!s) return false;
-      
-      const cleaned = s.replace(/[€$£\s]/g, '');
-      return /^-?[\d.,]+$/.test(cleaned) && this.parse(s) !== 0;
-    }
-  };
-
-  // ============================================================================
-  // COLUMN VALIDATION HELPER (Optional micro-utility)
-  // ============================================================================
-  /**
-   * Validates required columns exist in header index.
-   * Returns missing columns array, or empty array if all present.
-   * Usage: const missing = UTIL.checkColumns(idx, ['Col1', 'Col2']);
-   *        if (missing.length) { LOG.error(...); return; }
-   * 
-   * @param {Object} idx - Header index from SHEETS.headerIndex()
-   * @param {string[]} required - Required column names
-   * @returns {string[]} Array of missing column names
-   */
-  function checkColumns(idx, required) {
-    return required.filter(col => idx[col] === undefined);
+  function normalizeSupplierId(id) {
+    const normalized = String(id ?? '')
+      .trim()
+      .replace(/^IT/i, '')  // Rimuovi prefisso IT
+      .replace(/^0+/, '');  // Rimuovi zeri iniziali
+    return normalized;
   }
 
-  // ============================================================================
-  // RETURN PUBLIC API
-  // ============================================================================
+  // ============================================================
+  // API PUBBLICA (Ridotta - utility generiche migrate a SHARED_UTILS)
+  // ============================================================
+  
+  // NOTA: Per backward compatibility, mantengo alcuni wrapper che delegano a SHARED_UTILS
+  // Una volta completato il refactoring globale, questi wrapper possono essere rimossi
+  
   return {
-    /**
-     * Mostra un messaggio toast temporaneo nella UI del foglio.
-     * 
-     * @param {string} message - Messaggio da visualizzare
-     * @param {string} [title='Info'] - Titolo del toast
-     * @param {number} [timeout=5] - Durata in secondi (-1 per permanente)
-     * @returns {void}
-     */
-    showToast: (message, title = 'Info', timeout = 5) => SpreadsheetApp.getActiveSpreadsheet().toast(message, title, timeout),
-    /**
-     * Parsing robusto di numeri da stringhe.
-     * Supporta: formati italiani (1.234,56), inglesi (1,234.56), valute (€ 123).
-     * 
-     * @param {*} value - Valore da parsare (string, number, null)
-     * @returns {number} Numero parsato o 0 se non valido
-     * 
-     * @example
-     * parseNumSmart('1.234,56'); // => 1234.56
-     * parseNumSmart('€ 45,99');   // => 45.99
-     * parseNumSmart('invalid'); // => 0
-     */
-    parseNumSmart,
-    // XML helpers pubblici
-    /**
-     * Ottiene il primo child element XML con supporto multi-namespace.
-     * Prova in ordine: namespace elemento, extraNs, FPA_NS, FPA_NS10, no namespace.
-     * 
-     * @param {GoogleAppsScript.XML_Service.Element} element - Elemento XML genitore
-     * @param {string} name - Nome del child da cercare
-     * @param {GoogleAppsScript.XML_Service.Namespace} [extraNs] - Namespace aggiuntivo da provare
-     * @returns {GoogleAppsScript.XML_Service.Element|null} Primo child trovato o null
-     */
-    firstChild,
-    /**
-     * Ottiene il testo del primo child element XML.
-     * Wrapper di firstChild() + getText() con fallback a stringa vuota.
-     * 
-     * @param {GoogleAppsScript.XML_Service.Element} element - Elemento XML genitore
-     * @param {string} name - Nome del child da cercare
-     * @param {GoogleAppsScript.XML_Service.Namespace} [ns] - Namespace opzionale
-     * @returns {string} Testo del child o stringa vuota se non trovato
-     */
-    firstText,
-    /**
-     * Estrae testo da un nodo XML generico.
-     * Supporta Element, Text node, o conversione diretta a stringa.
-     * 
-     * @param {*} node - Nodo XML o valore da convertire
-     * @returns {string} Testo estratto o stringa vuota
-     */
-    textOf,
-    /**
-     * Scrive dati in un foglio in modalità batch con chunking automatico.
-     * Gestisce automaticamente espansione righe/colonne se necessario.
-     * 
-     * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - Foglio di destinazione
-     * @param {number} startRow - Riga iniziale (1-based)
-     * @param {Array<Array>} data - Array 2D di dati da scrivere
-     * @param {number} [batchSize=200] - Dimensione chunk per scrittura
-     * @returns {void}
-     * @throws {Error} Se la scrittura fallisce
-     */
-    writeBatched,
-    /**
-     * Normalizza una stringa per uso come chiave.
-     * Trim + UpperCase per confronti case-insensitive.
-     * 
-     * @param {string} str - Stringa da normalizzare
-     * @returns {string} Stringa normalizzata (trimmed e uppercase)
-     */
-    normKey: (str) => String(str ?? '').trim().toUpperCase(),
-    /**
-     * Normalizza un ID fornitore (P.IVA) rimuovendo prefisso IT e zeri iniziali.
-     * Utility DRY per evitare duplicazione logica normalizzazione P.IVA.
-     * 
-     * @param {string} id - P.IVA da normalizzare
-     * @returns {string} P.IVA normalizzata (senza IT, senza zeri iniziali)
-     * 
-     * @example
-     * normalizeSupplierId('IT01234567890'); // => '1234567890'
-     * normalizeSupplierId('00123456');      // => '123456'
-     */
-    normalizeSupplierId: (id) => {
-      const normalized = String(id ?? '')
-        .trim()
-        .replace(/^IT/i, '')  // Rimuovi prefisso IT
-        .replace(/^0+/, '');  // Rimuovi zeri iniziali
-      return normalized;
-    },
-    /**
-     * Ottiene tutti i file da una cartella Google Drive ricorsivamente.
-     * Attraversa tutte le sottocartelle e gestisce gracefully errori di permessi.
-     * 
-     * @param {GoogleAppsScript.Drive.Folder} folder - Cartella radice da esplorare
-     * @returns {Array<GoogleAppsScript.Drive.File>} Array di file trovati
-     */
-    getAllFilesRecursive,
-    /**
-     * Aggiorna celle specifiche in un foglio minimizzando le API calls.
-     * Legge tutto il range una volta, modifica in memoria, scrive in batch.
-     * 
-     * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - Foglio da aggiornare
-     * @param {Object<number, Object<number, *>>} updates - Mappa righe -> {colIndex: value}
-     * @param {number} [headerRows=1] - Numero righe header da saltare
-     * @returns {number} Numero celle effettivamente modificate
-     * 
-     * @example
-     * const updates = {
-     *   5: { 2: 'nuovo valore', 4: 123 },  // riga 5, colonne 2 e 4
-     *   8: { 1: 'altro valore' }           // riga 8, colonna 1
-     * };
-     * UTIL.updateSheetInPlace(sheet, updates, 1);
-     */
-    updateSheetInPlace,
-    /**
-     * Forza una cella Google Sheets a interpretare il valore come testo.
-     * Aggiunge apostrofo iniziale se necessario (numeri con zeri iniziali, codici).
-     * 
-     * @param {*} value - Valore da forzare come testo
-     * @returns {string} Valore con apostrofo se necessario, altrimenti stringa originale
-     * 
-     * @example
-     * forceText('001');  // => "'001" (previene conversione a numero 1)
-     * forceText('ABC');  // => "ABC" (già testo, nessun apostrofo)
-     */
-    forceText,
-    /**
-     * Acquisisce un lock globale per prevenire esecuzioni concorrenti.
-     * 
-     * @param {number} [timeoutMs=10000] - Timeout acquisizione in millisecondi
-     * @returns {boolean} True se lock acquisito, false se timeout o già locked
-     */
-    acquireLock,
+    // === CORE OPERATIONS (Rimangono in UTIL) ===
     
-    /**
-     * Rilascia il lock globale precedentemente acquisito.
-     * @returns {void}
-     */
+    // Lock Management (Script-level state)
+    acquireLock,
     releaseLock,
-    /**
-     * Converte un indice colonna (0-based) in lettera colonna stile A1.
-     * 
-     * @param {number} colIndex - Indice colonna (0 = 'A', 1 = 'B', ...)
-     * @returns {string} Lettera colonna ('A', 'B', ..., 'Z', 'AA', 'AB', ...)
-     * 
-     * @example
-     * getColumnLetter(0);  // => 'A'
-     * getColumnLetter(25); // => 'Z'
-     * getColumnLetter(26); // => 'AA'
-     */
-    getColumnLetter,
-    /**
-     * Valida che tutte le colonne richieste esistano nell'indice header.
-     * 
-     * @param {Object<string, number>} idx - Indice header da SHEETS.headerIndex()
-     * @param {Array<string>} required - Array nomi colonne richieste
-     * @returns {Array<string>} Array nomi colonne mancanti (vuoto se tutte presenti)
-     * 
-     * @example
-     * const missing = UTIL.checkColumns(idx, ['FileID', 'NumeroDoc']);
-     * if (missing.length) {
-     *   throw new Error('Colonne mancanti: ' + missing.join(', '));
-     * }
-     */
-    checkColumns,  // Column validation helper
-    // Namespaces
-    date: DATE_UTILS,
-    number: NUMBER_UTILS
+    
+    // Number Parsing (Advanced IT/EN formats)
+    parseNumSmart,
+    
+    // XML Helpers (FatturaPA-specific)
+    firstChild,
+    firstText,
+    textOf,
+    
+    // Batch Operations (Large data I/O)
+    writeBatched,
+    getAllFilesRecursive,
+    updateSheetInPlace,
+    
+    // Business-specific
+    normalizeSupplierId,
+    normKey: (str) => String(str ?? '').trim().toUpperCase(),
+    
+    // === BACKWARD COMPATIBILITY (Deprecated - use SHARED_UTILS) ===
+    
+    // @deprecated Use SHARED_UTILS.showToast
+    showToast: (message, title = 'Info', timeout = 5) => {
+      try {
+        SpreadsheetApp.getActiveSpreadsheet().toast(message, title, timeout);
+      } catch (e) {
+        console.log(`[TOAST] ${title}: ${message}`);
+      }
+    },
+    
+    // @deprecated Use SHARED_UTILS.getColumnLetter
+    getColumnLetter: (colIndex) => {
+      if (typeof colIndex !== 'number' || colIndex < 0) return '';
+      let letter = '';
+      let num = colIndex + 1;
+      while (num > 0) {
+        let rem = (num - 1) % 26;
+        letter = String.fromCharCode(65 + rem) + letter;
+        num = Math.floor((num - 1) / 26);
+      }
+      return letter;
+    },
+    
+    // @deprecated Use SHARED_UTILS.checkColumns
+    checkColumns: (idx, required) => required.filter(col => idx[col] === undefined),
+    
+    // @deprecated Use SHARED_UTILS.forceText
+    forceText: (value) => {
+      const str = String(value ?? '');
+      if (!str) return '';
+      if (str.startsWith("'")) return str;
+      const trimmedStr = str.trim();
+      // Helper interno _looksNumericLike duplicato per backward compatibility
+      const looksNumeric = (s) => {
+        if (!s) return false;
+        const cleaned = s.replace(/[€$£\s]/g, '');
+        return /^-?[\d.,]+$/.test(cleaned);
+      };
+      if (/^0\d+$/.test(trimmedStr) || looksNumeric(trimmedStr)) {
+        return "'" + str;
+      }
+      return str;
+    },
+    
+    // === NAMESPACES (Delegate to SHARED_UTILS for new code) ===
+    
+    // @deprecated Use SHARED_UTILS.date (kept for backward compatibility)
+    date: {
+      // Wrappers che delegano a SHARED_UTILS quando disponibile
+      parseXmlDate: (dateInput) => {
+        try {
+          return SHARED_UTILS?.date?.parseXmlDate(dateInput) ?? null;
+        } catch (e) {
+          // Fallback inline se SHARED_UTILS non caricato
+          if (!dateInput) return null;
+          if (dateInput instanceof Date) return isNaN(dateInput.getTime()) ? null : dateInput;
+          return null;
+        }
+      },
+      formatIsoDate: (date) => SHARED_UTILS?.date?.formatIsoDate(date) ?? '',
+      formatItalianDate: (date) => SHARED_UTILS?.date?.formatItalianDate(date) ?? '',
+      formatTimestamp: (date) => SHARED_UTILS?.date?.formatTimestamp(date) ?? '',
+      extractYearMonth: (date) => SHARED_UTILS?.date?.extractYearMonth(date) ?? { anno: '', mese: 0 },
+      getItalianMonthName: (monthNumber, yearSuffix) => SHARED_UTILS?.date?.getItalianMonthName(monthNumber, yearSuffix) ?? 'N/A',
+      getShortMonthName: (monthNumber, yearSuffix) => SHARED_UTILS?.date?.getShortMonthName(monthNumber, yearSuffix) ?? 'N/A',
+      isValidDate: (value) => SHARED_UTILS?.date ? SHARED_UTILS.isValidDate(value) : (value instanceof Date && !isNaN(value.getTime())),
+      parseItalianDate: (italianDateStr) => SHARED_UTILS?.date?.parseItalianDate(italianDateStr) ?? null,
+      formatLongItalian: (date) => SHARED_UTILS?.date?.formatLongItalian(date) ?? '',
+      daysBetween: (date1, date2) => SHARED_UTILS?.date?.daysBetween(date1, date2) ?? 0,
+      getFirstDayOfMonth: (date) => SHARED_UTILS?.date?.getFirstDayOfMonth(date) ?? null,
+      getLastDayOfMonth: (date) => SHARED_UTILS?.date?.getLastDayOfMonth(date) ?? null
+    },
+    
+    // @deprecated Use parseNumSmart or SHARED_UTILS.toNumber (kept for backward compatibility)
+    number: {
+      parse: (value) => parseNumSmart(value),
+      parseStrict: (value) => parseNumSmart(value, { strictMode: true, returnZeroOnFail: false }),
+      isNumericLike: (value) => {
+        if (typeof value === 'number') return true;
+        if (typeof value !== 'string') return false;
+        const s = String(value).trim();
+        if (!s) return false;
+        const cleaned = s.replace(/[€$£\s]/g, '');
+        return /^-?[\d.,]+$/.test(cleaned) && parseNumSmart(s) !== 0;
+      }
+    }
   };
 })();
 

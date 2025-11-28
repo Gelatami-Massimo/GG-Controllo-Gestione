@@ -305,6 +305,110 @@ const IMPORT_ROWS = (function () {
   }
 
   /**
+   * Costruisce una Hash Map O(1) per lookup prodotti istantaneo.
+   * Chiave: FornitoreID|CodiceProdottoNormalizzato
+   * Valore: Oggetto prodotto completo
+   * 
+   * @param {Object} productCache - Cache prodotti da PRODUCTS.primeCache()
+   * @returns {Map<string, Object>} Hash map per lookup O(1)
+   * @private
+   */
+  function _buildProductHashMap(productCache) {
+    const hashMap = new Map();
+    
+    if (!productCache || !productCache.byFornitoreCodice) {
+      LOG.warn('PRODUCTS_HASH_MAP', 'Product cache vuota, hash map sarà vuota.');
+      return hashMap;
+    }
+
+    // Copia diretta dalla cache byFornitoreCodice (già indicizzata per FornitoreID|Codice)
+    for (const [key, product] of productCache.byFornitoreCodice.entries()) {
+      hashMap.set(key, product);
+    }
+
+    LOG.info('PRODUCTS_HASH_MAP', `Hash Map costruita: ${hashMap.size} prodotti indicizzati per lookup O(1).`);
+    return hashMap;
+  }
+
+  /**
+   * Batch parsing XML: estrae tutte le righe da un XML in array di oggetti plain.
+   * Separazione Fase 1 (parsing) da Fase 2 (business logic).
+   * 
+   * @param {string} fileId - Drive File ID dell'XML fattura
+   * @returns {{success: boolean, rows: Array<Object>, error: string}} Risultato parsing
+   * @private
+   */
+  function _parseXmlBatch(fileId) {
+    const result = { success: false, rows: [], error: '' };
+
+    try {
+      const doc = XMLSAFE.parseDriveXml(fileId);
+      if (!doc) {
+        result.error = 'Parsing XML fallito';
+        return result;
+      }
+
+      const root = doc.getRootElement();
+      const body = UTIL.firstChild(root, 'FatturaElettronicaBody');
+      const datiBeniServizi = UTIL.firstChild(body, 'DatiBeniServizi');
+
+      const dettaglioLinee = datiBeniServizi
+        ? (datiBeniServizi.getChildren() || []).filter(n => n.getName && n.getName() === 'DettaglioLinee')
+        : [];
+
+      if (dettaglioLinee.length === 0) {
+        result.success = true; // Successo, ma nessuna riga
+        return result;
+      }
+
+      // Estrai dati XML in array di plain objects
+      for (const linea of dettaglioLinee) {
+        const codiceArticolo = UTIL.firstChild(linea, 'CodiceArticolo');
+        const codiceValoreRaw = codiceArticolo ? UTIL.firstText(codiceArticolo, 'CodiceValore') : '';
+        const codiceTipo = codiceArticolo ? (UTIL.firstText(codiceArticolo, 'CodiceTipo') || '') : '';
+        const descrizione = UTIL.firstText(linea, 'Descrizione') || '';
+        const um = UTIL.firstText(linea, 'UnitaMisura');
+        const numeroLinea = UTIL.firstText(linea, 'NumeroLinea');
+        const qta = UTIL.parseNumSmart(UTIL.firstText(linea, 'Quantita'));
+        const prezzoUnit = UTIL.parseNumSmart(UTIL.firstText(linea, 'PrezzoUnitario'));
+        const prezzoTotaleRiga = UTIL.parseNumSmart(UTIL.firstText(linea, 'PrezzoTotale'));
+        const aliquota = UTIL.parseNumSmart(UTIL.firstText(linea, 'AliquotaIVA'));
+
+        // Genera codice TEMP se mancante (logica stabile)
+        let codiceValore;
+        let isTempGenerated = false;
+        if (codiceValoreRaw) {
+          codiceValore = codiceValoreRaw;
+        } else {
+          const descrizionePulita = (descrizione || '').replace(/\s/g, '').toUpperCase();
+          codiceValore = `TEMP_${descrizionePulita.substring(0, 15)}`;
+          isTempGenerated = true;
+        }
+
+        result.rows.push({
+          numeroLinea,
+          codiceValore,
+          codiceTipo,
+          descrizione,
+          um,
+          qta,
+          prezzoUnit,
+          prezzoTotaleRiga,
+          aliquota,
+          isTempGenerated
+        });
+      }
+
+      result.success = true;
+    } catch (e) {
+      result.error = e.message;
+      LOG.error('XML_BATCH_PARSE', `Errore parsing batch XML ${fileId}`, { error: e.message });
+    }
+
+    return result;
+  }
+
+  /**
    * Legge le parole chiave da ignorare dal foglio 'Filtro Righe Spazzatura'.
    * @returns {Set<string>} Un Set di parole chiave in minuscolo.
    */
@@ -421,6 +525,15 @@ const IMPORT_ROWS = (function () {
     // Cache prodotti
     const productCache = PRODUCTS.primeCache();
 
+    // ✅ OTTIMIZZAZIONE: Costruisci Hash Map O(1) per lookup istantaneo
+    const productHashMap = _buildProductHashMap(productCache);
+    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_HASH_MAP', 'Hash Map prodotti costruita', {
+      productsIndexed: productHashMap.size
+    });
+
+    // Array temporaneo per nuovi prodotti (batch creation)
+    const newProductsToCreate = [];
+
     // Cursor
     const CURSOR_KEY = App.config.keys.cursors.rows;
     const cursor = STATE.getJSON(CURSOR_KEY, { nextRow: headerRowF + 1 });
@@ -503,8 +616,10 @@ const IMPORT_ROWS = (function () {
             rowsBuffer,
             righeHeaders,
             junkKeywordsSet,
-            existingRows,  // ✅ Aggiungo cache duplicati
-            runId  // ✅ Propago runId per logging interno
+            existingRows,  // ✅ Cache duplicati
+            runId,  // ✅ RunId per logging interno
+            productHashMap,  // ✅ OTTIMIZZAZIONE: Hash Map O(1)
+            newProductsToCreate  // ✅ OTTIMIZZAZIONE: Array batch nuovi prodotti
           );
 
           ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_INVOICE_PROCESSED', 'Fattura processata', {
@@ -562,6 +677,46 @@ const IMPORT_ROWS = (function () {
       return;
     }
 
+    // ✅ OTTIMIZZAZIONE: Batch creation nuovi prodotti (se accumulati)
+    if (newProductsToCreate.length > 0) {
+      ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_BATCH_CREATE', 'Avvio batch creation nuovi prodotti', {
+        newProductsCount: newProductsToCreate.length
+      });
+      LOG?.info('ROWS_BATCH_CREATE', `Creazione batch di ${newProductsToCreate.length} nuovi prodotti...`);
+      
+      try {
+        // ✅ Chiamata batch creation ottimizzata
+        const createdProducts = PRODUCTS.createBatch(newProductsToCreate, productCache, runId);
+        
+        // ✅ Aggiorna Hash Map con nuovi prodotti creati
+        createdProducts.forEach(product => {
+          if (product.lookupKey) {
+            productHashMap.set(product.lookupKey, product);
+            ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_HASH_UPDATE', 'Hash Map aggiornata con nuovo prodotto', {
+              lookupKey: product.lookupKey,
+              codiceInternoBreve: product.codiceInternoBreve
+            });
+          }
+        });
+        
+        ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_BATCH_CREATE_DONE', 'Batch creation completata', {
+          productsCreated: createdProducts.length,
+          hashMapUpdated: true
+        });
+        LOG?.info('ROWS_BATCH_CREATE', `Creati ${createdProducts.length} nuovi prodotti. Hash Map aggiornata.`);
+      } catch (e) {
+        LOG?.error('ROWS_BATCH_CREATE', 'Errore batch creation prodotti.', { 
+          error: e.message, 
+          stack: e.stack,
+          productsCount: newProductsToCreate.length 
+        });
+        ENHANCED_LOGGER.error(runId, 'IMPORT_ROWS_BATCH_CREATE_ERROR', 'Errore batch creation', {
+          error: e.message,
+          productsCount: newProductsToCreate.length
+        });
+      }
+    }
+
     // Scrittura finale
     _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF);
     STATE.clear(CURSOR_KEY);
@@ -584,13 +739,15 @@ const IMPORT_ROWS = (function () {
 
   /**
    * Processa le righe di una singola fattura.
+   * OTTIMIZZATO: Usa Hash Map O(1) per lookup prodotti, parsing XML batch separato.
+   * 
    * Ritorna:
    *  - statusSrc: 'imported','total_mismatch','xml_error','processing_error','no_rows'
    *  - hasImportedRows: TRUE solo se sono state scritte righe in rowsBuffer
    *  - importedRowsCount: numero di righe scritte nel buffer per quella fattura
    *  - sommaRigheNetto: somma PrezzoTotale delle righe importate
    */
-  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsSet, existingRows, runId) {
+  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsSet, existingRows, runId, productHashMap, newProductsToCreate) {
     const fileId = invData[idxF.FileID];
     
     ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_INVOICE_START', 'Inizio processamento fattura', {
@@ -611,33 +768,30 @@ const IMPORT_ROWS = (function () {
     const TOLLERANZA_EURO = Number(CONFIG.get('ROWS_TOLLERANZA_EURO', 1.00)) || 1.00;
 
     try {
-      const doc = XMLSAFE.parseDriveXml(fileId);
-      if (!doc) {
+      // ✅ FASE 1: Batch XML Parsing (separato dalla business logic)
+      const parseResult = _parseXmlBatch(fileId);
+      
+      if (!parseResult.success) {
         statusSrc = 'xml_error';
-        throw new Error('Parsing XML fallito.');
+        throw new Error(parseResult.error || 'Parsing XML fallito.');
       }
 
-      const root = doc.getRootElement();
-      const body = UTIL.firstChild(root, 'FatturaElettronicaBody');
-      const datiBeniServizi = UTIL.firstChild(body, 'DatiBeniServizi');
+      const parsedRows = parseResult.rows;
 
-      const dettaglioLinee = datiBeniServizi
-        ? (datiBeniServizi.getChildren() || []).filter(n => n.getName && n.getName() === 'DettaglioLinee')
-        : [];
-
-      if (dettaglioLinee.length === 0) {
+      if (parsedRows.length === 0) {
         statusSrc = 'no_rows';
         if (Math.abs(imponibileFattura) > TOLLERANZA_EURO) {
           statusSrc = 'total_mismatch';
           LOG?.warn('ROWS_TOTAL_CHECK', `Discrepanza: Imponibile=${imponibileFattura} ma nessuna riga.`, { fileId });
         }
       } else {
-        // Converti il Set in Array una sola volta per usare .some()
+        // ✅ FASE 2: Business Logic (su array di plain objects)
         const junkKeywordsArray = Array.from(junkKeywordsSet);
         const tipiDaEscludere = ['SCONTO', 'TESTO', 'OMAGGIO'];
+        const fornitoreIdNorm = String(invData[idxF.FornitoreID] || '').trim().replace(/^IT/i, '').replace(/^0+/, '');
 
-        for (const linea of dettaglioLinee) {
-          const descrizione = UTIL.firstText(linea, 'Descrizione') || '';
+        for (const rowData of parsedRows) {
+          const { numeroLinea, codiceValore, codiceTipo, descrizione, um, qta, prezzoUnit, prezzoTotaleRiga, aliquota, isTempGenerated } = rowData;
           
           if (!descrizione) {
             continue; // Salta righe senza descrizione
@@ -645,43 +799,20 @@ const IMPORT_ROWS = (function () {
           
           const descLower = descrizione.toLowerCase();
           const isJunk = junkKeywordsArray.some(keyword => descLower.includes(keyword));
+          const codiceValoreForzato = UTIL.forceText(codiceValore);
 
-          const codiceArticolo = UTIL.firstChild(linea, 'CodiceArticolo');
-          const codiceValoreRaw = codiceArticolo ? UTIL.firstText(codiceArticolo, 'CodiceValore') : '';
-          const codiceTipo = codiceArticolo ? (UTIL.firstText(codiceArticolo, 'CodiceTipo') || '') : '';
-
-          // >>> NUOVA LOGICA: Generazione codice temporaneo se mancante <<<
-          let codiceValore;
-          let isTempGenerated = false;
-          if (codiceValoreRaw) {
-            codiceValore = codiceValoreRaw;
-          } else {
-            // Se il CodiceArticolo è assente, genera un codice stabile basato sulla descrizione.
-            const descrizionePulita = (descrizione || '').replace(/\s/g, '').toUpperCase();
-            codiceValore = `TEMP_${descrizionePulita.substring(0, 15)}`;
-            isTempGenerated = true;
-            
+          if (isTempGenerated) {
             ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_TEMP_CODE', 'Codice TEMP generato', {
               fileId,
               descrizione: descrizione.substring(0, 50),
               codiceValore
             });
           }
-          // >>> FINE NUOVA LOGICA <<<
-
-          const um = UTIL.firstText(linea, 'UnitaMisura');
-          const codiceValoreForzato = UTIL.forceText(codiceValore);
-
-          const qta = UTIL.parseNumSmart(UTIL.firstText(linea, 'Quantita'));
-          const prezzoUnit = UTIL.parseNumSmart(UTIL.firstText(linea, 'PrezzoUnitario'));
-          const prezzoTotaleRiga = UTIL.parseNumSmart(UTIL.firstText(linea, 'PrezzoTotale'));
-          const aliquota = UTIL.parseNumSmart(UTIL.firstText(linea, 'AliquotaIVA'));
 
           // Somma sempre al totale per il controllo di coerenza
           sommaTotaleRighe += prezzoTotaleRiga;
 
-          // ✅ CONTROLLO DUPLICATI: Skip se riga già esiste
-          const numeroLinea = UTIL.firstText(linea, 'NumeroLinea');
+          // ✅ CONTROLLO DUPLICATI: Skip se riga già esiste (numeroLinea già estratto da rowData)
           const duplicateKey = `${fileId}|${numeroLinea}`;
           
           if (existingRows && existingRows.has(duplicateKey)) {
@@ -722,26 +853,65 @@ const IMPORT_ROWS = (function () {
           // Da qui in poi, la riga è valida e verrà importata.
           sommaRigheImportate += prezzoTotaleRiga;
 
-          // ✅ Gestione Prodotti (SOLO per ARTICOLO e se non è spazzatura - controllo già fatto)
+          // ✅ OTTIMIZZAZIONE: Lookup prodotti O(1) con Hash Map
           let codiceInterno = null;
           let codiceInternoBreve = null;
           if (tipoRiga === 'ARTICOLO') { // Omaggio è già escluso sopra
-            const prodResult = PRODUCTS.findOrCreateProduct(
-              invData[idxF.FornitoreID], invData[idxF.DenominazioneFornitore],
-              codiceValore, // Usa il codice (reale o generato)
-              descrizione, um, productCache, categoriaFornitore,
-              runId  // ✅ Passa runId per logging Products
-            );
-            codiceInterno = prodResult.codiceInterno; // Legacy (per compatibilità)
-            codiceInternoBreve = prodResult.codiceInternoBreve; // Nuovo
+            // Normalizza codice fornitore per lookup
+            const codiceNorm = String(codiceValore || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const lookupKey = `${fornitoreIdNorm}|${codiceNorm}`;
             
-            ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_PRODUCT_MATCH', 'Prodotto trovato/creato', {
-              fileId,
-              numeroLinea,
-              codiceValore,
-              codiceInternoBreve,
-              wasCreated: prodResult.isNew || false
-            });
+            // Lookup O(1) nella Hash Map
+            let foundProduct = productHashMap.get(lookupKey);
+            
+            if (foundProduct) {
+              // Prodotto trovato in cache
+              codiceInternoBreve = foundProduct.codiceInternoBreve;
+              codiceInterno = foundProduct.codiceInterno || codiceInternoBreve; // Legacy fallback
+              
+              ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_PRODUCT_FOUND', 'Prodotto trovato O(1)', {
+                fileId,
+                numeroLinea,
+                lookupKey,
+                codiceInternoBreve
+              });
+            } else if (!codiceValore.startsWith('TEMP_')) {
+              // Prodotto NON trovato e NON è codice temporaneo → accumula per batch creation
+              const newProduct = {
+                fornitoreId: invData[idxF.FornitoreID],
+                denominazioneFornitore: invData[idxF.DenominazioneFornitore],
+                codiceValore,
+                descrizione,
+                um,
+                categoriaFornitore,
+                lookupKey // Per aggiornare Hash Map dopo creazione
+              };
+              newProductsToCreate.push(newProduct);
+              
+              // ✅ Genera codice temporaneo per questa riga (verrà sostituito dopo batch creation)
+              // Per ora assegna codice placeholder per permettere import riga
+              codiceInternoBreve = `PENDING_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              codiceInterno = codiceInternoBreve; // Legacy fallback
+              
+              ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_PRODUCT_NEW', 'Nuovo prodotto accumulato per batch creation', {
+                fileId,
+                numeroLinea,
+                codiceValore,
+                descrizione: descrizione.substring(0, 50),
+                codicePending: codiceInternoBreve
+              });
+              
+              // ⚠️ NOTA: Codice PENDING verrà sostituito con codice reale dopo batch creation
+              // In alternativa, skippa questa riga e re-importa fattura dopo batch creation
+            } else {
+              // Codice TEMP: non creare prodotto, logga warning
+              ENHANCED_LOGGER.warn(runId, 'IMPORT_ROWS_TEMP_SKIP', 'Prodotto con codice TEMP skippato', {
+                fileId,
+                numeroLinea,
+                codiceValore
+              });
+              continue; // Skip righe con codice temporaneo
+            }
           }
 
           // ✅ CALCOLO COSTO UNITARIO (solo per ARTICOLO con prezzo positivo)

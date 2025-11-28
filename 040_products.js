@@ -536,6 +536,178 @@ const PRODUCTS = (() => {
     }
   }
 
+  /**
+   * Crea batch di nuovi prodotti in una singola operazione di scrittura.
+   * OTTIMIZZAZIONE: Scrive N prodotti con 1 sola chiamata a setValues().
+   * 
+   * @param {Array<Object>} productsArray - Array di oggetti prodotto da creare
+   * @param {Object} cache - Cache prodotti per aggiornamento immediato
+   * @param {string} [runId=''] - RunId per logging granulare
+   * @returns {Array<Object>} Array prodotti creati con codici generati
+   * 
+   * @example
+   * const newProducts = [
+   *   { fornitoreId: '12345', denominazioneFornitore: 'Fornitore A', 
+   *     codiceValore: 'ABC123', descrizione: 'Latte', um: 'LT', 
+   *     categoriaFornitore: 'Latticini', lookupKey: '12345|ABC123' },
+   *   { fornitoreId: '12345', denominazioneFornitore: 'Fornitore A',
+   *     codiceValore: 'XYZ789', descrizione: 'Yogurt', um: 'KG',
+   *     categoriaFornitore: 'Latticini', lookupKey: '12345|XYZ789' }
+   * ];
+   * const created = PRODUCTS.createBatch(newProducts, productCache, runId);
+   * // created = [{ codiceInternoBreve: 'FOR-0001', lookupKey: '12345|ABC123', ... }, ...]
+   */
+  function createBatch(productsArray, cache, runId = '') {
+    if (!productsArray || productsArray.length === 0) {
+      LOG.info('PRODUCTS_BATCH_CREATE', 'Nessun prodotto da creare (array vuoto).');
+      return [];
+    }
+
+    if (!cache) {
+      LOG.error('PRODUCTS_BATCH_CREATE', 'Cache non fornita. Impossibile creare batch.');
+      return [];
+    }
+
+    const sh = SHEETS.get(SHEETS.SHEET_NAMES.Prodotti);
+    if (!sh) {
+      LOG.error('PRODUCTS_BATCH_CREATE', 'Foglio Prodotti non trovato.');
+      return [];
+    }
+
+    const schema = SHEETS.SCHEMAS && SHEETS.SCHEMAS[SHEETS.SHEET_NAMES.Prodotti];
+    if (!schema || !Array.isArray(schema)) {
+      LOG.error('PRODUCTS_BATCH_CREATE', 'Schema Prodotti mancante.');
+      return [];
+    }
+
+    const headerRow = SHEETS._findHeaderRow(sh, SHEETS.SHEET_NAMES.Prodotti);
+    const startRow = Math.max(headerRow + 1, sh.getLastRow() + 1);
+    const now = new Date();
+    const createdProducts = [];
+    const rowsToWrite = [];
+
+    if (runId) {
+      ENHANCED_LOGGER.info(runId, 'PRODUCTS_BATCH_CREATE_START', 'Avvio batch creation prodotti', {
+        productsCount: productsArray.length
+      });
+    }
+
+    // Prepara righe per batch insert
+    for (const productData of productsArray) {
+      const { fornitoreId, denominazioneFornitore, codiceValore, descrizione, um, categoriaFornitore, lookupKey } = productData;
+
+      // Genera CodiceInternoBreve univoco
+      const codiceInternoBreve = _generateCodiceInternoBreve(fornitoreId, denominazioneFornitore, codiceValore, cache);
+      
+      // Genera CodiceInterno legacy (per compatibilità)
+      const normCodForn = normalizeCodiceFornitore(codiceValore);
+      const chiaveDescrizione = normalizeDescrizione(descrizione);
+      const codiceInterno = normCodForn
+        ? `${fornitoreId}-${normCodForn}`.slice(0, 60)
+        : `${fornitoreId}-${chiaveDescrizione.replace(/\\s+/g, '-')}`.slice(0, 60);
+
+      // Costruisci riga secondo schema
+      const newProductData = {
+        CodiceInterno: codiceInterno,
+        CodiceInternoBreve: codiceInternoBreve,
+        ChiaveDescrizione: chiaveDescrizione,
+        CodiceFornitore: UTIL.forceText(codiceValore),
+        Descrizione: descrizione,
+        UM: um || 'PZ', // Default PZ se mancante
+        FornitoreID: fornitoreId,
+        DenominazioneFornitore: denominazioneFornitore,
+        CategoriaProdotto: categoriaFornitore || '',
+        Note: '',
+        CreatoIl: now,
+        UltimoAgg: now,
+        Ingrediente: '',
+        NonInUso: true,  // Parte bloccato
+        UMBase: '',
+        PZxCT: '',
+        KGxPZ: '',
+        PZxFila: '',
+        FilePerCT: '',
+        RichiedeSetup: true,
+        CostoUnitario: '',
+        UMCosto: ''
+      };
+
+      const newRow = schema.map(header => {
+        const dataKey = String(header).replace(/ /g, '');
+        return (dataKey in newProductData) ? newProductData[dataKey] : '';
+      });
+
+      rowsToWrite.push(newRow);
+
+      // Prepara oggetto per ritorno
+      const prodotto = {
+        fornitoreId,
+        codiceFornitore: codiceValore,
+        descrizione,
+        um: um || 'PZ',
+        codiceInterno,
+        codiceInternoBreve,
+        chiaveDescrizione,
+        lookupKey // Mantieni lookup key per aggiornamento Hash Map
+      };
+
+      createdProducts.push(prodotto);
+
+      // Aggiorna cache in memoria IMMEDIATAMENTE
+      cache.shortCodes.add(codiceInternoBreve);
+      
+      if (normCodForn) {
+        const keyCode = `${fornitoreId}|${normCodForn.toUpperCase()}`;
+        cache.byFornitoreCodice.set(keyCode, prodotto);
+      }
+
+      const keyDesc = `${fornitoreId}|${chiaveDescrizione}`;
+      cache.byFornitoreDescrizione.set(keyDesc, prodotto);
+      cache.byCodeBreve.set(codiceInternoBreve, prodotto);
+
+      if (runId) {
+        ENHANCED_LOGGER.debug(runId, 'PRODUCTS_BATCH_ITEM', 'Prodotto preparato per batch', {
+          codiceInternoBreve,
+          codiceValore,
+          descrizione: descrizione.substring(0, 50)
+        });
+      }
+    }
+
+    // ✅ BATCH WRITE: 1 sola operazione per N prodotti
+    try {
+      const neededLastRow = startRow + rowsToWrite.length - 1;
+      const maxRows = sh.getMaxRows();
+      if (neededLastRow > maxRows) {
+        sh.insertRowsAfter(maxRows, neededLastRow - maxRows);
+      }
+
+      UTIL.writeBatched(sh, startRow, rowsToWrite);
+      
+      LOG.info('PRODUCTS_BATCH_CREATE', `Batch creation completata: ${rowsToWrite.length} prodotti creati.`, {
+        startRow,
+        endRow: startRow + rowsToWrite.length - 1
+      });
+
+      if (runId) {
+        ENHANCED_LOGGER.info(runId, 'PRODUCTS_BATCH_CREATE_DONE', 'Batch creation completata', {
+          productsCreated: rowsToWrite.length,
+          startRow,
+          endRow: startRow + rowsToWrite.length - 1
+        });
+      }
+    } catch (e) {
+      LOG.error('PRODUCTS_BATCH_CREATE', 'Errore batch write prodotti.', { 
+        error: e.message, 
+        stack: e.stack,
+        productsCount: rowsToWrite.length 
+      });
+      return []; // Ritorna array vuoto in caso di errore
+    }
+
+    return createdProducts;
+  }
+
   // ============================================================
   // FUNZIONI DI UTILITÀ (MANTENIAMO PER COMPATIBILITÀ)
   // ============================================================
@@ -561,7 +733,8 @@ const PRODUCTS = (() => {
   return { 
     primeCache, 
     findOrCreateProduct, 
-    flushNewRows, 
+    flushNewRows,
+    createBatch, // ✅ NUOVA: Batch creation ottimizzata
     normalizeDescrizione,
     generateSupplierSigla: _generateSupplierSigla,  // Esposta per riuso in tools
     isProductActive,
