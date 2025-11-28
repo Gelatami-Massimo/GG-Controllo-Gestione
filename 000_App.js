@@ -197,3 +197,8 @@ try {
 } catch (_) {
   // Ignora in caso di ambiente limitato
 }
+
+// Espone App in globalThis per ModuleRegistry dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.App = App;
+}
