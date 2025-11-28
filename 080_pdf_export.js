@@ -176,7 +176,7 @@ const PDF = (function () {
         }
         LOG?.warn('PDF', 'Timeout. Ripresa salvata.');
         if (!isSilent) {
-          UTIL.showToast('Timeout raggiunto. Premi "Crea PDF" per riprendere.', 'Pausa', 10);
+          SHARED_UTILS.showToast('Timeout raggiunto. Premi "Crea PDF" per riprendere.', 'Pausa', 10);
         }
       },
       processChunk: (chunkData, chunkStartRow) => {
@@ -289,7 +289,7 @@ const PDF = (function () {
             LOG?.warn('PDF_QUOTA_EXCEEDED', `⚠️ QUOTA GIORNALIERA RAGGIUNTA. Stop esecuzione alla riga ${rowNum}. Creati finora: ${createdCount} PDF.`);
             
             if (!isSilent) {
-              UTIL.showToast(
+              SHARED_UTILS.showToast(
                 '⚠️ Quota giornaliera PDF raggiunta. PDF_ENABLED disabilitato. Riprova domani o usa "Riprendi PDF".', 
                 'Quota Esaurita', 
                 15
@@ -540,7 +540,7 @@ const PDF = (function () {
       UTIL.updateSheetInPlace(sh, updates, headerRow);
       LOG?.info('PDF_SKIP', `Marcate ${skippedCount} fatture come SKIPPED (PDF_ENABLED=FALSE).`);
       if (!isSilent) {
-        UTIL.showToast(`PDF disabilitato: ${skippedCount} fatture marcate SKIPPED.`, 'PDF Disabilitato', 5);
+        SHARED_UTILS.showToast(`PDF disabilitato: ${skippedCount} fatture marcate SKIPPED.`, 'PDF Disabilitato', 5);
       }
     }
   }
@@ -559,7 +559,7 @@ const PDF = (function () {
     const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
     if (!idx.StatoPDF) {
       LOG?.error('PDF_ONLY', 'Colonna StatoPDF non trovata. Impossibile procedere.');
-      if (!isSilent) UTIL.showToast('Colonna StatoPDF mancante.', 'Errore', 5);
+      if (!isSilent) SHARED_UTILS.showToast('Colonna StatoPDF mancante.', 'Errore', 5);
       return;
     }
 
@@ -583,12 +583,12 @@ const PDF = (function () {
 
     if (rowsTodo.length === 0) {
       LOG?.info('PDF_ONLY', 'Nessuna fattura TODO o SKIPPED da processare.');
-      if (!isSilent) UTIL.showToast('Nessun PDF da riprendere.', 'Info', 3);
+      if (!isSilent) SHARED_UTILS.showToast('Nessun PDF da riprendere.', 'Info', 3);
       return;
     }
 
     LOG?.info('PDF_ONLY', `Ripresa creazione PDF: ${rowsTodo.length} fatture TODO/SKIPPED.`);
-    if (!isSilent) UTIL.showToast(`Ripresa ${rowsTodo.length} PDF...`, 'Avvio', 5);
+    if (!isSilent) SHARED_UTILS.showToast(`Ripresa ${rowsTodo.length} PDF...`, 'Avvio', 5);
 
     // Forza processamento di tutte queste fatture
     _mainLoop(outputFolder, isSilent, true);
@@ -599,7 +599,7 @@ const PDF = (function () {
 
 // Registra PDF nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('PDF', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG', 'SHEET_ITERATOR']);
+  ModuleRegistry.register('PDF', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS', 'STATE', 'CONFIG', 'SHEET_ITERATOR']);
 }
 
 // Registra PDF nel namespace GG

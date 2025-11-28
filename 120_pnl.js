@@ -12,7 +12,7 @@
 function createPnlSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetName = 'Conto Economico Riclassificato';
-  UTIL.showToast(`Aggiornamento ${sheetName}...`, 'Conto Economico', 10);
+  SHARED_UTILS.showToast(`Aggiornamento ${sheetName}...`, 'Conto Economico', 10);
 
   const VOCE_FATTURATO = 'Fatturato';
   const VOCE_FATTURE_INCASSATE = 'Fatture Incassate';
@@ -76,7 +76,7 @@ function createPnlSheet() {
   );
   
   if (responseAnno.getSelectedButton() === ui.Button.CANCEL) {
-    UTIL.showToast('Operazione annullata', 'Info', 3);
+    SHARED_UTILS.showToast('Operazione annullata', 'Info', 3);
     return;
   }
   
@@ -95,7 +95,7 @@ function createPnlSheet() {
   );
   
   if (responsePerimetro.getSelectedButton() === ui.Button.CANCEL) {
-    UTIL.showToast('Operazione annullata', 'Info', 3);
+    SHARED_UTILS.showToast('Operazione annullata', 'Info', 3);
     return;
   }
   
@@ -111,7 +111,7 @@ function createPnlSheet() {
     );
     
     if (responseSede.getSelectedButton() === ui.Button.CANCEL) {
-      UTIL.showToast('Operazione annullata', 'Info', 3);
+      SHARED_UTILS.showToast('Operazione annullata', 'Info', 3);
       return;
     }
     
@@ -391,7 +391,7 @@ function createPnlSheet() {
     }
 
     LOG.info('PNL_SHEET', `P&L Dinamico multi-perimetro scritto con successo.`);
-    UTIL.showToast(`P&L Dinamico "${sheetName}" aggiornato!`, 'Completato', 10);
+    SHARED_UTILS.showToast(`P&L Dinamico "${sheetName}" aggiornato!`, 'Completato', 10);
     ss.setActiveSheet(sh);
 
   } catch (e) {

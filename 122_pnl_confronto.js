@@ -12,7 +12,7 @@
 function createPnlConfrontoGemmaZaffiro() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetName = 'Confronto Gemma-Zaffiro';
-  UTIL.showToast(`Creazione ${sheetName}...`, 'Confronto', 10);
+  SHARED_UTILS.showToast(`Creazione ${sheetName}...`, 'Confronto', 10);
 
   const VOCE_FATTURATO = 'Fatturato';
   const VOCE_FATTURE_INCASSATE = 'Fatture Incassate';
@@ -67,7 +67,7 @@ function createPnlConfrontoGemmaZaffiro() {
   );
   
   if (responseAnno.getSelectedButton() === ui.Button.CANCEL) {
-    UTIL.showToast('Operazione annullata', 'Info', 3);
+    SHARED_UTILS.showToast('Operazione annullata', 'Info', 3);
     return;
   }
   
@@ -174,7 +174,7 @@ function createPnlConfrontoGemmaZaffiro() {
     if (filtroAnno) {
       anniOrdinati = anniOrdinati.filter(a => a === filtroAnno);
       if (anniOrdinati.length === 0) {
-        UTIL.showToast(`Nessun dato trovato per l'anno ${filtroAnno}`, 'Avviso', 5);
+        SHARED_UTILS.showToast(`Nessun dato trovato per l'anno ${filtroAnno}`, 'Avviso', 5);
         return;
       }
     }
@@ -211,7 +211,7 @@ function createPnlConfrontoGemmaZaffiro() {
 
     const messaggioAnno = filtroAnno ? ` per anno ${filtroAnno}` : ` per ${anniOrdinati.length} anni`;
     LOG.info('PNL_CONFRONTO', `Confronto Gemma-Zaffiro creato con successo${messaggioAnno}.`);
-    UTIL.showToast(`Confronto "${sheetName}" creato!`, 'Completato', 10);
+    SHARED_UTILS.showToast(`Confronto "${sheetName}" creato!`, 'Completato', 10);
     ss.setActiveSheet(sh);
 
   } catch (e) {

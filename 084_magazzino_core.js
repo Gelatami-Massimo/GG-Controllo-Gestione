@@ -606,7 +606,7 @@ const MAGAZZINO_CORE = (() => {
       
       // Logging già gestito da ENHANCED_LOGGER in MAG_PRODOTTI_START
       
-      UTIL.showToast(`Creazione Report Magazzino (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino', 10);
+      SHARED_UTILS.showToast(`Creazione Report Magazzino (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino', 10);
 
       // 1. Ottieni righe base con filtro (SENZA filtro Ingrediente per vedere tutti i prodotti)
       const rowsBase = buildMagazzinoBaseRows_(dateFilter, false, runId);
@@ -616,7 +616,7 @@ const MAGAZZINO_CORE = (() => {
       });
 
       if (rowsBase.length === 0) {
-        UTIL.showToast('Nessun dato da elaborare.', 'Avviso', 5);
+        SHARED_UTILS.showToast('Nessun dato da elaborare.', 'Avviso', 5);
         ENHANCED_LOGGER.warn(runId, 'MAG_PRODOTTI_NO_DATA', 'Nessun dato trovato per intervallo selezionato');
         return;
       }
@@ -662,11 +662,11 @@ const MAGAZZINO_CORE = (() => {
       _writeMagazzinoSheet(aggregati);
 
       const numRows = Object.keys(aggregati).length;
-      UTIL.showToast(`Report Magazzino completato: ${numRows} righe.`, 'Completato', 5);
+      SHARED_UTILS.showToast(`Report Magazzino completato: ${numRows} righe.`, 'Completato', 5);
       LOG?.info('MAG_CORE', `Report Magazzino per prodotto completato: ${numRows} righe.`);
 
     } catch (e) {
-      UTIL.showToast('Errore durante la generazione del report Magazzino.', 'Errore', 10);
+      SHARED_UTILS.showToast('Errore durante la generazione del report Magazzino.', 'Errore', 10);
       LOG?.error('MAG_CORE', 'Errore in buildMagazzinoByYear.', {
         error: e.message,
         stack: e.stack
@@ -841,7 +841,7 @@ const MAGAZZINO_CORE = (() => {
       
       // Logging già gestito da ENHANCED_LOGGER in MAG_INGREDIENTI_START
       
-      UTIL.showToast(`Creazione Report Magazzino Ingredienti (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino Ingredienti', 10);
+      SHARED_UTILS.showToast(`Creazione Report Magazzino Ingredienti (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino Ingredienti', 10);
 
       // 1. Ottieni righe base con filtro (CON filtro Ingrediente per vedere solo ingredienti)
       const rowsBase = buildMagazzinoBaseRows_(dateFilter, true, runId);
@@ -851,7 +851,7 @@ const MAGAZZINO_CORE = (() => {
       });
 
       if (rowsBase.length === 0) {
-        UTIL.showToast('Nessun dato da elaborare.', 'Avviso', 5);
+        SHARED_UTILS.showToast('Nessun dato da elaborare.', 'Avviso', 5);
         ENHANCED_LOGGER.warn(runId, 'MAG_INGREDIENTI_NO_DATA', 'Nessun dato trovato per intervallo selezionato');
         return;
       }
@@ -882,11 +882,11 @@ const MAGAZZINO_CORE = (() => {
       _writeMagazzinoIngredientiSheet(aggregati);
 
       const numRows = Object.keys(aggregati).length;
-      UTIL.showToast(`Report Magazzino Ingredienti completato: ${numRows} righe.`, 'Completato', 5);
+      SHARED_UTILS.showToast(`Report Magazzino Ingredienti completato: ${numRows} righe.`, 'Completato', 5);
       LOG?.info('MAG_CORE', `Report Magazzino Ingredienti completato: ${numRows} righe.`);
 
     } catch (e) {
-      UTIL.showToast('Errore durante la generazione del report Magazzino Ingredienti.', 'Errore', 10);
+      SHARED_UTILS.showToast('Errore durante la generazione del report Magazzino Ingredienti.', 'Errore', 10);
       LOG?.error('MAG_CORE', 'Errore in buildMagazzinoIngredientiByYear.', {
         error: e.message,
         stack: e.stack
@@ -981,7 +981,7 @@ const MAGAZZINO_CORE = (() => {
    */
   function updatePrezziMediMagazzino() {
     try {
-      UTIL.showToast('Aggiornamento prezzi medi magazzini...', 'Magazzino', 5);
+      SHARED_UTILS.showToast('Aggiornamento prezzi medi magazzini...', 'Magazzino', 5);
       
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const sheetNames = ['Magazzino', 'Magazzino_Ingredienti'];
@@ -1010,11 +1010,11 @@ const MAGAZZINO_CORE = (() => {
         LOG?.info('MAG_CORE', `Prezzi medi aggiornati per foglio ${name}`);
       });
 
-      UTIL.showToast(`Prezzi medi aggiornati per ${updated} fogli.`, 'Completato', 5);
+      SHARED_UTILS.showToast(`Prezzi medi aggiornati per ${updated} fogli.`, 'Completato', 5);
       LOG?.info('MAG_CORE', `updatePrezziMediMagazzino completato: ${updated} fogli aggiornati.`);
 
     } catch (e) {
-      UTIL.showToast('Errore durante aggiornamento prezzi medi.', 'Errore', 10);
+      SHARED_UTILS.showToast('Errore durante aggiornamento prezzi medi.', 'Errore', 10);
       LOG?.error('MAG_CORE', 'Errore in updatePrezziMediMagazzino.', {
         error: e.message,
         stack: e.stack
@@ -1033,7 +1033,7 @@ const MAGAZZINO_CORE = (() => {
 
 // Registra nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('MAGAZZINO_CORE', ['UTIL', 'LOG']);
+  ModuleRegistry.register('MAGAZZINO_CORE', ['UTIL', 'SHARED_UTILS', 'LOG']);
 }
 
 // Registra nel namespace GG

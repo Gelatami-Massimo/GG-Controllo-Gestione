@@ -86,7 +86,7 @@ const FILTERS = (function () {
         try { range.createFilter(); }
         catch (e) { LOG?.warn('FILTERS_CLEAR', `Impossibile ricreare il filtro su ${sheetName}`, { error: e.message }); }
       }
-      UTIL.showToast(`Filtri rimossi da '${sheetName}'.`, 'Filtri');
+      SHARED_UTILS.showToast(`Filtri rimossi da '${sheetName}'.`, 'Filtri');
     } catch (e) {
       LOG?.error('FILTERS_CLEAR', `Impossibile rimuovere filtro su ${sheetName}`, { error: e.message, stack: e.stack });
       throw e;
@@ -124,7 +124,7 @@ const FILTERS = (function () {
     }
 
     _applyFilterSmart(sh, sheetName, colIndex + 1, filterValue);
-    UTIL.showToast(`Filtro applicato.`, 'Filtri');
+    SHARED_UTILS.showToast(`Filtro applicato.`, 'Filtri');
   }
 
   // ---------------------- Core ----------------------

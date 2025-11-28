@@ -79,7 +79,7 @@ const SETUP = (function () {
     const triggerEveryMin = (Number.isFinite(rawMin) && rawMin > 0) ? rawMin : 15; // Logica invariata, Apps Script arrotonda da solo
 
     // 5) Verifica permessi cartelle
-    UTIL.showToast('Verifico gli ID delle cartelle...', 'Setup');
+    SHARED_UTILS.showToast('Verifico gli ID delle cartelle...', 'Setup');
     let inputFolder, outputFolder;
     try { inputFolder = DriveApp.getFolderById(inputId); }
     catch (e) { throw new Error('ID cartella INPUT non valido o permessi mancanti.'); }
@@ -87,25 +87,25 @@ const SETUP = (function () {
     catch (e) { throw new Error('ID cartella OUTPUT non valido o permessi mancanti.'); }
 
     // 6) Preparazione fogli
-    UTIL.showToast('Creazione e formattazione fogli...', 'Setup');
+    SHARED_UTILS.showToast('Creazione e formattazione fogli...', 'Setup');
     SHEETS.ensureAll();
     SHEETS.applyFormats();
     
     // 6.1) Inizializza Dashboard Trigger
     if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.initSheet) {
-      UTIL.showToast('Inizializzazione Dashboard Trigger...', 'Setup');
+      SHARED_UTILS.showToast('Inizializzazione Dashboard Trigger...', 'Setup');
       TRIGGER_DASHBOARD.initSheet();
     }
 
     // 7) Scrittura configurazione
-    UTIL.showToast('Scrittura configurazione...', 'Setup');
+    SHARED_UTILS.showToast('Scrittura configurazione...', 'Setup');
     _writeConfiguration(inputId, outputId, triggerEveryMin);
     
     CONFIG.invalidateCache();
     SHEETS.invalidateHeaderIndexCache();
 
     // ✅ 8) Manutenzione completa finale (filtri, formati codici, duplicati, integrità)
-    UTIL.showToast('Applicazione formati e verifica integrità...', 'Setup');
+    SHARED_UTILS.showToast('Applicazione formati e verifica integrità...', 'Setup');
     DEBUG.forceTextFormatOnCodes();   // Forza testo su codici
     DEBUG.manageDuplicateInvoices();  // Marca duplicati fatture (silenzioso)
     DEBUG.manageDuplicateRows();      // Marca duplicati righe (silenzioso)

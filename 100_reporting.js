@@ -35,7 +35,7 @@ const REPORTING = (function () {
    * REPORTING.run();
    */
   function run() {
-    UTIL.showToast('Generazione Report di Audit in corso...', 'Reporting', 10);
+    SHARED_UTILS.showToast('Generazione Report di Audit in corso...', 'Reporting', 10);
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sh = ss.getSheetByName(REPORT_SHEET_NAME);
@@ -61,7 +61,7 @@ const REPORTING = (function () {
     // Scrive il report
     _writeReport(sh, reports);
 
-    UTIL.showToast('Report di Audit generato con successo!', 'Completato', 5);
+    SHARED_UTILS.showToast('Report di Audit generato con successo!', 'Completato', 5);
     LOG.info('REPORTING', 'Report di audit completato.');
   }
 
@@ -398,7 +398,7 @@ const REPORTING = (function () {
 
 // Registra REPORTING nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('REPORTING', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG']);
+  ModuleRegistry.register('REPORTING', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS', 'STATE', 'CONFIG']);
 }
 
 // Registra REPORTING nel namespace GG
