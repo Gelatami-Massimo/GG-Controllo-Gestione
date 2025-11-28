@@ -540,7 +540,7 @@ const ERROR_HANDLER = (function() {
       } catch (e) {
         const context = extractErrorContext(e);
         LOG.warn(scope, message, { error: e.message, ...context });
-        recordErrorStat(e, scope, { recovered: suppressThrow });
+        recordErrorStat(e.name, scope);
         
         if (!suppressThrow) throw e;
         return undefined;

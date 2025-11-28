@@ -23,8 +23,7 @@ const ModuleRegistry = (() => {
       // Controlla dipendenze
       const missing = dependencies.filter(dep => {
         // Controlla se il modulo globale esiste
-        return typeof eval('typeof ' + dep) === 'undefined' && 
-               typeof globalThis[dep] === 'undefined';
+        return typeof globalThis[dep] === 'undefined';
       });
       
       if (missing.length > 0) {
@@ -75,8 +74,7 @@ const ModuleRegistry = (() => {
       moduleNames.forEach(name => {
         const info = registry[name];
         const missing = info.dependencies.filter(dep => {
-          return typeof eval('typeof ' + dep) === 'undefined' && 
-                 typeof globalThis[dep] === 'undefined';
+          return typeof globalThis[dep] === 'undefined';
         });
         
         if (missing.length > 0) {

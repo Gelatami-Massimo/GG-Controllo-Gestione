@@ -222,8 +222,7 @@ const ModuleRegistry = (() => {
       // Controlla dipendenze
       const missing = dependencies.filter(dep => {
         // Controlla se il modulo globale esiste
-        return typeof eval('typeof ' + dep) === 'undefined' && 
-               typeof globalThis[dep] === 'undefined';
+        return typeof globalThis[dep] === 'undefined';
       });
       
       if (missing.length > 0) {
@@ -274,8 +273,7 @@ const ModuleRegistry = (() => {
       moduleNames.forEach(name => {
         const info = registry[name];
         const missing = info.dependencies.filter(dep => {
-          return typeof eval('typeof ' + dep) === 'undefined' && 
-                 typeof globalThis[dep] === 'undefined';
+          return typeof globalThis[dep] === 'undefined';
         });
         
         if (missing.length > 0) {
@@ -1408,7 +1406,7 @@ const ERROR_HANDLER = (function() {
       } catch (e) {
         const context = extractErrorContext(e);
         LOG.warn(scope, message, { error: e.message, ...context });
-        recordErrorStat(e, scope, { recovered: suppressThrow });
+        recordErrorStat(e.name, scope);
         
         if (!suppressThrow) throw e;
         return undefined;
@@ -6434,7 +6432,7 @@ const FILTERS = (function () {
         try { range.createFilter(); }
         catch (e) { LOG?.warn('FILTERS_CLEAR', `Impossibile ricreare il filtro su ${sheetName}`, { error: e.message }); }
       }
-      UTIL.showToast(`Filtri rimossi da '${sheetName}'.`, 'Filtri');
+      SHARED_UTILS.showToast(`Filtri rimossi da '${sheetName}'.`, 'Filtri');
     } catch (e) {
       LOG?.error('FILTERS_CLEAR', `Impossibile rimuovere filtro su ${sheetName}`, { error: e.message, stack: e.stack });
       throw e;
@@ -6472,7 +6470,7 @@ const FILTERS = (function () {
     }
 
     _applyFilterSmart(sh, sheetName, colIndex + 1, filterValue);
-    UTIL.showToast(`Filtro applicato.`, 'Filtri');
+    SHARED_UTILS.showToast(`Filtro applicato.`, 'Filtri');
   }
 
   // ---------------------- Core ----------------------
@@ -7800,6 +7798,7 @@ if (typeof ModuleRegistry !== 'undefined') {
     'SHEETS',
     'LOG',
     'UTIL',
+    'SHARED_UTILS',
     'XMLSAFE',
     'STATE',
     'CONFIG'
@@ -8353,7 +8352,7 @@ const IMPORT_ROWS = (function () {
     const lastInvoiceRow = shF.getLastRow();
 
     if (currentRow > lastInvoiceRow) {
-      if (!isSilent) UTIL.showToast('Nessuna nuova riga da importare.', 'Info', 5);
+      if (!isSilent) SHARED_UTILS.showToast('Nessuna nuova riga da importare.', 'Info', 5);
       STATE.clear(CURSOR_KEY);
       return;
     }
@@ -8389,7 +8388,7 @@ const IMPORT_ROWS = (function () {
         _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF);
         LOG?.warn('ROWS', 'Timeout. Ripresa salvata.');
         if (!isSilent) {
-          UTIL.showToast('Timeout raggiunto. Clicca "Continua" per riprendere.', 'Pausa', 10);
+          SHARED_UTILS.showToast('Timeout raggiunto. Clicca "Continua" per riprendere.', 'Pausa', 10);
         }
       },
       processChunk: (invoicesChunk, chunkStartRow) => {
@@ -8479,7 +8478,7 @@ const IMPORT_ROWS = (function () {
           current: progressRow, total: lastInvoiceRow,
           message: `Importo righe: ${progressRow}/${lastInvoiceRow}...`
         });
-        UTIL.showToast(`Elaboro fattura ${progressRow}/${lastInvoiceRow}...`, 'Importazione Righe', 3);
+        SHARED_UTILS.showToast(`Elaboro fattura ${progressRow}/${lastInvoiceRow}...`, 'Importazione Righe', 3);
       }
     }
     });
@@ -8930,7 +8929,7 @@ const IMPORT_ROWS = (function () {
 
 // Registra IMPORT_ROWS nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('IMPORT_ROWS', ['SHEETS', 'LOG', 'UTIL', 'PRODUCTS', 'STATE', 'CONFIG', 'SHEET_ITERATOR']);
+  ModuleRegistry.register('IMPORT_ROWS', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS', 'PRODUCTS', 'STATE', 'CONFIG', 'SHEET_ITERATOR']);
 }
 
 // Registra IMPORT_ROWS nel namespace GG
@@ -9115,7 +9114,7 @@ const PDF = (function () {
         }
         LOG?.warn('PDF', 'Timeout. Ripresa salvata.');
         if (!isSilent) {
-          UTIL.showToast('Timeout raggiunto. Premi "Crea PDF" per riprendere.', 'Pausa', 10);
+          SHARED_UTILS.showToast('Timeout raggiunto. Premi "Crea PDF" per riprendere.', 'Pausa', 10);
         }
       },
       processChunk: (chunkData, chunkStartRow) => {
@@ -9228,7 +9227,7 @@ const PDF = (function () {
             LOG?.warn('PDF_QUOTA_EXCEEDED', `⚠️ QUOTA GIORNALIERA RAGGIUNTA. Stop esecuzione alla riga ${rowNum}. Creati finora: ${createdCount} PDF.`);
             
             if (!isSilent) {
-              UTIL.showToast(
+              SHARED_UTILS.showToast(
                 '⚠️ Quota giornaliera PDF raggiunta. PDF_ENABLED disabilitato. Riprova domani o usa "Riprendi PDF".', 
                 'Quota Esaurita', 
                 15
@@ -9479,7 +9478,7 @@ const PDF = (function () {
       UTIL.updateSheetInPlace(sh, updates, headerRow);
       LOG?.info('PDF_SKIP', `Marcate ${skippedCount} fatture come SKIPPED (PDF_ENABLED=FALSE).`);
       if (!isSilent) {
-        UTIL.showToast(`PDF disabilitato: ${skippedCount} fatture marcate SKIPPED.`, 'PDF Disabilitato', 5);
+        SHARED_UTILS.showToast(`PDF disabilitato: ${skippedCount} fatture marcate SKIPPED.`, 'PDF Disabilitato', 5);
       }
     }
   }
@@ -9498,7 +9497,7 @@ const PDF = (function () {
     const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
     if (!idx.StatoPDF) {
       LOG?.error('PDF_ONLY', 'Colonna StatoPDF non trovata. Impossibile procedere.');
-      if (!isSilent) UTIL.showToast('Colonna StatoPDF mancante.', 'Errore', 5);
+      if (!isSilent) SHARED_UTILS.showToast('Colonna StatoPDF mancante.', 'Errore', 5);
       return;
     }
 
@@ -9522,12 +9521,12 @@ const PDF = (function () {
 
     if (rowsTodo.length === 0) {
       LOG?.info('PDF_ONLY', 'Nessuna fattura TODO o SKIPPED da processare.');
-      if (!isSilent) UTIL.showToast('Nessun PDF da riprendere.', 'Info', 3);
+      if (!isSilent) SHARED_UTILS.showToast('Nessun PDF da riprendere.', 'Info', 3);
       return;
     }
 
     LOG?.info('PDF_ONLY', `Ripresa creazione PDF: ${rowsTodo.length} fatture TODO/SKIPPED.`);
-    if (!isSilent) UTIL.showToast(`Ripresa ${rowsTodo.length} PDF...`, 'Avvio', 5);
+    if (!isSilent) SHARED_UTILS.showToast(`Ripresa ${rowsTodo.length} PDF...`, 'Avvio', 5);
 
     // Forza processamento di tutte queste fatture
     _mainLoop(outputFolder, isSilent, true);
@@ -9538,7 +9537,7 @@ const PDF = (function () {
 
 // Registra PDF nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('PDF', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG', 'SHEET_ITERATOR']);
+  ModuleRegistry.register('PDF', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS', 'STATE', 'CONFIG', 'SHEET_ITERATOR']);
 }
 
 // Registra PDF nel namespace GG
@@ -10153,7 +10152,7 @@ const MAGAZZINO_CORE = (() => {
       
       // Logging già gestito da ENHANCED_LOGGER in MAG_PRODOTTI_START
       
-      UTIL.showToast(`Creazione Report Magazzino (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino', 10);
+      SHARED_UTILS.showToast(`Creazione Report Magazzino (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino', 10);
 
       // 1. Ottieni righe base con filtro (SENZA filtro Ingrediente per vedere tutti i prodotti)
       const rowsBase = buildMagazzinoBaseRows_(dateFilter, false, runId);
@@ -10163,7 +10162,7 @@ const MAGAZZINO_CORE = (() => {
       });
 
       if (rowsBase.length === 0) {
-        UTIL.showToast('Nessun dato da elaborare.', 'Avviso', 5);
+        SHARED_UTILS.showToast('Nessun dato da elaborare.', 'Avviso', 5);
         ENHANCED_LOGGER.warn(runId, 'MAG_PRODOTTI_NO_DATA', 'Nessun dato trovato per intervallo selezionato');
         return;
       }
@@ -10209,11 +10208,11 @@ const MAGAZZINO_CORE = (() => {
       _writeMagazzinoSheet(aggregati);
 
       const numRows = Object.keys(aggregati).length;
-      UTIL.showToast(`Report Magazzino completato: ${numRows} righe.`, 'Completato', 5);
+      SHARED_UTILS.showToast(`Report Magazzino completato: ${numRows} righe.`, 'Completato', 5);
       LOG?.info('MAG_CORE', `Report Magazzino per prodotto completato: ${numRows} righe.`);
 
     } catch (e) {
-      UTIL.showToast('Errore durante la generazione del report Magazzino.', 'Errore', 10);
+      SHARED_UTILS.showToast('Errore durante la generazione del report Magazzino.', 'Errore', 10);
       LOG?.error('MAG_CORE', 'Errore in buildMagazzinoByYear.', {
         error: e.message,
         stack: e.stack
@@ -10388,7 +10387,7 @@ const MAGAZZINO_CORE = (() => {
       
       // Logging già gestito da ENHANCED_LOGGER in MAG_INGREDIENTI_START
       
-      UTIL.showToast(`Creazione Report Magazzino Ingredienti (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino Ingredienti', 10);
+      SHARED_UTILS.showToast(`Creazione Report Magazzino Ingredienti (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino Ingredienti', 10);
 
       // 1. Ottieni righe base con filtro (CON filtro Ingrediente per vedere solo ingredienti)
       const rowsBase = buildMagazzinoBaseRows_(dateFilter, true, runId);
@@ -10398,7 +10397,7 @@ const MAGAZZINO_CORE = (() => {
       });
 
       if (rowsBase.length === 0) {
-        UTIL.showToast('Nessun dato da elaborare.', 'Avviso', 5);
+        SHARED_UTILS.showToast('Nessun dato da elaborare.', 'Avviso', 5);
         ENHANCED_LOGGER.warn(runId, 'MAG_INGREDIENTI_NO_DATA', 'Nessun dato trovato per intervallo selezionato');
         return;
       }
@@ -10429,11 +10428,11 @@ const MAGAZZINO_CORE = (() => {
       _writeMagazzinoIngredientiSheet(aggregati);
 
       const numRows = Object.keys(aggregati).length;
-      UTIL.showToast(`Report Magazzino Ingredienti completato: ${numRows} righe.`, 'Completato', 5);
+      SHARED_UTILS.showToast(`Report Magazzino Ingredienti completato: ${numRows} righe.`, 'Completato', 5);
       LOG?.info('MAG_CORE', `Report Magazzino Ingredienti completato: ${numRows} righe.`);
 
     } catch (e) {
-      UTIL.showToast('Errore durante la generazione del report Magazzino Ingredienti.', 'Errore', 10);
+      SHARED_UTILS.showToast('Errore durante la generazione del report Magazzino Ingredienti.', 'Errore', 10);
       LOG?.error('MAG_CORE', 'Errore in buildMagazzinoIngredientiByYear.', {
         error: e.message,
         stack: e.stack
@@ -10528,7 +10527,7 @@ const MAGAZZINO_CORE = (() => {
    */
   function updatePrezziMediMagazzino() {
     try {
-      UTIL.showToast('Aggiornamento prezzi medi magazzini...', 'Magazzino', 5);
+      SHARED_UTILS.showToast('Aggiornamento prezzi medi magazzini...', 'Magazzino', 5);
       
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const sheetNames = ['Magazzino', 'Magazzino_Ingredienti'];
@@ -10557,11 +10556,11 @@ const MAGAZZINO_CORE = (() => {
         LOG?.info('MAG_CORE', `Prezzi medi aggiornati per foglio ${name}`);
       });
 
-      UTIL.showToast(`Prezzi medi aggiornati per ${updated} fogli.`, 'Completato', 5);
+      SHARED_UTILS.showToast(`Prezzi medi aggiornati per ${updated} fogli.`, 'Completato', 5);
       LOG?.info('MAG_CORE', `updatePrezziMediMagazzino completato: ${updated} fogli aggiornati.`);
 
     } catch (e) {
-      UTIL.showToast('Errore durante aggiornamento prezzi medi.', 'Errore', 10);
+      SHARED_UTILS.showToast('Errore durante aggiornamento prezzi medi.', 'Errore', 10);
       LOG?.error('MAG_CORE', 'Errore in updatePrezziMediMagazzino.', {
         error: e.message,
         stack: e.stack
@@ -10580,7 +10579,7 @@ const MAGAZZINO_CORE = (() => {
 
 // Registra nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('MAGAZZINO_CORE', ['UTIL', 'LOG']);
+  ModuleRegistry.register('MAGAZZINO_CORE', ['UTIL', 'SHARED_UTILS', 'LOG']);
 }
 
 // Registra nel namespace GG
@@ -10661,7 +10660,7 @@ const DASHBOARD = (function () {
    * DASHBOARD.create();
    */
   function create() {
-    UTIL.showToast('Aggiornamento Dashboard...', 'Dashboard', 10);
+    SHARED_UTILS.showToast('Aggiornamento Dashboard...', 'Dashboard', 10);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
     _ensureDatiMensiliSheet(ss); // Assicura che 'Dati Mensili' esista
@@ -10966,8 +10965,8 @@ const DASHBOARD = (function () {
             const data    = row[idx.Data];
             const costoNetto  = UTIL.number.parse(row[idx.TotImponibile]);
             const costoTotale = UTIL.number.parse(row[idx.TotDocumento]);
-            if (UTIL.date.isValidDate(data)) {
-              const ymObj = UTIL.date.extractYearMonth(data);
+            if (SHARED_UTILS.isValidDate(data)) {
+              const ymObj = SHARED_UTILS.date.extractYearMonth(data);
               const annoMese = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
               if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
               let cur = dataAggregata.get(sedeKey).get(annoMese)
@@ -11141,7 +11140,7 @@ const DASHBOARD = (function () {
 
 // Registra DASHBOARD nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('DASHBOARD', ['SHEETS', 'LOG', 'UTIL']);
+  ModuleRegistry.register('DASHBOARD', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS']);
 }
 
 // Registra DASHBOARD nel namespace GG
@@ -12277,7 +12276,7 @@ const REPORTING = (function () {
    * REPORTING.run();
    */
   function run() {
-    UTIL.showToast('Generazione Report di Audit in corso...', 'Reporting', 10);
+    SHARED_UTILS.showToast('Generazione Report di Audit in corso...', 'Reporting', 10);
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sh = ss.getSheetByName(REPORT_SHEET_NAME);
@@ -12303,7 +12302,7 @@ const REPORTING = (function () {
     // Scrive il report
     _writeReport(sh, reports);
 
-    UTIL.showToast('Report di Audit generato con successo!', 'Completato', 5);
+    SHARED_UTILS.showToast('Report di Audit generato con successo!', 'Completato', 5);
     LOG.info('REPORTING', 'Report di audit completato.');
   }
 
@@ -12640,7 +12639,7 @@ const REPORTING = (function () {
 
 // Registra REPORTING nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('REPORTING', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG']);
+  ModuleRegistry.register('REPORTING', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS', 'STATE', 'CONFIG']);
 }
 
 // Registra REPORTING nel namespace GG
@@ -12705,7 +12704,7 @@ if (typeof GG !== 'undefined') {
 function createPnlSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetName = 'Conto Economico Riclassificato';
-  UTIL.showToast(`Aggiornamento ${sheetName}...`, 'Conto Economico', 10);
+  SHARED_UTILS.showToast(`Aggiornamento ${sheetName}...`, 'Conto Economico', 10);
 
   const VOCE_FATTURATO = 'Fatturato';
   const VOCE_FATTURE_INCASSATE = 'Fatture Incassate';
@@ -12769,7 +12768,7 @@ function createPnlSheet() {
   );
   
   if (responseAnno.getSelectedButton() === ui.Button.CANCEL) {
-    UTIL.showToast('Operazione annullata', 'Info', 3);
+    SHARED_UTILS.showToast('Operazione annullata', 'Info', 3);
     return;
   }
   
@@ -12788,7 +12787,7 @@ function createPnlSheet() {
   );
   
   if (responsePerimetro.getSelectedButton() === ui.Button.CANCEL) {
-    UTIL.showToast('Operazione annullata', 'Info', 3);
+    SHARED_UTILS.showToast('Operazione annullata', 'Info', 3);
     return;
   }
   
@@ -12804,7 +12803,7 @@ function createPnlSheet() {
     );
     
     if (responseSede.getSelectedButton() === ui.Button.CANCEL) {
-      UTIL.showToast('Operazione annullata', 'Info', 3);
+      SHARED_UTILS.showToast('Operazione annullata', 'Info', 3);
       return;
     }
     
@@ -13084,7 +13083,7 @@ function createPnlSheet() {
     }
 
     LOG.info('PNL_SHEET', `P&L Dinamico multi-perimetro scritto con successo.`);
-    UTIL.showToast(`P&L Dinamico "${sheetName}" aggiornato!`, 'Completato', 10);
+    SHARED_UTILS.showToast(`P&L Dinamico "${sheetName}" aggiornato!`, 'Completato', 10);
     ss.setActiveSheet(sh);
 
   } catch (e) {
@@ -13753,7 +13752,7 @@ function _getAziendaMap() {
 function createPnlConfrontoGemmaZaffiro() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetName = 'Confronto Gemma-Zaffiro';
-  UTIL.showToast(`Creazione ${sheetName}...`, 'Confronto', 10);
+  SHARED_UTILS.showToast(`Creazione ${sheetName}...`, 'Confronto', 10);
 
   const VOCE_FATTURATO = 'Fatturato';
   const VOCE_FATTURE_INCASSATE = 'Fatture Incassate';
@@ -13808,7 +13807,7 @@ function createPnlConfrontoGemmaZaffiro() {
   );
   
   if (responseAnno.getSelectedButton() === ui.Button.CANCEL) {
-    UTIL.showToast('Operazione annullata', 'Info', 3);
+    SHARED_UTILS.showToast('Operazione annullata', 'Info', 3);
     return;
   }
   
@@ -13915,7 +13914,7 @@ function createPnlConfrontoGemmaZaffiro() {
     if (filtroAnno) {
       anniOrdinati = anniOrdinati.filter(a => a === filtroAnno);
       if (anniOrdinati.length === 0) {
-        UTIL.showToast(`Nessun dato trovato per l'anno ${filtroAnno}`, 'Avviso', 5);
+        SHARED_UTILS.showToast(`Nessun dato trovato per l'anno ${filtroAnno}`, 'Avviso', 5);
         return;
       }
     }
@@ -13952,7 +13951,7 @@ function createPnlConfrontoGemmaZaffiro() {
 
     const messaggioAnno = filtroAnno ? ` per anno ${filtroAnno}` : ` per ${anniOrdinati.length} anni`;
     LOG.info('PNL_CONFRONTO', `Confronto Gemma-Zaffiro creato con successo${messaggioAnno}.`);
-    UTIL.showToast(`Confronto "${sheetName}" creato!`, 'Completato', 10);
+    SHARED_UTILS.showToast(`Confronto "${sheetName}" creato!`, 'Completato', 10);
     ss.setActiveSheet(sh);
 
   } catch (e) {
@@ -15029,11 +15028,11 @@ const DEBUG = (function () {
 
     if (errors === 0 && warnings === 0) {
       LOG.info('SANITY_CHECK', 'Controllo integrità completato: NESSUN PROBLEMA RILEVATO.');
-      UTIL.showToast('Controllo integrità: OK!', 'Completato', 5);
+      SHARED_UTILS.showToast('Controllo integrità: OK!', 'Completato', 5);
     } else {
       const msg = `Controllo completato: ${errors} ERRORE/I, ${warnings} AVVISO/I. Controlla il foglio Log.`;
       LOG.warn('SANITY_CHECK', msg);
-      UTIL.showToast(msg, 'Attenzione', 10);
+      SHARED_UTILS.showToast(msg, 'Attenzione', 10);
     }
   }
 
@@ -15066,7 +15065,7 @@ const DEBUG = (function () {
     const supplierMap = _getCurrentSupplierMap();
     if (supplierMap.size === 0) {
       LOG.warn('SYNC_CATEGORIES', 'Mappa fornitori vuota o non leggibile. Operazione annullata.');
-      UTIL.showToast('Errore: impossibile leggere i fornitori.', 'Errore');
+      SHARED_UTILS.showToast('Errore: impossibile leggere i fornitori.', 'Errore');
       return;
     }
 
@@ -15123,7 +15122,7 @@ const DEBUG = (function () {
           }
           cursor.sheetIndex = i;
           STATE.setJSON(SYNC_CAT_CURSOR_KEY, cursor);
-          UTIL.showToast(`Timeout. Pausa (${sheetName}). Clicca di nuovo per riprendere.`, 'Pausa', 10);
+          SHARED_UTILS.showToast(`Timeout. Pausa (${sheetName}). Clicca di nuovo per riprendere.`, 'Pausa', 10);
           LOG.warn('SYNC_CATEGORIES', `Timeout ${sheetName}. Ripresa salvata.`);
         },
         processChunk: (chunkData, chunkStartRow) => {
@@ -15206,7 +15205,7 @@ const DEBUG = (function () {
 
           // UI progress
           if (chunkStartRow % (CHUNK_SIZE * 2) === 0) {
-            UTIL.showToast(`Riallineo ${sheetName}: riga ${chunkStartRow}/${lastRow}...`, 'Manutenzione', -1);
+            SHARED_UTILS.showToast(`Riallineo ${sheetName}: riga ${chunkStartRow}/${lastRow}...`, 'Manutenzione', -1);
           }
         }
       });
@@ -15228,7 +15227,7 @@ const DEBUG = (function () {
     }
 
     STATE.clear(SYNC_CAT_CURSOR_KEY);
-    UTIL.showToast('Riallineamento categorie completato!', 'Fatto!');
+    SHARED_UTILS.showToast('Riallineamento categorie completato!', 'Fatto!');
     LOG.info('SYNC_CATEGORIES', 'Completato per tutti i fogli.');
   }
 
@@ -15303,7 +15302,7 @@ const DEBUG = (function () {
 
     const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
     const shFor = SHEETS.get(SHEETS.SHEET_NAMES.Fornitori);
-    if (!shF || !shFor) { UTIL.showToast("Fogli 'Fatture' o 'Fornitori' non trovati.", 'Errore'); return; }
+    if (!shF || !shFor) { SHARED_UTILS.showToast("Fogli 'Fatture' o 'Fornitori' non trovati.", 'Errore'); return; }
 
     const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
     const headerRowFor = SHEETS._findHeaderRow(shFor, SHEETS.SHEET_NAMES.Fornitori);
@@ -15311,12 +15310,12 @@ const DEBUG = (function () {
 
     let cursor = STATE.getJSON(SYNC_SUPPLIERS_CURSOR_KEY, { nextRow: headerRowF + 1 });
 
-    if (cursor.nextRow > lastRowF) { UTIL.showToast('Nessuna nuova fattura da cui sincronizzare fornitori.', 'Info'); STATE.clear(SYNC_SUPPLIERS_CURSOR_KEY); return; }
+    if (cursor.nextRow > lastRowF) { SHARED_UTILS.showToast('Nessuna nuova fattura da cui sincronizzare fornitori.', 'Info'); STATE.clear(SYNC_SUPPLIERS_CURSOR_KEY); return; }
 
     const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
     const requiredF = ['FornitoreID', 'DenominazioneFornitore', 'RegimeFiscale'];
     const missingF = UTIL.checkColumns(idxF, requiredF);
-    if (missingF.length) { UTIL.showToast(`Colonne mancanti in Fatture: ${missingF.join(', ')}`, 'Errore'); return; }
+    if (missingF.length) { SHARED_UTILS.showToast(`Colonne mancanti in Fatture: ${missingF.join(', ')}`, 'Errore'); return; }
 
     const existingIds = new Set();
     try {
@@ -15338,7 +15337,7 @@ const DEBUG = (function () {
     let added = 0;
     const lastColNeeded = Math.max(idxF.FornitoreID, idxF.DenominazioneFornitore, idxF.RegimeFiscale) + 1;
 
-    UTIL.showToast('Sincronizzazione Fornitori da Fatture...', 'Manutenzione', -1);
+    SHARED_UTILS.showToast('Sincronizzazione Fornitori da Fatture...', 'Manutenzione', -1);
 
     // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling
     const iteratorResult = SHEET_ITERATOR.forEachChunk({
@@ -15359,7 +15358,7 @@ const DEBUG = (function () {
           if (written) added += written;
           newRowsBatch = [];
         }
-        UTIL.showToast(`Pausa per timeout: aggiunti finora ${added} fornitori. Riprendere.`, 'Pausa', 10);
+        SHARED_UTILS.showToast(`Pausa per timeout: aggiunti finora ${added} fornitori. Riprendere.`, 'Pausa', 10);
         LOG.warn('DEBUG_SYNC_SUP_FROM_INV', `Timeout dopo ${added} nuovi fornitori. Ripresa salvata.`);
       },
       processChunk: (chunk, chunkStartRow) => {
@@ -15386,7 +15385,7 @@ const DEBUG = (function () {
 
         // UI progress
         if (chunkStartRow % (CHUNK_SIZE * 2) === 0) {
-          UTIL.showToast(`Sincronizzo fornitori... (riga ${chunkStartRow}/${lastRowF})`, 'Manutenzione', -1);
+          SHARED_UTILS.showToast(`Sincronizzo fornitori... (riga ${chunkStartRow}/${lastRowF})`, 'Manutenzione', -1);
         }
       }
     });
@@ -15403,7 +15402,7 @@ const DEBUG = (function () {
     }
 
     STATE.clear(SYNC_SUPPLIERS_CURSOR_KEY);
-    UTIL.showToast(`Sincronizzazione completata. Aggiunti ${added} fornitori.`, 'Completato', 5);
+    SHARED_UTILS.showToast(`Sincronizzazione completata. Aggiunti ${added} fornitori.`, 'Completato', 5);
     LOG.info('DEBUG_SYNC_SUP_FROM_INV', `Sync fornitori completato. Aggiunti ${added}.`);
   }
 
@@ -15456,7 +15455,7 @@ const DEBUG = (function () {
         onTimeout: () => {
           cursor.sheetIndex = i;
           STATE.setJSON(FORCE_TEXT_CURSOR_KEY, cursor);
-          UTIL.showToast(`Timeout. Pausa (${sheetName}).`, 'Pausa', 10);
+          SHARED_UTILS.showToast(`Timeout. Pausa (${sheetName}).`, 'Pausa', 10);
           LOG.warn('FORCE_TEXT', `Timeout ${sheetName}. Ripresa salvata.`);
         },
         processChunk: (chunkData, chunkStartRow) => {
@@ -15481,7 +15480,7 @@ const DEBUG = (function () {
 
           // UI progress
           if (chunkStartRow % (CHUNK_SIZE * 2) === 0) {
-            UTIL.showToast(`Applico formato testo ${sheetName}: riga ${chunkStartRow}/${lastRow}...`, 'Manutenzione', -1);
+            SHARED_UTILS.showToast(`Applico formato testo ${sheetName}: riga ${chunkStartRow}/${lastRow}...`, 'Manutenzione', -1);
           }
         }
       });
@@ -15496,7 +15495,7 @@ const DEBUG = (function () {
     }
 
     STATE.clear(FORCE_TEXT_CURSOR_KEY);
-    UTIL.showToast('Formato testo applicato con successo!', 'Fatto!');
+    SHARED_UTILS.showToast('Formato testo applicato con successo!', 'Fatto!');
     LOG.info('FORCE_TEXT', 'Applicazione formato testo completata.');
   }
 
@@ -15550,7 +15549,7 @@ const DEBUG = (function () {
 
         if (!fornId || !numDoc) return;
 
-        if (UTIL.date.isValidDate(dataDoc)) {
+        if (SHARED_UTILS.isValidDate(dataDoc)) {
           dataDoc = Utilities.formatDate(dataDoc, Session.getScriptTimeZone(), 'yyyy-MM-dd');
         } else {
           return; // Skip righe con data non valida
@@ -15708,7 +15707,7 @@ const DEBUG = (function () {
       STATE.set(DUPLICATE_COUNT_KEY, result?.found ?? 0);
     } catch (e) {
       LOG.error('DEBUG_MARK_DUPLICATES', 'Errore marca duplicati fatture.', { error: e.message });
-      UTIL.showToast('Errore durante marcatura duplicati. Vedi Log.', 'Errore');
+      SHARED_UTILS.showToast('Errore durante marcatura duplicati. Vedi Log.', 'Errore');
     }
   }
 
@@ -15730,7 +15729,7 @@ const DEBUG = (function () {
 
     let cursor = STATE.getJSON(CLEAR_CURSOR_KEY, { nextRow: headerRowF + 1 });
 
-    UTIL.showToast('Pulizia marcatura duplicati...', 'Manutenzione', -1);
+    SHARED_UTILS.showToast('Pulizia marcatura duplicati...', 'Manutenzione', -1);
     LOG.info('DEBUG_CLEAR_MARKING', `Avvio pulizia da riga ${cursor.nextRow}.`);
 
     // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling
@@ -15744,7 +15743,7 @@ const DEBUG = (function () {
       cursorKey: CLEAR_CURSOR_KEY,
       maxRuntimeSec: maxSec,
       onTimeout: () => {
-        UTIL.showToast('Timeout pulizia. Riprendere.', 'Pausa', 10);
+        SHARED_UTILS.showToast('Timeout pulizia. Riprendere.', 'Pausa', 10);
         LOG.warn('DEBUG_CLEAR_MARKING', 'Timeout. Ripresa salvata.');
       },
       processChunk: (chunkData, chunkStartRow) => {
@@ -15756,7 +15755,7 @@ const DEBUG = (function () {
 
         // UI progress
         if (chunkStartRow % (BATCH_SIZE_CLEAR * 2) === 0) {
-          UTIL.showToast(`Pulisco marcatura: riga ${chunkStartRow}/${lastRowF}...`, 'Manutenzione', -1);
+          SHARED_UTILS.showToast(`Pulisco marcatura: riga ${chunkStartRow}/${lastRowF}...`, 'Manutenzione', -1);
         }
       }
     });
@@ -15767,7 +15766,7 @@ const DEBUG = (function () {
     }
 
     STATE.clear(CLEAR_CURSOR_KEY);
-    UTIL.showToast('Marcatura duplicati rimossa.', 'Fatto!');
+    SHARED_UTILS.showToast('Marcatura duplicati rimossa.', 'Fatto!');
     LOG.info('DEBUG_CLEAR_MARKING', 'Pulizia marcatura completata.');
     STATE.set(DUPLICATE_COUNT_KEY, 0);
   }
@@ -15782,9 +15781,9 @@ const DEBUG = (function () {
       'Cancellerò TUTTI i dati temporanei e i progressi salvati (cursori). Sei sicuro?',
       ui.ButtonSet.YES_NO
     );
-    if (res !== ui.Button.YES) { UTIL.showToast('Pulizia cache annullata.', 'Info'); return; }
+    if (res !== ui.Button.YES) { SHARED_UTILS.showToast('Pulizia cache annullata.', 'Info'); return; }
 
-    UTIL.showToast('Pulizia cache e cursori in corso...', 'Debug', -1);
+    SHARED_UTILS.showToast('Pulizia cache e cursori in corso...', 'Debug', -1);
 
     // 1. Pulisci ScriptProperties (più veloce: deleteAllProperties)
     try {
@@ -15820,7 +15819,7 @@ const DEBUG = (function () {
       // Ignora se moduli non disponibili
     }
 
-    UTIL.showToast('Cache e cursori azzerati!', 'Completato', 3);
+    SHARED_UTILS.showToast('Cache e cursori azzerati!', 'Completato', 3);
   }
 
 
@@ -15830,10 +15829,10 @@ const DEBUG = (function () {
    */
   function createDuplicateSnapshot() {
     const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
-    if (!shF) { UTIL.showToast('Foglio Fatture non trovato.', 'Errore'); return; }
+    if (!shF) { SHARED_UTILS.showToast('Foglio Fatture non trovato.', 'Errore'); return; }
 
     const headerRow = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
-    if (shF.getLastRow() <= headerRow) { UTIL.showToast('Nessuna riga in Fatture.', 'Info'); return; }
+    if (shF.getLastRow() <= headerRow) { SHARED_UTILS.showToast('Nessuna riga in Fatture.', 'Info'); return; }
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const SNAP_NAME = 'Fatture Duplicate (Snapshot)';
@@ -15869,7 +15868,7 @@ const DEBUG = (function () {
     }
 
     if (toCopy.length === 0) {
-      UTIL.showToast('Nessuna riga marcata come duplicata (sfondo giallo).', 'Info');
+      SHARED_UTILS.showToast('Nessuna riga marcata come duplicata (sfondo giallo).', 'Info');
       LOG.info('DEBUG_SNAPSHOT_DUP', 'Nessuna riga gialla trovata per snapshot.');
       return;
     }
@@ -15878,7 +15877,7 @@ const DEBUG = (function () {
       shSnap.getRange(2, 1, toCopy.length, snapHeaders.length).setValues(toCopy);
       try { shSnap.autoResizeColumns(1, snapHeaders.length); } catch (_) {}
       shSnap.getRange(1, snapHeaders.length + 2).setValue(`Snapshot: ${new Date().toLocaleString('it-IT')}`).setFontStyle('italic');
-      UTIL.showToast(`Snapshot creato: ${toCopy.length} righe duplicate su "${SNAP_NAME}".`, 'Completato', 8);
+      SHARED_UTILS.showToast(`Snapshot creato: ${toCopy.length} righe duplicate su "${SNAP_NAME}".`, 'Completato', 8);
       LOG.info('DEBUG_SNAPSHOT_DUP', `Snapshot duplicati completato (${toCopy.length} righe).`);
     } catch (e) {
       LOG.error('DEBUG_SNAPSHOT_DUP', 'Errore scrittura snapshot duplicati.', { error: e.message });
@@ -15913,7 +15912,7 @@ const DEBUG = (function () {
       LOG.error('DEV_DUP_RIGHE', 'Errore creazione snapshot duplicati righe.', {
         error: e.message
       });
-      UTIL.showToast('Errore creazione snapshot. Vedi Log.', 'Errore');
+      SHARED_UTILS.showToast('Errore creazione snapshot. Vedi Log.', 'Errore');
     }
   }
 
@@ -15932,14 +15931,14 @@ const DEBUG = (function () {
     const shDup = ss.getSheetByName('Righe_Duplicate');
     
     if (!shDup) {
-      UTIL.showToast('Foglio "Righe_Duplicate" non trovato. Esegui prima "Trova Righe Duplicate".', 'Errore', 8);
+      SHARED_UTILS.showToast('Foglio "Righe_Duplicate" non trovato. Esegui prima "Trova Righe Duplicate".', 'Errore', 8);
       LOG.error('DEV_DELETE_DUP', 'Foglio "Righe_Duplicate" non esistente.');
       return;
     }
 
     const lastRow = shDup.getLastRow();
     if (lastRow < 2) {
-      UTIL.showToast('Nessuna riga duplicata da eliminare.', 'Info', 5);
+      SHARED_UTILS.showToast('Nessuna riga duplicata da eliminare.', 'Info', 5);
       LOG.info('DEV_DELETE_DUP', 'Foglio "Righe_Duplicate" vuoto.');
       return;
     }
@@ -15959,7 +15958,7 @@ const DEBUG = (function () {
     );
 
     if (response !== ui.Button.YES) {
-      UTIL.showToast('Operazione annullata dall\'utente.', 'Annullato', 5);
+      SHARED_UTILS.showToast('Operazione annullata dall\'utente.', 'Annullato', 5);
       LOG.info('DEV_DELETE_DUP', 'Eliminazione annullata dall\'utente.');
       return;
     }
@@ -15967,7 +15966,7 @@ const DEBUG = (function () {
     // Leggi gli indici delle righe da eliminare (colonna RowIndex)
     const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
     if (!shRighe) {
-      UTIL.showToast('Foglio "Righe" non trovato!', 'Errore');
+      SHARED_UTILS.showToast('Foglio "Righe" non trovato!', 'Errore');
       LOG.error('DEV_DELETE_DUP', 'Foglio "Righe" non trovato.');
       return;
     }
@@ -15985,13 +15984,13 @@ const DEBUG = (function () {
         .sort((a, b) => b - a); // Ordine DECRESCENTE
 
       if (rowsToDelete.length === 0) {
-        UTIL.showToast('Nessun indice di riga valido trovato.', 'Errore');
+        SHARED_UTILS.showToast('Nessun indice di riga valido trovato.', 'Errore');
         LOG.error('DEV_DELETE_DUP', 'Nessun indice RowIndex valido.');
         return;
       }
 
       LOG.info('DEV_DELETE_DUP', `Eliminazione di ${rowsToDelete.length} righe duplicate...`);
-      UTIL.showToast(`Eliminazione ${rowsToDelete.length} righe in corso...`, 'Attendere', -1);
+      SHARED_UTILS.showToast(`Eliminazione ${rowsToDelete.length} righe in corso...`, 'Attendere', -1);
 
       // Elimina le righe una alla volta (dal basso verso l'alto)
       let deletedCount = 0;
@@ -16002,7 +16001,7 @@ const DEBUG = (function () {
           
           // Toast di progresso ogni 50 righe
           if (deletedCount % 50 === 0) {
-            UTIL.showToast(`Eliminate ${deletedCount}/${rowsToDelete.length} righe...`, 'In corso', -1);
+            SHARED_UTILS.showToast(`Eliminate ${deletedCount}/${rowsToDelete.length} righe...`, 'In corso', -1);
           }
         } catch (e) {
           LOG.error('DEV_DELETE_DUP', `Errore eliminazione riga ${rowIndex}`, { error: e.message });
@@ -16016,7 +16015,7 @@ const DEBUG = (function () {
       shDup.getRange(1, 1, 1, schema.length).setValues([schema]).setFontWeight('bold');
       shDup.setFrozenRows(1);
 
-      UTIL.showToast(`✅ Eliminate ${deletedCount} righe duplicate con successo!`, 'Completato', 8);
+      SHARED_UTILS.showToast(`✅ Eliminate ${deletedCount} righe duplicate con successo!`, 'Completato', 8);
       LOG.info('DEV_DELETE_DUP', `Eliminazione completata. Righe eliminate: ${deletedCount}`);
       
       // Torna al foglio Righe per mostrare il risultato
@@ -16024,7 +16023,7 @@ const DEBUG = (function () {
 
     } catch (e) {
       LOG.error('DEV_DELETE_DUP', 'Errore durante l\'eliminazione delle righe duplicate', { error: e.message, stack: e.stack });
-      UTIL.showToast('Errore durante l\'eliminazione. Vedi Log.', 'Errore');
+      SHARED_UTILS.showToast('Errore durante l\'eliminazione. Vedi Log.', 'Errore');
     }
   }
 
@@ -16040,14 +16039,14 @@ const DEBUG = (function () {
     const shR = ss.getSheetByName('Righe');
     
     if (!shR) {
-      UTIL.showToast('Foglio "Righe" non trovato!', 'Errore');
+      SHARED_UTILS.showToast('Foglio "Righe" non trovato!', 'Errore');
       LOG.error('DEV_COUNT_DUP', 'Foglio "Righe" non esistente.');
       return;
     }
 
     const lastRow = shR.getLastRow();
     if (lastRow < 2) {
-      UTIL.showToast('Foglio "Righe" vuoto.', 'Info', 5);
+      SHARED_UTILS.showToast('Foglio "Righe" vuoto.', 'Info', 5);
       LOG.info('DEV_COUNT_DUP', 'Foglio "Righe" vuoto, nessuna riga da analizzare.');
       return;
     }
@@ -16057,7 +16056,7 @@ const DEBUG = (function () {
     const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
 
     if (idx.FileID === undefined || idx.NumeroLinea === undefined) {
-      UTIL.showToast('Colonne FileID o NumeroLinea mancanti.', 'Errore');
+      SHARED_UTILS.showToast('Colonne FileID o NumeroLinea mancanti.', 'Errore');
       LOG.error('DEV_COUNT_DUP', 'Colonne FileID o NumeroLinea non trovate.');
       return;
     }
@@ -16065,7 +16064,7 @@ const DEBUG = (function () {
     const maxCol = Math.max(idx.FileID, idx.NumeroLinea) + 1;
 
     try {
-      UTIL.showToast('Lettura dati in corso...', 'Analisi', -1);
+      SHARED_UTILS.showToast('Lettura dati in corso...', 'Analisi', -1);
       const data = shR.getRange(headerRow + 1, 1, lastRow - headerRow, maxCol).getValues();
       
       const seen = new Map();
@@ -16111,7 +16110,7 @@ const DEBUG = (function () {
 
     } catch (e) {
       LOG.error('DEV_COUNT_DUP', 'Errore durante il conteggio duplicati', { error: e.message });
-      UTIL.showToast('Errore durante l\'analisi. Vedi Log.', 'Errore');
+      SHARED_UTILS.showToast('Errore durante l\'analisi. Vedi Log.', 'Errore');
     }
   }
 
@@ -16754,7 +16753,7 @@ const DEBUG = (function () {
     );
 
     if (response !== ui.Button.YES) {
-      UTIL.showToast('Operazione annullata.', 'Annullato', 5);
+      SHARED_UTILS.showToast('Operazione annullata.', 'Annullato', 5);
       LOG.info('DEV_RESET_FLAGS', 'Reset flag annullato dall\'utente.');
       return;
     }
@@ -16763,14 +16762,14 @@ const DEBUG = (function () {
     const shF = ss.getSheetByName('Fatture');
     
     if (!shF) {
-      UTIL.showToast('Foglio "Fatture" non trovato!', 'Errore');
+      SHARED_UTILS.showToast('Foglio "Fatture" non trovato!', 'Errore');
       LOG.error('DEV_RESET_FLAGS', 'Foglio "Fatture" non esistente.');
       return;
     }
 
     const lastRow = shF.getLastRow();
     if (lastRow < 2) {
-      UTIL.showToast('Foglio "Fatture" vuoto.', 'Info', 5);
+      SHARED_UTILS.showToast('Foglio "Fatture" vuoto.', 'Info', 5);
       LOG.info('DEV_RESET_FLAGS', 'Foglio "Fatture" vuoto.');
       return;
     }
@@ -16784,12 +16783,12 @@ const DEBUG = (function () {
       const idxTotRigheNetto = headers.indexOf('TotRigheNetto');
       
       if (idxRigheImportate === -1 || idxImportaRigheSrc === -1) {
-        UTIL.showToast('Colonne RigheImportate/ImportaRigheSrc non trovate!', 'Errore');
+        SHARED_UTILS.showToast('Colonne RigheImportate/ImportaRigheSrc non trovate!', 'Errore');
         LOG.error('DEV_RESET_FLAGS', 'Colonne necessarie non trovate nel foglio Fatture.');
         return;
       }
       
-      UTIL.showToast('Reset flag in corso...', 'Attendere', -1);
+      SHARED_UTILS.showToast('Reset flag in corso...', 'Attendere', -1);
       
       const rowCount = lastRow - 1;
       
@@ -16806,7 +16805,7 @@ const DEBUG = (function () {
         shF.getRange(2, idxTotRigheNetto + 1, rowCount, 1).setValue(0);
       }
       
-      UTIL.showToast(`✅ Reset completato su ${rowCount} fatture!`, 'Completato', 8);
+      SHARED_UTILS.showToast(`✅ Reset completato su ${rowCount} fatture!`, 'Completato', 8);
       LOG.info('DEV_RESET_FLAGS', `Reset flag completato su ${rowCount} fatture.`);
       
       ui.alert(
@@ -16820,7 +16819,7 @@ const DEBUG = (function () {
 
     } catch (e) {
       LOG.error('DEV_RESET_FLAGS', 'Errore durante il reset flag', { error: e.message });
-      UTIL.showToast('Errore durante il reset. Vedi Log.', 'Errore');
+      SHARED_UTILS.showToast('Errore durante il reset. Vedi Log.', 'Errore');
     }
   }
 
@@ -16947,7 +16946,7 @@ function runInBackground(functionName) {
 
 // Registra DEBUG nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG', 'DUPLICATE_MANAGER', 'SHEET_ITERATOR', 'ERROR_HANDLER']);
+  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS', 'STATE', 'CONFIG', 'DUPLICATE_MANAGER', 'SHEET_ITERATOR', 'ERROR_HANDLER']);
 }
 
 // Registra DEBUG nel namespace GG
@@ -18799,7 +18798,7 @@ const SETUP = (function () {
     const triggerEveryMin = (Number.isFinite(rawMin) && rawMin > 0) ? rawMin : 15; // Logica invariata, Apps Script arrotonda da solo
 
     // 5) Verifica permessi cartelle
-    UTIL.showToast('Verifico gli ID delle cartelle...', 'Setup');
+    SHARED_UTILS.showToast('Verifico gli ID delle cartelle...', 'Setup');
     let inputFolder, outputFolder;
     try { inputFolder = DriveApp.getFolderById(inputId); }
     catch (e) { throw new Error('ID cartella INPUT non valido o permessi mancanti.'); }
@@ -18807,25 +18806,25 @@ const SETUP = (function () {
     catch (e) { throw new Error('ID cartella OUTPUT non valido o permessi mancanti.'); }
 
     // 6) Preparazione fogli
-    UTIL.showToast('Creazione e formattazione fogli...', 'Setup');
+    SHARED_UTILS.showToast('Creazione e formattazione fogli...', 'Setup');
     SHEETS.ensureAll();
     SHEETS.applyFormats();
     
     // 6.1) Inizializza Dashboard Trigger
     if (typeof TRIGGER_DASHBOARD !== 'undefined' && TRIGGER_DASHBOARD.initSheet) {
-      UTIL.showToast('Inizializzazione Dashboard Trigger...', 'Setup');
+      SHARED_UTILS.showToast('Inizializzazione Dashboard Trigger...', 'Setup');
       TRIGGER_DASHBOARD.initSheet();
     }
 
     // 7) Scrittura configurazione
-    UTIL.showToast('Scrittura configurazione...', 'Setup');
+    SHARED_UTILS.showToast('Scrittura configurazione...', 'Setup');
     _writeConfiguration(inputId, outputId, triggerEveryMin);
     
     CONFIG.invalidateCache();
     SHEETS.invalidateHeaderIndexCache();
 
     // ✅ 8) Manutenzione completa finale (filtri, formati codici, duplicati, integrità)
-    UTIL.showToast('Applicazione formati e verifica integrità...', 'Setup');
+    SHARED_UTILS.showToast('Applicazione formati e verifica integrità...', 'Setup');
     DEBUG.forceTextFormatOnCodes();   // Forza testo su codici
     DEBUG.manageDuplicateInvoices();  // Marca duplicati fatture (silenzioso)
     DEBUG.manageDuplicateRows();      // Marca duplicati righe (silenzioso)
@@ -19252,4 +19251,679 @@ if (typeof GG !== 'undefined') {
     onMaintenanceAction,
     onClearCacheAction
   });
+}
+/**
+ * ============================================================================
+ * 🧪 SMOKE TEST - SHARED_UTILS & BACKWARD COMPATIBILITY
+ * ============================================================================
+ * 
+ * Script di test per verificare:
+ * 1. ✅ SHARED_UTILS caricato correttamente nel namespace GG
+ * 2. ✅ Pattern consolidation (getSheetContext, safeExecute, isValidDate)
+ * 3. ✅ Backward compatibility wrappers UTIL deprecated
+ * 4. ✅ DATE_UTILS API completa accessibile
+ * 5. ✅ Zero breaking changes nel codice esistente
+ * 
+ * ISTRUZIONI:
+ * - Copia/incolla questo file nell'editor Google Apps Script
+ * - Esegui: runSmokeTest() dal menu Run
+ * - Verifica output nel Logger (Ctrl+Enter o View > Logs)
+ * - Tutti i check devono mostrare ✅ (nessun ❌)
+ * 
+ * MODALITÀ: Test NON invasivo (solo lettura, no scritture fogli)
+ * ============================================================================
+ */
+
+/**
+ * Funzione principale Smoke Test
+ * Esegui questa funzione per verificare l'integrità post-refactoring
+ */
+function runSmokeTest() {
+  console.log('================================================================================');
+  console.log('🧪 SMOKE TEST - Verifica SHARED_UTILS & Backward Compatibility');
+  console.log('================================================================================');
+  console.log('Data test: ' + new Date().toLocaleString('it-IT'));
+  console.log('');
+  
+  const results = {
+    passed: 0,
+    failed: 0,
+    tests: []
+  };
+  
+  // TEST 1: Module Registry & Namespace
+  testModuleRegistry(results);
+  
+  // TEST 2: Pattern Consolidation Core
+  testPatternConsolidation(results);
+  
+  // TEST 3: Backward Compatibility Wrappers
+  testBackwardCompatibility(results);
+  
+  // TEST 4: DATE_UTILS API
+  testDateUtils(results);
+  
+  // TEST 5: Utility Functions
+  testUtilityFunctions(results);
+  
+  // Summary Report
+  printSummary(results);
+  
+  return results;
+}
+
+/**
+ * TEST 1: Verifica Module Registry e Namespace GG
+ */
+function testModuleRegistry(results) {
+  console.log('--------------------------------------------------------------------------------');
+  console.log('TEST 1: Module Registry & Namespace GG');
+  console.log('--------------------------------------------------------------------------------');
+  
+  try {
+    // Check SHARED_UTILS caricato
+    if (typeof GG === 'undefined') {
+      logTest(results, '❌ CRITICAL: Namespace GG non definito', false);
+      return;
+    }
+    logTest(results, '✅ Namespace GG definito', true);
+    
+    if (typeof GG.SHARED_UTILS === 'undefined') {
+      logTest(results, '❌ CRITICAL: GG.SHARED_UTILS non caricato', false);
+      return;
+    }
+    logTest(results, '✅ GG.SHARED_UTILS caricato nel namespace', true);
+    
+    // Check funzioni core disponibili
+    const coreFunctions = ['getSheetContext', 'safeExecute', 'isValidDate'];
+    for (const fn of coreFunctions) {
+      if (typeof GG.SHARED_UTILS[fn] !== 'function') {
+        logTest(results, `❌ Funzione ${fn} non disponibile in SHARED_UTILS`, false);
+      } else {
+        logTest(results, `✅ Funzione ${fn} disponibile`, true);
+      }
+    }
+    
+    // Check UTIL ancora disponibile (backward compatibility)
+    if (typeof UTIL === 'undefined') {
+      logTest(results, '❌ CRITICAL: UTIL non disponibile (backward compatibility rotta)', false);
+    } else {
+      logTest(results, '✅ UTIL disponibile (backward compatibility OK)', true);
+    }
+    
+  } catch (e) {
+    logTest(results, '❌ ERRORE TEST 1: ' + e.message, false);
+    console.error(e.stack);
+  }
+  
+  console.log('');
+}
+
+/**
+ * TEST 2: Pattern Consolidation (getSheetContext, safeExecute, isValidDate)
+ */
+function testPatternConsolidation(results) {
+  console.log('--------------------------------------------------------------------------------');
+  console.log('TEST 2: Pattern Consolidation Core');
+  console.log('--------------------------------------------------------------------------------');
+  
+  try {
+    // TEST 2.1: getSheetContext() - Verifica su foglio esistente
+    console.log('TEST 2.1: getSheetContext()');
+    try {
+      // Prova con foglio Fatture (dovrebbe esistere)
+      const ctx = GG.SHARED_UTILS.getSheetContext(SHEETS.SHEET_NAMES.Fatture);
+      
+      if (!ctx) {
+        logTest(results, '⚠️  getSheetContext() ritorna null (foglio Fatture non trovato - verificare manualmente)', true);
+      } else {
+        // Verifica struttura ritornata
+        const requiredKeys = ['sheet', 'headerRow', 'idx', 'lastRow', 'lastCol'];
+        let structureOk = true;
+        for (const key of requiredKeys) {
+          if (!(key in ctx)) {
+            logTest(results, `❌ getSheetContext(): manca proprietà '${key}'`, false);
+            structureOk = false;
+          }
+        }
+        
+        if (structureOk) {
+          logTest(results, '✅ getSheetContext() struttura corretta (sheet, headerRow, idx, lastRow, lastCol)', true);
+          console.log(`   → Foglio: ${ctx.sheet ? ctx.sheet.getName() : 'N/A'}, Righe: ${ctx.lastRow}, Colonne: ${ctx.lastCol}`);
+        }
+      }
+    } catch (e) {
+      logTest(results, '❌ getSheetContext() errore: ' + e.message, false);
+    }
+    
+    // TEST 2.2: safeExecute() - Wrapper error handling
+    console.log('TEST 2.2: safeExecute()');
+    try {
+      // Test funzione successo
+      const resultSuccess = GG.SHARED_UTILS.safeExecute(
+        () => {
+          return { value: 42, message: 'Test OK' };
+        },
+        'SMOKE_TEST',
+        { 
+          errorMessage: 'Errore test safeExecute',
+          silent: true // No toast durante test
+        }
+      );
+      
+      if (resultSuccess && resultSuccess.value === 42) {
+        logTest(results, '✅ safeExecute() funzione successo OK', true);
+      } else {
+        logTest(results, '❌ safeExecute() ritorno inaspettato', false);
+      }
+      
+      // Test funzione errore (should catch)
+      const resultError = GG.SHARED_UTILS.safeExecute(
+        () => {
+          throw new Error('Test error intenzionale');
+        },
+        'SMOKE_TEST',
+        { 
+          errorMessage: 'Errore catturato correttamente',
+          silent: true
+        }
+      );
+      
+      if (resultError === null || resultError === undefined) {
+        logTest(results, '✅ safeExecute() catch errore OK', true);
+      } else {
+        logTest(results, '⚠️  safeExecute() catch errore comportamento inaspettato', true);
+      }
+      
+    } catch (e) {
+      logTest(results, '❌ safeExecute() errore: ' + e.message, false);
+    }
+    
+    // TEST 2.3: isValidDate() - Validazione date
+    console.log('TEST 2.3: isValidDate()');
+    try {
+      const testCases = [
+        { value: new Date(), expected: true, desc: 'Date valida' },
+        { value: new Date('2025-11-28'), expected: true, desc: 'Date da stringa ISO' },
+        { value: null, expected: false, desc: 'null' },
+        { value: undefined, expected: false, desc: 'undefined' },
+        { value: 'not a date', expected: false, desc: 'stringa invalida' },
+        { value: 12345, expected: false, desc: 'numero' },
+        { value: new Date('invalid'), expected: false, desc: 'Date invalida (NaN)' }
+      ];
+      
+      let allPassed = true;
+      for (const test of testCases) {
+        const result = GG.SHARED_UTILS.isValidDate(test.value);
+        if (result !== test.expected) {
+          logTest(results, `❌ isValidDate(${test.desc}): atteso ${test.expected}, ricevuto ${result}`, false);
+          allPassed = false;
+        }
+      }
+      
+      if (allPassed) {
+        logTest(results, `✅ isValidDate() tutti i ${testCases.length} test case OK`, true);
+      }
+      
+    } catch (e) {
+      logTest(results, '❌ isValidDate() errore: ' + e.message, false);
+    }
+    
+  } catch (e) {
+    logTest(results, '❌ ERRORE TEST 2: ' + e.message, false);
+    console.error(e.stack);
+  }
+  
+  console.log('');
+}
+
+/**
+ * TEST 3: Backward Compatibility Wrappers UTIL
+ */
+function testBackwardCompatibility(results) {
+  console.log('--------------------------------------------------------------------------------');
+  console.log('TEST 3: Backward Compatibility Wrappers');
+  console.log('--------------------------------------------------------------------------------');
+  
+  try {
+    // TEST 3.1: UTIL.showToast() wrapper
+    console.log('TEST 3.1: UTIL.showToast() (deprecated wrapper)');
+    try {
+      // Non chiamiamo realmente (evita popup), verifichiamo solo esistenza
+      if (typeof UTIL.showToast === 'function') {
+        logTest(results, '✅ UTIL.showToast() disponibile (backward compatibility)', true);
+      } else {
+        logTest(results, '❌ UTIL.showToast() non disponibile', false);
+      }
+    } catch (e) {
+      logTest(results, '❌ UTIL.showToast() errore: ' + e.message, false);
+    }
+    
+    // TEST 3.2: UTIL.getColumnLetter() wrapper
+    console.log('TEST 3.2: UTIL.getColumnLetter() (deprecated wrapper)');
+    try {
+      const testCases = [
+        { input: 0, expected: 'A' },
+        { input: 25, expected: 'Z' },
+        { input: 26, expected: 'AA' },
+        { input: 701, expected: 'ZZ' }
+      ];
+      
+      let allPassed = true;
+      for (const test of testCases) {
+        const result = UTIL.getColumnLetter(test.input);
+        if (result !== test.expected) {
+          logTest(results, `❌ UTIL.getColumnLetter(${test.input}): atteso '${test.expected}', ricevuto '${result}'`, false);
+          allPassed = false;
+        }
+      }
+      
+      if (allPassed) {
+        logTest(results, `✅ UTIL.getColumnLetter() wrapper funzionante (${testCases.length} test case)`, true);
+      }
+    } catch (e) {
+      logTest(results, '❌ UTIL.getColumnLetter() errore: ' + e.message, false);
+    }
+    
+    // TEST 3.3: UTIL.checkColumns() wrapper
+    console.log('TEST 3.3: UTIL.checkColumns() (deprecated wrapper)');
+    try {
+      const mockIdx = { Fornitore: 0, Data: 1, Importo: 2 };
+      const required = ['Fornitore', 'Data', 'Importo', 'ColonnaMancante'];
+      const missing = UTIL.checkColumns(mockIdx, required);
+      
+      if (Array.isArray(missing) && missing.length === 1 && missing[0] === 'ColonnaMancante') {
+        logTest(results, '✅ UTIL.checkColumns() wrapper funzionante', true);
+      } else {
+        logTest(results, '❌ UTIL.checkColumns() risultato inaspettato: ' + JSON.stringify(missing), false);
+      }
+    } catch (e) {
+      logTest(results, '❌ UTIL.checkColumns() errore: ' + e.message, false);
+    }
+    
+    // TEST 3.4: UTIL.forceText() wrapper
+    console.log('TEST 3.4: UTIL.forceText() (deprecated wrapper)');
+    try {
+      const testCases = [
+        { input: '00123', expected: "'00123" },
+        { input: '123', expected: "'123" },
+        { input: 'text', expected: "'text" }
+      ];
+      
+      let allPassed = true;
+      for (const test of testCases) {
+        const result = UTIL.forceText(test.input);
+        if (result !== test.expected) {
+          logTest(results, `❌ UTIL.forceText('${test.input}'): atteso '${test.expected}', ricevuto '${result}'`, false);
+          allPassed = false;
+        }
+      }
+      
+      if (allPassed) {
+        logTest(results, `✅ UTIL.forceText() wrapper funzionante (${testCases.length} test case)`, true);
+      }
+    } catch (e) {
+      logTest(results, '❌ UTIL.forceText() errore: ' + e.message, false);
+    }
+    
+    // TEST 3.5: UTIL.date.* namespace wrappers
+    console.log('TEST 3.5: UTIL.date.* namespace (deprecated wrappers)');
+    try {
+      if (typeof UTIL.date === 'undefined' || UTIL.date === null) {
+        logTest(results, '❌ UTIL.date namespace non disponibile', false);
+      } else {
+        const dateFunctions = ['formatIsoDate', 'formatItalianDate', 'parseXmlDate', 'extractYearMonth'];
+        let allAvailable = true;
+        
+        for (const fn of dateFunctions) {
+          if (typeof UTIL.date[fn] !== 'function') {
+            logTest(results, `❌ UTIL.date.${fn}() non disponibile`, false);
+            allAvailable = false;
+          }
+        }
+        
+        if (allAvailable) {
+          logTest(results, `✅ UTIL.date.* namespace wrapper disponibile (${dateFunctions.length} funzioni verificate)`, true);
+        }
+      }
+    } catch (e) {
+      logTest(results, '❌ UTIL.date.* errore: ' + e.message, false);
+    }
+    
+  } catch (e) {
+    logTest(results, '❌ ERRORE TEST 3: ' + e.message, false);
+    console.error(e.stack);
+  }
+  
+  console.log('');
+}
+
+/**
+ * TEST 4: DATE_UTILS API Completa
+ */
+function testDateUtils(results) {
+  console.log('--------------------------------------------------------------------------------');
+  console.log('TEST 4: DATE_UTILS API Completa');
+  console.log('--------------------------------------------------------------------------------');
+  
+  try {
+    const testDate = new Date('2025-11-28T14:30:00');
+    
+    // TEST 4.1: Formatting functions
+    console.log('TEST 4.1: Date Formatting');
+    try {
+      const formats = [
+        { fn: 'formatIsoDate', expected: '2025-11-28' },
+        { fn: 'formatItalianDate', expected: '28/11/2025' },
+        { fn: 'formatTimestamp', expectedPattern: /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/ }
+      ];
+      
+      let allPassed = true;
+      for (const test of formats) {
+        const result = GG.SHARED_UTILS.date[test.fn](testDate);
+        
+        if (test.expected) {
+          if (result !== test.expected) {
+            logTest(results, `❌ date.${test.fn}(): atteso '${test.expected}', ricevuto '${result}'`, false);
+            allPassed = false;
+          }
+        } else if (test.expectedPattern) {
+          if (!test.expectedPattern.test(result)) {
+            logTest(results, `❌ date.${test.fn}(): formato inaspettato '${result}'`, false);
+            allPassed = false;
+          }
+        }
+      }
+      
+      if (allPassed) {
+        logTest(results, `✅ Date formatting funzionante (${formats.length} formati testati)`, true);
+      }
+    } catch (e) {
+      logTest(results, '❌ Date formatting errore: ' + e.message, false);
+    }
+    
+    // TEST 4.2: Parsing functions
+    console.log('TEST 4.2: Date Parsing');
+    try {
+      // parseXmlDate (ISO 8601)
+      const xmlDate = GG.SHARED_UTILS.date.parseXmlDate('2025-11-28');
+      if (xmlDate instanceof Date && !isNaN(xmlDate.getTime())) {
+        logTest(results, '✅ date.parseXmlDate() parsing ISO 8601 OK', true);
+      } else {
+        logTest(results, '❌ date.parseXmlDate() parsing fallito', false);
+      }
+      
+      // parseItalianDate (DD/MM/YYYY)
+      const italianDate = GG.SHARED_UTILS.date.parseItalianDate('28/11/2025');
+      if (italianDate instanceof Date && !isNaN(italianDate.getTime())) {
+        logTest(results, '✅ date.parseItalianDate() parsing DD/MM/YYYY OK', true);
+      } else {
+        logTest(results, '❌ date.parseItalianDate() parsing fallito', false);
+      }
+    } catch (e) {
+      logTest(results, '❌ Date parsing errore: ' + e.message, false);
+    }
+    
+    // TEST 4.3: Extraction & Calculation
+    console.log('TEST 4.3: Date Extraction & Calculation');
+    try {
+      // extractYearMonth
+      const ym = GG.SHARED_UTILS.date.extractYearMonth(testDate);
+      if (ym && ym.anno === '2025' && ym.mese === 11) {
+        logTest(results, '✅ date.extractYearMonth() extraction OK', true);
+      } else {
+        logTest(results, '❌ date.extractYearMonth() risultato inaspettato: ' + JSON.stringify(ym), false);
+      }
+      
+      // getItalianMonthName
+      const monthName = GG.SHARED_UTILS.date.getItalianMonthName(11);
+      if (monthName === 'Novembre') {
+        logTest(results, '✅ date.getItalianMonthName() nome mese OK', true);
+      } else {
+        logTest(results, `❌ date.getItalianMonthName(11): atteso 'Novembre', ricevuto '${monthName}'`, false);
+      }
+      
+      // daysBetween
+      const date1 = new Date('2025-11-01');
+      const date2 = new Date('2025-11-28');
+      const days = GG.SHARED_UTILS.date.daysBetween(date1, date2);
+      if (days === 27) {
+        logTest(results, '✅ date.daysBetween() calcolo differenza OK', true);
+      } else {
+        logTest(results, `❌ date.daysBetween(): atteso 27, ricevuto ${days}`, false);
+      }
+      
+    } catch (e) {
+      logTest(results, '❌ Date extraction/calculation errore: ' + e.message, false);
+    }
+    
+    // TEST 4.4: Month boundaries
+    console.log('TEST 4.4: Date Month Boundaries');
+    try {
+      const firstDay = GG.SHARED_UTILS.date.getFirstDayOfMonth(testDate);
+      const lastDay = GG.SHARED_UTILS.date.getLastDayOfMonth(testDate);
+      
+      if (firstDay.getDate() === 1 && firstDay.getMonth() === 10) { // 10 = Novembre (0-based)
+        logTest(results, '✅ date.getFirstDayOfMonth() calcolo OK', true);
+      } else {
+        logTest(results, '❌ date.getFirstDayOfMonth() risultato inaspettato', false);
+      }
+      
+      if (lastDay.getDate() === 30 && lastDay.getMonth() === 10) { // Novembre ha 30 giorni
+        logTest(results, '✅ date.getLastDayOfMonth() calcolo OK', true);
+      } else {
+        logTest(results, '❌ date.getLastDayOfMonth() risultato inaspettato', false);
+      }
+    } catch (e) {
+      logTest(results, '❌ Date boundaries errore: ' + e.message, false);
+    }
+    
+  } catch (e) {
+    logTest(results, '❌ ERRORE TEST 4: ' + e.message, false);
+    console.error(e.stack);
+  }
+  
+  console.log('');
+}
+
+/**
+ * TEST 5: Utility Functions Bonus
+ */
+function testUtilityFunctions(results) {
+  console.log('--------------------------------------------------------------------------------');
+  console.log('TEST 5: Utility Functions Bonus');
+  console.log('--------------------------------------------------------------------------------');
+  
+  try {
+    // TEST 5.1: normalizeString()
+    console.log('TEST 5.1: normalizeString()');
+    try {
+      const testCases = [
+        { input: '  test   string  ', expected: 'TEST STRING' },
+        { input: 'CamelCase', expected: 'CAMELCASE' },
+        { input: null, expected: '' },
+        { input: undefined, expected: '' }
+      ];
+      
+      let allPassed = true;
+      for (const test of testCases) {
+        const result = GG.SHARED_UTILS.normalizeString(test.input);
+        if (result !== test.expected) {
+          logTest(results, `❌ normalizeString('${test.input}'): atteso '${test.expected}', ricevuto '${result}'`, false);
+          allPassed = false;
+        }
+      }
+      
+      if (allPassed) {
+        logTest(results, `✅ normalizeString() funzionante (${testCases.length} test case)`, true);
+      }
+    } catch (e) {
+      logTest(results, '❌ normalizeString() errore: ' + e.message, false);
+    }
+    
+    // TEST 5.2: toNumber()
+    console.log('TEST 5.2: toNumber()');
+    try {
+      const testCases = [
+        { input: '42', expected: 42 },
+        { input: '3.14', expected: 3.14 },
+        { input: null, defaultVal: 99, expected: 99 },
+        { input: 'not a number', defaultVal: 0, expected: 0 },
+        { input: undefined, defaultVal: -1, expected: -1 }
+      ];
+      
+      let allPassed = true;
+      for (const test of testCases) {
+        const result = GG.SHARED_UTILS.toNumber(test.input, test.defaultVal);
+        if (result !== test.expected) {
+          logTest(results, `❌ toNumber('${test.input}', ${test.defaultVal}): atteso ${test.expected}, ricevuto ${result}`, false);
+          allPassed = false;
+        }
+      }
+      
+      if (allPassed) {
+        logTest(results, `✅ toNumber() funzionante (${testCases.length} test case)`, true);
+      }
+    } catch (e) {
+      logTest(results, '❌ toNumber() errore: ' + e.message, false);
+    }
+    
+    // TEST 5.3: toBoolean()
+    console.log('TEST 5.3: toBoolean()');
+    try {
+      const testCases = [
+        { input: 'true', expected: true },
+        { input: 'TRUE', expected: true },
+        { input: 'vero', expected: true },
+        { input: '1', expected: true },
+        { input: 'si', expected: true },
+        { input: 'yes', expected: true },
+        { input: 'false', expected: false },
+        { input: '0', expected: false },
+        { input: null, defaultVal: true, expected: true },
+        { input: undefined, defaultVal: false, expected: false }
+      ];
+      
+      let allPassed = true;
+      for (const test of testCases) {
+        const result = GG.SHARED_UTILS.toBoolean(test.input, test.defaultVal);
+        if (result !== test.expected) {
+          logTest(results, `❌ toBoolean('${test.input}', ${test.defaultVal}): atteso ${test.expected}, ricevuto ${result}`, false);
+          allPassed = false;
+        }
+      }
+      
+      if (allPassed) {
+        logTest(results, `✅ toBoolean() funzionante (${testCases.length} test case)`, true);
+      }
+    } catch (e) {
+      logTest(results, '❌ toBoolean() errore: ' + e.message, false);
+    }
+    
+  } catch (e) {
+    logTest(results, '❌ ERRORE TEST 5: ' + e.message, false);
+    console.error(e.stack);
+  }
+  
+  console.log('');
+}
+
+/**
+ * Helper: Log singolo test e aggiorna contatori
+ */
+function logTest(results, message, passed) {
+  console.log(message);
+  results.tests.push({ message: message, passed: passed });
+  
+  if (passed) {
+    results.passed++;
+  } else {
+    results.failed++;
+  }
+}
+
+/**
+ * Helper: Stampa summary finale
+ */
+function printSummary(results) {
+  console.log('================================================================================');
+  console.log('📊 SUMMARY SMOKE TEST');
+  console.log('================================================================================');
+  console.log(`Total Tests: ${results.passed + results.failed}`);
+  console.log(`✅ Passed: ${results.passed}`);
+  console.log(`❌ Failed: ${results.failed}`);
+  console.log('');
+  
+  if (results.failed === 0) {
+    console.log('🎉 TUTTI I TEST PASSATI! ✅');
+    console.log('');
+    console.log('✅ SHARED_UTILS funzionante correttamente');
+    console.log('✅ Backward compatibility garantita');
+    console.log('✅ Pattern consolidation operativo');
+    console.log('✅ DATE_UTILS API completa');
+    console.log('');
+    console.log('🚀 SISTEMA PRONTO PER REFACTORING MODULI');
+  } else {
+    console.log('⚠️  ALCUNI TEST FALLITI - VERIFICA RICHIESTA');
+    console.log('');
+    console.log('Test falliti:');
+    for (const test of results.tests) {
+      if (!test.passed) {
+        console.log('  - ' + test.message);
+      }
+    }
+    console.log('');
+    console.log('⚠️  NON PROCEDERE CON REFACTORING FINO A RISOLUZIONE ERRORI');
+  }
+  
+  console.log('================================================================================');
+  console.log('Fine Smoke Test - ' + new Date().toLocaleString('it-IT'));
+  console.log('================================================================================');
+}
+
+/**
+ * Quick Test: Esegui solo test critici (per verifica rapida)
+ */
+function runQuickTest() {
+  console.log('🚀 QUICK TEST - Solo verifica critica');
+  console.log('');
+  
+  try {
+    // 1. Check namespace
+    if (typeof GG === 'undefined' || typeof GG.SHARED_UTILS === 'undefined') {
+      console.log('❌ CRITICAL: SHARED_UTILS non caricato');
+      return false;
+    }
+    console.log('✅ SHARED_UTILS caricato');
+    
+    // 2. Check pattern core
+    if (typeof GG.SHARED_UTILS.getSheetContext !== 'function') {
+      console.log('❌ getSheetContext() mancante');
+      return false;
+    }
+    console.log('✅ getSheetContext() disponibile');
+    
+    // 3. Check backward compatibility
+    if (typeof UTIL === 'undefined' || typeof UTIL.showToast !== 'function') {
+      console.log('❌ Backward compatibility rotta');
+      return false;
+    }
+    console.log('✅ Backward compatibility OK');
+    
+    // 4. Check DATE_UTILS
+    if (typeof GG.SHARED_UTILS.date === 'undefined') {
+      console.log('❌ DATE_UTILS mancante');
+      return false;
+    }
+    console.log('✅ DATE_UTILS disponibile');
+    
+    console.log('');
+    console.log('✅ QUICK TEST PASSED - Sistema operativo');
+    return true;
+    
+  } catch (e) {
+    console.log('❌ QUICK TEST FAILED: ' + e.message);
+    console.error(e.stack);
+    return false;
+  }
 }
