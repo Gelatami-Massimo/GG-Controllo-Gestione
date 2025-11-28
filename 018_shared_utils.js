@@ -4,6 +4,7 @@
 // RUOLO: Utility condivise per eliminazione codice duplicato (Debito Tecnico).
 // NOTE: Consolidamento utility generiche da 030_globals.js + pattern ripetuti.
 //       Separa LOGICA (utility) da DATI (globals/state).
+//       DIPENDENZE: SHEETS, LOG, CONSTANTS (verificare ordine caricamento in .clasp.json)
 // =============================================================
 
 const SHARED_UTILS = (function () {
