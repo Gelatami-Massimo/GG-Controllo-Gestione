@@ -541,7 +541,7 @@ const IMPORT_ROWS = (function () {
     const lastInvoiceRow = shF.getLastRow();
 
     if (currentRow > lastInvoiceRow) {
-      if (!isSilent) UTIL.showToast('Nessuna nuova riga da importare.', 'Info', 5);
+      if (!isSilent) SHARED_UTILS.showToast('Nessuna nuova riga da importare.', 'Info', 5);
       STATE.clear(CURSOR_KEY);
       return;
     }
@@ -577,7 +577,7 @@ const IMPORT_ROWS = (function () {
         _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF);
         LOG?.warn('ROWS', 'Timeout. Ripresa salvata.');
         if (!isSilent) {
-          UTIL.showToast('Timeout raggiunto. Clicca "Continua" per riprendere.', 'Pausa', 10);
+          SHARED_UTILS.showToast('Timeout raggiunto. Clicca "Continua" per riprendere.', 'Pausa', 10);
         }
       },
       processChunk: (invoicesChunk, chunkStartRow) => {
@@ -667,7 +667,7 @@ const IMPORT_ROWS = (function () {
           current: progressRow, total: lastInvoiceRow,
           message: `Importo righe: ${progressRow}/${lastInvoiceRow}...`
         });
-        UTIL.showToast(`Elaboro fattura ${progressRow}/${lastInvoiceRow}...`, 'Importazione Righe', 3);
+        SHARED_UTILS.showToast(`Elaboro fattura ${progressRow}/${lastInvoiceRow}...`, 'Importazione Righe', 3);
       }
     }
     });
@@ -1118,7 +1118,7 @@ const IMPORT_ROWS = (function () {
 
 // Registra IMPORT_ROWS nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('IMPORT_ROWS', ['SHEETS', 'LOG', 'UTIL', 'PRODUCTS', 'STATE', 'CONFIG', 'SHEET_ITERATOR']);
+  ModuleRegistry.register('IMPORT_ROWS', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS', 'PRODUCTS', 'STATE', 'CONFIG', 'SHEET_ITERATOR']);
 }
 
 // Registra IMPORT_ROWS nel namespace GG

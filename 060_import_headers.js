@@ -1109,6 +1109,7 @@ if (typeof ModuleRegistry !== 'undefined') {
     'SHEETS',
     'LOG',
     'UTIL',
+    'SHARED_UTILS',
     'XMLSAFE',
     'STATE',
     'CONFIG'

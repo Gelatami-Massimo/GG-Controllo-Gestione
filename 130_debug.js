@@ -70,11 +70,11 @@ const DEBUG = (function () {
 
     if (errors === 0 && warnings === 0) {
       LOG.info('SANITY_CHECK', 'Controllo integrità completato: NESSUN PROBLEMA RILEVATO.');
-      UTIL.showToast('Controllo integrità: OK!', 'Completato', 5);
+      SHARED_UTILS.showToast('Controllo integrità: OK!', 'Completato', 5);
     } else {
       const msg = `Controllo completato: ${errors} ERRORE/I, ${warnings} AVVISO/I. Controlla il foglio Log.`;
       LOG.warn('SANITY_CHECK', msg);
-      UTIL.showToast(msg, 'Attenzione', 10);
+      SHARED_UTILS.showToast(msg, 'Attenzione', 10);
     }
   }
 
@@ -107,7 +107,7 @@ const DEBUG = (function () {
     const supplierMap = _getCurrentSupplierMap();
     if (supplierMap.size === 0) {
       LOG.warn('SYNC_CATEGORIES', 'Mappa fornitori vuota o non leggibile. Operazione annullata.');
-      UTIL.showToast('Errore: impossibile leggere i fornitori.', 'Errore');
+      SHARED_UTILS.showToast('Errore: impossibile leggere i fornitori.', 'Errore');
       return;
     }
 
@@ -164,7 +164,7 @@ const DEBUG = (function () {
           }
           cursor.sheetIndex = i;
           STATE.setJSON(SYNC_CAT_CURSOR_KEY, cursor);
-          UTIL.showToast(`Timeout. Pausa (${sheetName}). Clicca di nuovo per riprendere.`, 'Pausa', 10);
+          SHARED_UTILS.showToast(`Timeout. Pausa (${sheetName}). Clicca di nuovo per riprendere.`, 'Pausa', 10);
           LOG.warn('SYNC_CATEGORIES', `Timeout ${sheetName}. Ripresa salvata.`);
         },
         processChunk: (chunkData, chunkStartRow) => {
@@ -247,7 +247,7 @@ const DEBUG = (function () {
 
           // UI progress
           if (chunkStartRow % (CHUNK_SIZE * 2) === 0) {
-            UTIL.showToast(`Riallineo ${sheetName}: riga ${chunkStartRow}/${lastRow}...`, 'Manutenzione', -1);
+            SHARED_UTILS.showToast(`Riallineo ${sheetName}: riga ${chunkStartRow}/${lastRow}...`, 'Manutenzione', -1);
           }
         }
       });
@@ -269,7 +269,7 @@ const DEBUG = (function () {
     }
 
     STATE.clear(SYNC_CAT_CURSOR_KEY);
-    UTIL.showToast('Riallineamento categorie completato!', 'Fatto!');
+    SHARED_UTILS.showToast('Riallineamento categorie completato!', 'Fatto!');
     LOG.info('SYNC_CATEGORIES', 'Completato per tutti i fogli.');
   }
 
@@ -344,7 +344,7 @@ const DEBUG = (function () {
 
     const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
     const shFor = SHEETS.get(SHEETS.SHEET_NAMES.Fornitori);
-    if (!shF || !shFor) { UTIL.showToast("Fogli 'Fatture' o 'Fornitori' non trovati.", 'Errore'); return; }
+    if (!shF || !shFor) { SHARED_UTILS.showToast("Fogli 'Fatture' o 'Fornitori' non trovati.", 'Errore'); return; }
 
     const headerRowF = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
     const headerRowFor = SHEETS._findHeaderRow(shFor, SHEETS.SHEET_NAMES.Fornitori);
@@ -352,12 +352,12 @@ const DEBUG = (function () {
 
     let cursor = STATE.getJSON(SYNC_SUPPLIERS_CURSOR_KEY, { nextRow: headerRowF + 1 });
 
-    if (cursor.nextRow > lastRowF) { UTIL.showToast('Nessuna nuova fattura da cui sincronizzare fornitori.', 'Info'); STATE.clear(SYNC_SUPPLIERS_CURSOR_KEY); return; }
+    if (cursor.nextRow > lastRowF) { SHARED_UTILS.showToast('Nessuna nuova fattura da cui sincronizzare fornitori.', 'Info'); STATE.clear(SYNC_SUPPLIERS_CURSOR_KEY); return; }
 
     const idxF = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Fatture);
     const requiredF = ['FornitoreID', 'DenominazioneFornitore', 'RegimeFiscale'];
     const missingF = UTIL.checkColumns(idxF, requiredF);
-    if (missingF.length) { UTIL.showToast(`Colonne mancanti in Fatture: ${missingF.join(', ')}`, 'Errore'); return; }
+    if (missingF.length) { SHARED_UTILS.showToast(`Colonne mancanti in Fatture: ${missingF.join(', ')}`, 'Errore'); return; }
 
     const existingIds = new Set();
     try {
@@ -379,7 +379,7 @@ const DEBUG = (function () {
     let added = 0;
     const lastColNeeded = Math.max(idxF.FornitoreID, idxF.DenominazioneFornitore, idxF.RegimeFiscale) + 1;
 
-    UTIL.showToast('Sincronizzazione Fornitori da Fatture...', 'Manutenzione', -1);
+    SHARED_UTILS.showToast('Sincronizzazione Fornitori da Fatture...', 'Manutenzione', -1);
 
     // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling
     const iteratorResult = SHEET_ITERATOR.forEachChunk({
@@ -400,7 +400,7 @@ const DEBUG = (function () {
           if (written) added += written;
           newRowsBatch = [];
         }
-        UTIL.showToast(`Pausa per timeout: aggiunti finora ${added} fornitori. Riprendere.`, 'Pausa', 10);
+        SHARED_UTILS.showToast(`Pausa per timeout: aggiunti finora ${added} fornitori. Riprendere.`, 'Pausa', 10);
         LOG.warn('DEBUG_SYNC_SUP_FROM_INV', `Timeout dopo ${added} nuovi fornitori. Ripresa salvata.`);
       },
       processChunk: (chunk, chunkStartRow) => {
@@ -427,7 +427,7 @@ const DEBUG = (function () {
 
         // UI progress
         if (chunkStartRow % (CHUNK_SIZE * 2) === 0) {
-          UTIL.showToast(`Sincronizzo fornitori... (riga ${chunkStartRow}/${lastRowF})`, 'Manutenzione', -1);
+          SHARED_UTILS.showToast(`Sincronizzo fornitori... (riga ${chunkStartRow}/${lastRowF})`, 'Manutenzione', -1);
         }
       }
     });
@@ -444,7 +444,7 @@ const DEBUG = (function () {
     }
 
     STATE.clear(SYNC_SUPPLIERS_CURSOR_KEY);
-    UTIL.showToast(`Sincronizzazione completata. Aggiunti ${added} fornitori.`, 'Completato', 5);
+    SHARED_UTILS.showToast(`Sincronizzazione completata. Aggiunti ${added} fornitori.`, 'Completato', 5);
     LOG.info('DEBUG_SYNC_SUP_FROM_INV', `Sync fornitori completato. Aggiunti ${added}.`);
   }
 
@@ -497,7 +497,7 @@ const DEBUG = (function () {
         onTimeout: () => {
           cursor.sheetIndex = i;
           STATE.setJSON(FORCE_TEXT_CURSOR_KEY, cursor);
-          UTIL.showToast(`Timeout. Pausa (${sheetName}).`, 'Pausa', 10);
+          SHARED_UTILS.showToast(`Timeout. Pausa (${sheetName}).`, 'Pausa', 10);
           LOG.warn('FORCE_TEXT', `Timeout ${sheetName}. Ripresa salvata.`);
         },
         processChunk: (chunkData, chunkStartRow) => {
@@ -522,7 +522,7 @@ const DEBUG = (function () {
 
           // UI progress
           if (chunkStartRow % (CHUNK_SIZE * 2) === 0) {
-            UTIL.showToast(`Applico formato testo ${sheetName}: riga ${chunkStartRow}/${lastRow}...`, 'Manutenzione', -1);
+            SHARED_UTILS.showToast(`Applico formato testo ${sheetName}: riga ${chunkStartRow}/${lastRow}...`, 'Manutenzione', -1);
           }
         }
       });
@@ -537,7 +537,7 @@ const DEBUG = (function () {
     }
 
     STATE.clear(FORCE_TEXT_CURSOR_KEY);
-    UTIL.showToast('Formato testo applicato con successo!', 'Fatto!');
+    SHARED_UTILS.showToast('Formato testo applicato con successo!', 'Fatto!');
     LOG.info('FORCE_TEXT', 'Applicazione formato testo completata.');
   }
 
@@ -591,7 +591,7 @@ const DEBUG = (function () {
 
         if (!fornId || !numDoc) return;
 
-        if (UTIL.date.isValidDate(dataDoc)) {
+        if (SHARED_UTILS.isValidDate(dataDoc)) {
           dataDoc = Utilities.formatDate(dataDoc, Session.getScriptTimeZone(), 'yyyy-MM-dd');
         } else {
           return; // Skip righe con data non valida
@@ -749,7 +749,7 @@ const DEBUG = (function () {
       STATE.set(DUPLICATE_COUNT_KEY, result?.found ?? 0);
     } catch (e) {
       LOG.error('DEBUG_MARK_DUPLICATES', 'Errore marca duplicati fatture.', { error: e.message });
-      UTIL.showToast('Errore durante marcatura duplicati. Vedi Log.', 'Errore');
+      SHARED_UTILS.showToast('Errore durante marcatura duplicati. Vedi Log.', 'Errore');
     }
   }
 
@@ -771,7 +771,7 @@ const DEBUG = (function () {
 
     let cursor = STATE.getJSON(CLEAR_CURSOR_KEY, { nextRow: headerRowF + 1 });
 
-    UTIL.showToast('Pulizia marcatura duplicati...', 'Manutenzione', -1);
+    SHARED_UTILS.showToast('Pulizia marcatura duplicati...', 'Manutenzione', -1);
     LOG.info('DEBUG_CLEAR_MARKING', `Avvio pulizia da riga ${cursor.nextRow}.`);
 
     // REFACTORED: Use SHEET_ITERATOR for automatic chunk handling
@@ -785,7 +785,7 @@ const DEBUG = (function () {
       cursorKey: CLEAR_CURSOR_KEY,
       maxRuntimeSec: maxSec,
       onTimeout: () => {
-        UTIL.showToast('Timeout pulizia. Riprendere.', 'Pausa', 10);
+        SHARED_UTILS.showToast('Timeout pulizia. Riprendere.', 'Pausa', 10);
         LOG.warn('DEBUG_CLEAR_MARKING', 'Timeout. Ripresa salvata.');
       },
       processChunk: (chunkData, chunkStartRow) => {
@@ -797,7 +797,7 @@ const DEBUG = (function () {
 
         // UI progress
         if (chunkStartRow % (BATCH_SIZE_CLEAR * 2) === 0) {
-          UTIL.showToast(`Pulisco marcatura: riga ${chunkStartRow}/${lastRowF}...`, 'Manutenzione', -1);
+          SHARED_UTILS.showToast(`Pulisco marcatura: riga ${chunkStartRow}/${lastRowF}...`, 'Manutenzione', -1);
         }
       }
     });
@@ -808,7 +808,7 @@ const DEBUG = (function () {
     }
 
     STATE.clear(CLEAR_CURSOR_KEY);
-    UTIL.showToast('Marcatura duplicati rimossa.', 'Fatto!');
+    SHARED_UTILS.showToast('Marcatura duplicati rimossa.', 'Fatto!');
     LOG.info('DEBUG_CLEAR_MARKING', 'Pulizia marcatura completata.');
     STATE.set(DUPLICATE_COUNT_KEY, 0);
   }
@@ -823,9 +823,9 @@ const DEBUG = (function () {
       'Cancellerò TUTTI i dati temporanei e i progressi salvati (cursori). Sei sicuro?',
       ui.ButtonSet.YES_NO
     );
-    if (res !== ui.Button.YES) { UTIL.showToast('Pulizia cache annullata.', 'Info'); return; }
+    if (res !== ui.Button.YES) { SHARED_UTILS.showToast('Pulizia cache annullata.', 'Info'); return; }
 
-    UTIL.showToast('Pulizia cache e cursori in corso...', 'Debug', -1);
+    SHARED_UTILS.showToast('Pulizia cache e cursori in corso...', 'Debug', -1);
 
     // 1. Pulisci ScriptProperties (più veloce: deleteAllProperties)
     try {
@@ -861,7 +861,7 @@ const DEBUG = (function () {
       // Ignora se moduli non disponibili
     }
 
-    UTIL.showToast('Cache e cursori azzerati!', 'Completato', 3);
+    SHARED_UTILS.showToast('Cache e cursori azzerati!', 'Completato', 3);
   }
 
 
@@ -871,10 +871,10 @@ const DEBUG = (function () {
    */
   function createDuplicateSnapshot() {
     const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
-    if (!shF) { UTIL.showToast('Foglio Fatture non trovato.', 'Errore'); return; }
+    if (!shF) { SHARED_UTILS.showToast('Foglio Fatture non trovato.', 'Errore'); return; }
 
     const headerRow = SHEETS._findHeaderRow(shF, SHEETS.SHEET_NAMES.Fatture);
-    if (shF.getLastRow() <= headerRow) { UTIL.showToast('Nessuna riga in Fatture.', 'Info'); return; }
+    if (shF.getLastRow() <= headerRow) { SHARED_UTILS.showToast('Nessuna riga in Fatture.', 'Info'); return; }
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const SNAP_NAME = 'Fatture Duplicate (Snapshot)';
@@ -910,7 +910,7 @@ const DEBUG = (function () {
     }
 
     if (toCopy.length === 0) {
-      UTIL.showToast('Nessuna riga marcata come duplicata (sfondo giallo).', 'Info');
+      SHARED_UTILS.showToast('Nessuna riga marcata come duplicata (sfondo giallo).', 'Info');
       LOG.info('DEBUG_SNAPSHOT_DUP', 'Nessuna riga gialla trovata per snapshot.');
       return;
     }
@@ -919,7 +919,7 @@ const DEBUG = (function () {
       shSnap.getRange(2, 1, toCopy.length, snapHeaders.length).setValues(toCopy);
       try { shSnap.autoResizeColumns(1, snapHeaders.length); } catch (_) {}
       shSnap.getRange(1, snapHeaders.length + 2).setValue(`Snapshot: ${new Date().toLocaleString('it-IT')}`).setFontStyle('italic');
-      UTIL.showToast(`Snapshot creato: ${toCopy.length} righe duplicate su "${SNAP_NAME}".`, 'Completato', 8);
+      SHARED_UTILS.showToast(`Snapshot creato: ${toCopy.length} righe duplicate su "${SNAP_NAME}".`, 'Completato', 8);
       LOG.info('DEBUG_SNAPSHOT_DUP', `Snapshot duplicati completato (${toCopy.length} righe).`);
     } catch (e) {
       LOG.error('DEBUG_SNAPSHOT_DUP', 'Errore scrittura snapshot duplicati.', { error: e.message });
@@ -954,7 +954,7 @@ const DEBUG = (function () {
       LOG.error('DEV_DUP_RIGHE', 'Errore creazione snapshot duplicati righe.', {
         error: e.message
       });
-      UTIL.showToast('Errore creazione snapshot. Vedi Log.', 'Errore');
+      SHARED_UTILS.showToast('Errore creazione snapshot. Vedi Log.', 'Errore');
     }
   }
 
@@ -973,14 +973,14 @@ const DEBUG = (function () {
     const shDup = ss.getSheetByName('Righe_Duplicate');
     
     if (!shDup) {
-      UTIL.showToast('Foglio "Righe_Duplicate" non trovato. Esegui prima "Trova Righe Duplicate".', 'Errore', 8);
+      SHARED_UTILS.showToast('Foglio "Righe_Duplicate" non trovato. Esegui prima "Trova Righe Duplicate".', 'Errore', 8);
       LOG.error('DEV_DELETE_DUP', 'Foglio "Righe_Duplicate" non esistente.');
       return;
     }
 
     const lastRow = shDup.getLastRow();
     if (lastRow < 2) {
-      UTIL.showToast('Nessuna riga duplicata da eliminare.', 'Info', 5);
+      SHARED_UTILS.showToast('Nessuna riga duplicata da eliminare.', 'Info', 5);
       LOG.info('DEV_DELETE_DUP', 'Foglio "Righe_Duplicate" vuoto.');
       return;
     }
@@ -1000,7 +1000,7 @@ const DEBUG = (function () {
     );
 
     if (response !== ui.Button.YES) {
-      UTIL.showToast('Operazione annullata dall\'utente.', 'Annullato', 5);
+      SHARED_UTILS.showToast('Operazione annullata dall\'utente.', 'Annullato', 5);
       LOG.info('DEV_DELETE_DUP', 'Eliminazione annullata dall\'utente.');
       return;
     }
@@ -1008,7 +1008,7 @@ const DEBUG = (function () {
     // Leggi gli indici delle righe da eliminare (colonna RowIndex)
     const shRighe = SHEETS.get(SHEETS.SHEET_NAMES.Righe);
     if (!shRighe) {
-      UTIL.showToast('Foglio "Righe" non trovato!', 'Errore');
+      SHARED_UTILS.showToast('Foglio "Righe" non trovato!', 'Errore');
       LOG.error('DEV_DELETE_DUP', 'Foglio "Righe" non trovato.');
       return;
     }
@@ -1026,13 +1026,13 @@ const DEBUG = (function () {
         .sort((a, b) => b - a); // Ordine DECRESCENTE
 
       if (rowsToDelete.length === 0) {
-        UTIL.showToast('Nessun indice di riga valido trovato.', 'Errore');
+        SHARED_UTILS.showToast('Nessun indice di riga valido trovato.', 'Errore');
         LOG.error('DEV_DELETE_DUP', 'Nessun indice RowIndex valido.');
         return;
       }
 
       LOG.info('DEV_DELETE_DUP', `Eliminazione di ${rowsToDelete.length} righe duplicate...`);
-      UTIL.showToast(`Eliminazione ${rowsToDelete.length} righe in corso...`, 'Attendere', -1);
+      SHARED_UTILS.showToast(`Eliminazione ${rowsToDelete.length} righe in corso...`, 'Attendere', -1);
 
       // Elimina le righe una alla volta (dal basso verso l'alto)
       let deletedCount = 0;
@@ -1043,7 +1043,7 @@ const DEBUG = (function () {
           
           // Toast di progresso ogni 50 righe
           if (deletedCount % 50 === 0) {
-            UTIL.showToast(`Eliminate ${deletedCount}/${rowsToDelete.length} righe...`, 'In corso', -1);
+            SHARED_UTILS.showToast(`Eliminate ${deletedCount}/${rowsToDelete.length} righe...`, 'In corso', -1);
           }
         } catch (e) {
           LOG.error('DEV_DELETE_DUP', `Errore eliminazione riga ${rowIndex}`, { error: e.message });
@@ -1057,7 +1057,7 @@ const DEBUG = (function () {
       shDup.getRange(1, 1, 1, schema.length).setValues([schema]).setFontWeight('bold');
       shDup.setFrozenRows(1);
 
-      UTIL.showToast(`✅ Eliminate ${deletedCount} righe duplicate con successo!`, 'Completato', 8);
+      SHARED_UTILS.showToast(`✅ Eliminate ${deletedCount} righe duplicate con successo!`, 'Completato', 8);
       LOG.info('DEV_DELETE_DUP', `Eliminazione completata. Righe eliminate: ${deletedCount}`);
       
       // Torna al foglio Righe per mostrare il risultato
@@ -1065,7 +1065,7 @@ const DEBUG = (function () {
 
     } catch (e) {
       LOG.error('DEV_DELETE_DUP', 'Errore durante l\'eliminazione delle righe duplicate', { error: e.message, stack: e.stack });
-      UTIL.showToast('Errore durante l\'eliminazione. Vedi Log.', 'Errore');
+      SHARED_UTILS.showToast('Errore durante l\'eliminazione. Vedi Log.', 'Errore');
     }
   }
 
@@ -1081,14 +1081,14 @@ const DEBUG = (function () {
     const shR = ss.getSheetByName('Righe');
     
     if (!shR) {
-      UTIL.showToast('Foglio "Righe" non trovato!', 'Errore');
+      SHARED_UTILS.showToast('Foglio "Righe" non trovato!', 'Errore');
       LOG.error('DEV_COUNT_DUP', 'Foglio "Righe" non esistente.');
       return;
     }
 
     const lastRow = shR.getLastRow();
     if (lastRow < 2) {
-      UTIL.showToast('Foglio "Righe" vuoto.', 'Info', 5);
+      SHARED_UTILS.showToast('Foglio "Righe" vuoto.', 'Info', 5);
       LOG.info('DEV_COUNT_DUP', 'Foglio "Righe" vuoto, nessuna riga da analizzare.');
       return;
     }
@@ -1098,7 +1098,7 @@ const DEBUG = (function () {
     const idx = SHEETS.headerIndex(SHEETS.SHEET_NAMES.Righe);
 
     if (idx.FileID === undefined || idx.NumeroLinea === undefined) {
-      UTIL.showToast('Colonne FileID o NumeroLinea mancanti.', 'Errore');
+      SHARED_UTILS.showToast('Colonne FileID o NumeroLinea mancanti.', 'Errore');
       LOG.error('DEV_COUNT_DUP', 'Colonne FileID o NumeroLinea non trovate.');
       return;
     }
@@ -1106,7 +1106,7 @@ const DEBUG = (function () {
     const maxCol = Math.max(idx.FileID, idx.NumeroLinea) + 1;
 
     try {
-      UTIL.showToast('Lettura dati in corso...', 'Analisi', -1);
+      SHARED_UTILS.showToast('Lettura dati in corso...', 'Analisi', -1);
       const data = shR.getRange(headerRow + 1, 1, lastRow - headerRow, maxCol).getValues();
       
       const seen = new Map();
@@ -1152,7 +1152,7 @@ const DEBUG = (function () {
 
     } catch (e) {
       LOG.error('DEV_COUNT_DUP', 'Errore durante il conteggio duplicati', { error: e.message });
-      UTIL.showToast('Errore durante l\'analisi. Vedi Log.', 'Errore');
+      SHARED_UTILS.showToast('Errore durante l\'analisi. Vedi Log.', 'Errore');
     }
   }
 
@@ -1795,7 +1795,7 @@ const DEBUG = (function () {
     );
 
     if (response !== ui.Button.YES) {
-      UTIL.showToast('Operazione annullata.', 'Annullato', 5);
+      SHARED_UTILS.showToast('Operazione annullata.', 'Annullato', 5);
       LOG.info('DEV_RESET_FLAGS', 'Reset flag annullato dall\'utente.');
       return;
     }
@@ -1804,14 +1804,14 @@ const DEBUG = (function () {
     const shF = ss.getSheetByName('Fatture');
     
     if (!shF) {
-      UTIL.showToast('Foglio "Fatture" non trovato!', 'Errore');
+      SHARED_UTILS.showToast('Foglio "Fatture" non trovato!', 'Errore');
       LOG.error('DEV_RESET_FLAGS', 'Foglio "Fatture" non esistente.');
       return;
     }
 
     const lastRow = shF.getLastRow();
     if (lastRow < 2) {
-      UTIL.showToast('Foglio "Fatture" vuoto.', 'Info', 5);
+      SHARED_UTILS.showToast('Foglio "Fatture" vuoto.', 'Info', 5);
       LOG.info('DEV_RESET_FLAGS', 'Foglio "Fatture" vuoto.');
       return;
     }
@@ -1825,12 +1825,12 @@ const DEBUG = (function () {
       const idxTotRigheNetto = headers.indexOf('TotRigheNetto');
       
       if (idxRigheImportate === -1 || idxImportaRigheSrc === -1) {
-        UTIL.showToast('Colonne RigheImportate/ImportaRigheSrc non trovate!', 'Errore');
+        SHARED_UTILS.showToast('Colonne RigheImportate/ImportaRigheSrc non trovate!', 'Errore');
         LOG.error('DEV_RESET_FLAGS', 'Colonne necessarie non trovate nel foglio Fatture.');
         return;
       }
       
-      UTIL.showToast('Reset flag in corso...', 'Attendere', -1);
+      SHARED_UTILS.showToast('Reset flag in corso...', 'Attendere', -1);
       
       const rowCount = lastRow - 1;
       
@@ -1847,7 +1847,7 @@ const DEBUG = (function () {
         shF.getRange(2, idxTotRigheNetto + 1, rowCount, 1).setValue(0);
       }
       
-      UTIL.showToast(`✅ Reset completato su ${rowCount} fatture!`, 'Completato', 8);
+      SHARED_UTILS.showToast(`✅ Reset completato su ${rowCount} fatture!`, 'Completato', 8);
       LOG.info('DEV_RESET_FLAGS', `Reset flag completato su ${rowCount} fatture.`);
       
       ui.alert(
@@ -1861,7 +1861,7 @@ const DEBUG = (function () {
 
     } catch (e) {
       LOG.error('DEV_RESET_FLAGS', 'Errore durante il reset flag', { error: e.message });
-      UTIL.showToast('Errore durante il reset. Vedi Log.', 'Errore');
+      SHARED_UTILS.showToast('Errore durante il reset. Vedi Log.', 'Errore');
     }
   }
 
@@ -1988,7 +1988,7 @@ function runInBackground(functionName) {
 
 // Registra DEBUG nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'STATE', 'CONFIG', 'DUPLICATE_MANAGER', 'SHEET_ITERATOR', 'ERROR_HANDLER']);
+  ModuleRegistry.register('DEBUG', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS', 'STATE', 'CONFIG', 'DUPLICATE_MANAGER', 'SHEET_ITERATOR', 'ERROR_HANDLER']);
 }
 
 // Registra DEBUG nel namespace GG

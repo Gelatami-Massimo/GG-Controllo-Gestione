@@ -31,7 +31,7 @@ const DASHBOARD = (function () {
    * DASHBOARD.create();
    */
   function create() {
-    UTIL.showToast('Aggiornamento Dashboard...', 'Dashboard', 10);
+    SHARED_UTILS.showToast('Aggiornamento Dashboard...', 'Dashboard', 10);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
     _ensureDatiMensiliSheet(ss); // Assicura che 'Dati Mensili' esista
@@ -336,8 +336,8 @@ const DASHBOARD = (function () {
             const data    = row[idx.Data];
             const costoNetto  = UTIL.number.parse(row[idx.TotImponibile]);
             const costoTotale = UTIL.number.parse(row[idx.TotDocumento]);
-            if (UTIL.date.isValidDate(data)) {
-              const ymObj = UTIL.date.extractYearMonth(data);
+            if (SHARED_UTILS.isValidDate(data)) {
+              const ymObj = SHARED_UTILS.date.extractYearMonth(data);
               const annoMese = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
               if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
               let cur = dataAggregata.get(sedeKey).get(annoMese)
@@ -511,7 +511,7 @@ const DASHBOARD = (function () {
 
 // Registra DASHBOARD nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('DASHBOARD', ['SHEETS', 'LOG', 'UTIL']);
+  ModuleRegistry.register('DASHBOARD', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS']);
 }
 
 // Registra DASHBOARD nel namespace GG
