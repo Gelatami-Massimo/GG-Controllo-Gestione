@@ -1041,13 +1041,15 @@ const IMPORT_ROWS = (function () {
                 lookupKey,
                 codiceInternoBreve
               });
-            } else if (!codiceValore.startsWith('TEMP_')) {
-              // FALLBACK DI SICUREZZA: Il prodotto non è stato trovato nella mappa (forse il batch creation ha fallito o la chiave è diversa).
-              // Invece di accumulare o saltare, lo cerchiamo/creiamo AL VOLO (Just-In-Time) per salvare la riga.
+            } else {
+              // FALLBACK JIT: Il prodotto non è in mappa (batch creation fallito o prodotto con codice TEMP).
+              // Esegui creazione Just-In-Time per TUTTI i codici (reali E TEMP).
               
               LOG.warn(runId, 'IMPORT_ROWS_JIT_CREATE', 'Prodotto mancante in mappa dopo Step 1. Eseguo creazione JIT.', { 
                 fileId, 
                 lookupKey,
+                codiceValore,
+                isTempCode: codiceValore.startsWith('TEMP_'),
                 descrizione: descrizione.substring(0, 30) 
               });
 
@@ -1078,7 +1080,8 @@ const IMPORT_ROWS = (function () {
                   fileId,
                   numeroLinea,
                   lookupKey,
-                  codiceInternoBreve
+                  codiceInternoBreve,
+                  isTempCode: codiceValore.startsWith('TEMP_')
                 });
               } else {
                 // Se fallisce anche il JIT, allora è un errore critico di dati
@@ -1091,15 +1094,6 @@ const IMPORT_ROWS = (function () {
                 });
                 continue;
               }
-            } else {
-              // Codice TEMP: log warning e salta (STEP 1 dovrebbe averli gestiti)
-              LOG.warn(runId, 'IMPORT_ROWS_TEMP_SKIP', 'Codice TEMP non trovato in mappa dopo STEP 1 - riga saltata', {
-                fileId,
-                numeroLinea,
-                codiceValore,
-                descrizione: descrizione.substring(0, 50)
-              });
-              continue;
             }
           }
 
