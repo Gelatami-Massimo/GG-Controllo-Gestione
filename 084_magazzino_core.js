@@ -1041,6 +1041,11 @@ if (typeof GG !== 'undefined') {
   GG.register('MAGAZZINO_CORE', MAGAZZINO_CORE);
 }
 
+// Espone MAGAZZINO_CORE in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.MAGAZZINO_CORE = MAGAZZINO_CORE;
+}
+
 // Funzioni globali per il menu
 
 /**
