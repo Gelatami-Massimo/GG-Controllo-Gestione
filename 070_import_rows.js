@@ -374,14 +374,20 @@ const IMPORT_ROWS = (function () {
         const prezzoTotaleRiga = UTIL.parseNumSmart(UTIL.firstText(linea, 'PrezzoTotale'));
         const aliquota = UTIL.parseNumSmart(UTIL.firstText(linea, 'AliquotaIVA'));
 
-        // Genera codice TEMP se mancante (logica stabile)
+        // Genera codice TEMP se mancante (logica stabile e normalizzata)
         let codiceValore;
         let isTempGenerated = false;
+        
         if (codiceValoreRaw) {
           codiceValore = codiceValoreRaw;
         } else {
-          const descrizionePulita = (descrizione || '').replace(/\s/g, '').toUpperCase();
-          codiceValore = `TEMP_${descrizionePulita.substring(0, 15)}`;
+          // Usa la normalizzazione centralizzata per evitare duplicati su spazi/accenti diversi
+          const descNormalizzata = PRODUCTS.normalizeDescrizione(descrizione);
+          
+          // Prendi i primi 20 caratteri alfanumerici per creare una chiave unica leggibile
+          const slug = descNormalizzata.replace(/[^A-Z0-9]/g, '').substring(0, 20);
+          
+          codiceValore = `TEMP_${slug}`;
           isTempGenerated = true;
         }
 
