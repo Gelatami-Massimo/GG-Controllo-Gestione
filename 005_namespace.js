@@ -9,12 +9,13 @@
  * Namespace centrale GG (GG GESTIONE GELATAMI)
  * Centralizza accesso a tutti i moduli e gestisce il registro
  */
-const GG = (() => {
+// Fix: Usa var invece di const per evitare "already declared" in Apps Script
+var GG = GG || (() => {
   const modules = {};
   
   return {
     // Versione progetto
-    version: '25.0',
+    version: '25.1',
     
     // Timestamp build
     buildDate: new Date().toISOString(),
