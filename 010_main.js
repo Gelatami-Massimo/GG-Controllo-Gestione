@@ -441,6 +441,30 @@ function runDeleteEmptyRowsFromRigheSheet() {
 }
 
 /**
+ * Sincronizza il catalogo prodotti con i dati delle righe importate.
+ * Aggiorna informazioni prodotti esistenti e crea nuovi prodotti se necessario.
+ * @returns {void}
+ */
+function runSyncProdotti() {
+  _runSafely(
+    () => {
+      // Richiama la funzione di riallineamento prodotti dal modulo PRODUCTS
+      if (typeof PRODUCTS !== 'undefined' && PRODUCTS.realignAll) {
+        PRODUCTS.realignAll();
+      } else {
+        // Fallback: usa la cache prime per forzare refresh
+        LOG?.info('SYNC_PRODOTTI', 'Esecuzione refresh cache prodotti');
+        PRODUCTS.primeCache();
+        SpreadsheetApp.getUi().alert('✅ Cache prodotti aggiornata!');
+      }
+    },
+    'Products',
+    'Sincronizzazione prodotti in corso...',
+    'Sincronizzazione prodotti completata!'
+  );
+}
+
+/**
  * Esegue il reset completo del sistema e la re-importazione.
  * Funzione ad alto rischio, da usare con cautela.
  * @returns {void}
