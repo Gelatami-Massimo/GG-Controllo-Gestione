@@ -28,7 +28,15 @@ function onOpen() {
   }
   // --- FINE DIAGNOSTICA ---
 
-  const ui = SpreadsheetApp.getUi();
+  // Protegge getUi() per contesti non interattivi (test, trigger)
+  let ui;
+  try {
+    ui = SpreadsheetApp.getUi();
+  } catch (e) {
+    LOG?.warn('MAIN', 'onOpen() chiamato in contesto non interattivo - menu UI non disponibile');
+    return; // Esci silenziosamente se getUi() non è disponibile
+  }
+
   const menu = ui.createMenu('🧊 GELATAMI')
     .addItem('🎛️ Pannello di Controllo', App.ui.fn.openSidebar)
     .addSeparator();
