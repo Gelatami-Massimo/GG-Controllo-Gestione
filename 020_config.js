@@ -606,7 +606,7 @@ const SHEETS = (function () {
       ],
       [SHEET_NAMES.Log]: [
         { format: 'dd/mm/yyyy hh:mm:ss', cols: ['Timestamp'] },
-        { format: '@', cols: ['Level', 'Scope', 'Message', 'Context'] }
+        { format: '@', cols: ['RunId', 'Level', 'Scope', 'Message', 'Context'] }
       ],
       [SHEET_NAMES.Regole_UM]: [
         { format: '@', cols: ['CodiceInterno', 'UM Finale', 'Note'] },

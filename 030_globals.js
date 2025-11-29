@@ -47,7 +47,7 @@ const LOG = (function () {
         return;
       }
       const headerRow = SHEETS._findHeaderRow(sh, SHEETS.SHEET_NAMES.Log);
-      const numCols = 5; // Schema Log fisso
+      const numCols = 6; // Schema Log: [Timestamp, RunId, Scope, Level, Message, Context]
       const nextRow = Math.max(headerRow + 1, sh.getLastRow() + 1);
 
       const rangeToWrite = sh.getRange(nextRow, 1, logBuffer.length, numCols);
@@ -115,7 +115,9 @@ const LOG = (function () {
       if (safeContext.length > 49000) {
         safeContext = safeContext.substring(0, 49000) + '... [TRONCATO]"}';
       }
-      logBuffer.push([new Date(), level || 'INFO', scope || '-', message || '-', safeContext]);
+      // Allinea all'intestazione SCHEMAS.Log: ['Timestamp', 'RunId', 'Scope', 'Level', 'Message', 'Context']
+      // RunId non è gestito dal logger base: lasciamo colonna vuota per compatibilità con ENHANCED_LOGGER
+      logBuffer.push([new Date(), '', scope || '-', level || 'INFO', message || '-', safeContext]);
       
       if (logBuffer.length >= MAX_BUFFER_SIZE) _flush();
 
