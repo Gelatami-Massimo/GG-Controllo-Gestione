@@ -613,90 +613,218 @@ const IMPORT_ROWS = (function () {
           return; // niente da fare per questo chunk
         }
 
-        // Elabora blocco
+        // ===================================================================
+        // STEP 1: PRE-SCANSIONE E CREAZIONE PRODOTTI
+        // ===================================================================
+        LOG.debug(runId, 'IMPORT_ROWS_STEP1_START', 'STEP 1: Pre-scansione prodotti', {
+          chunkStartRow,
+          chunkSize: invoicesChunk.length
+        });
+        
+        const parsedInvoicesCache = new Map(); // Cache: invRowNum -> {invData, parsedRows, skip}
+        const productsToCreateInChunk = [];
+        const tipiDaEscludere = ['SCONTO', 'TESTO', 'OMAGGIO'];
+        
+        // 1.1: Scansiona tutte le fatture del chunk, parsa XML, identifica prodotti mancanti
         for (let i = 0; i < invoicesChunk.length; i++) {
           const invData = invoicesChunk[i];
           const invRowNum = chunkStartRow + i;
-
+          const fileId = invData[idxF.FileID];
           const fornitoreId = String(invData[idxF.FornitoreID] ?? '').trim().replace(/^IT/i, '').replace(/^0+/, '');
-        const righeImportateFlag = invData[idxF.RigheImportate];
-        const importaSrc = invData[idxF.ImportaRigheSrc];
-
-        // 1. Se la fattura ha già righe importate con stato finale (imported/total_mismatch), non rielaborare
-        if (righeImportateFlag === true && finalStates.includes(importaSrc)) {
-          continue;
+          const righeImportateFlag = invData[idxF.RigheImportate];
+          const importaSrc = invData[idxF.ImportaRigheSrc];
+          
+          // Skip se già importata o fornitore disabilitato
+          if ((righeImportateFlag === true && finalStates.includes(importaSrc)) || !enabledSupplierIds.has(fornitoreId)) {
+            parsedInvoicesCache.set(invRowNum, { invData, parsedRows: null, skip: true });
+            continue;
+          }
+          
+          // Parsa XML
+          const parseResult = _parseXmlBatch(fileId);
+          if (!parseResult.success || parseResult.rows.length === 0) {
+            parsedInvoicesCache.set(invRowNum, { invData, parsedRows: parseResult.rows || [], skip: false });
+            continue;
+          }
+          
+          parsedInvoicesCache.set(invRowNum, { invData, parsedRows: parseResult.rows, skip: false });
+          
+          // Scansiona righe parsate per identificare prodotti mancanti
+          const fornitoreIdNorm = String(invData[idxF.FornitoreID] || '').trim().replace(/^IT/i, '').replace(/^0+/, '');
+          const categoriaFornitore = invData[idxF.Categoria];
+          
+          for (const rowData of parseResult.rows) {
+            const { codiceValore, descrizione, um, qta, prezzoTotaleRiga } = rowData;
+            
+            if (!descrizione) continue;
+            
+            // Filtra righe spazzatura
+            const isJunk = junkRegex ? junkRegex.test(String(descrizione)) : false;
+            if (isJunk) continue;
+            
+            // Classifica tipo riga
+            const tipoRiga = _classifyRowType(qta, prezzoTotaleRiga, descrizione, rowData.codiceTipo);
+            if (tipiDaEscludere.includes(tipoRiga)) continue;
+            
+            // Solo ARTICOLO richiede prodotto
+            if (tipoRiga !== 'ARTICOLO') continue;
+            
+            // Lookup prodotto nella hash map
+            const codiceNorm = String(codiceValore || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const lookupKey = `${fornitoreIdNorm}|${codiceNorm}`;
+            
+            if (!productHashMap.has(lookupKey)) {
+              // Prodotto mancante: accumula per batch creation
+              productsToCreateInChunk.push({
+                fornitoreId: invData[idxF.FornitoreID],
+                denominazioneFornitore: invData[idxF.DenominazioneFornitore],
+                codiceValore,
+                descrizione,
+                um,
+                categoriaFornitore,
+                lookupKey
+              });
+            }
+          }
         }
-
-        // 2. Fornitore abilitato/disabilitato
-        if (enabledSupplierIds.has(fornitoreId)) {
-          // Fornitore ABILITATO.
-          // Processa la fattura; la funzione restituisce:
-          //  - statusSrc: 'imported','total_mismatch','xml_error','processing_error','no_rows'
-          //  - hasImportedRows: TRUE solo se sono state scritte righe in 'Righe'
-          //  - importedRowsCount: numero righe scritte
-          //  - sommaRigheNetto: somma PrezzoTotale righe
-          const { statusSrc, hasImportedRows, importedRowsCount, sommaRigheNetto } = _processInvoice(
-            invData,
-            invRowNum,
-            idxF,
-            productCache,
-            rowsBuffer,
-            righeHeaders,
-            junkRegex,
-            existingRows,  // ✅ Cache duplicati
-            runId,  // ✅ RunId per logging interno
-            productHashMap,  // ✅ OTTIMIZZAZIONE: Hash Map O(1)
-            newProductsToCreate  // ✅ OTTIMIZZAZIONE: Array batch nuovi prodotti
-          );
-
-          LOG.info(runId, 'IMPORT_ROWS_INVOICE_PROCESSED', 'Fattura processata', {
-            invRowNum,
-            fileId: invData[idxF.FileID],
-            statusSrc,
-            importedRowsCount,
-            sommaRigheNetto
+        
+        // 1.2: Batch creation dei prodotti mancanti SUBITO
+        if (productsToCreateInChunk.length > 0) {
+          LOG.info(runId, 'IMPORT_ROWS_STEP1_BATCH_CREATE', 'Creazione batch prodotti del chunk', {
+            chunkStartRow,
+            productsCount: productsToCreateInChunk.length
           });
-
-          _addFlagUpdate(flagUpdates, invRowNum, idxF, {
-            RigheImportate: !!hasImportedRows,
-            ImportaRigheSrc: statusSrc,
-            RigheImportateNum: importedRowsCount || 0,
-            TotRigheNetto: sommaRigheNetto || 0
-          });
-
-          processedInvoices++;
-        } else {
-          // Fornitore DISABILITATO.
-          // Marca come 'skipped' ma lascia RigheImportate = FALSE
-          // (TRUE significa sempre "righe esistono in Righe").
-          LOG.debug(runId, 'IMPORT_ROWS_SKIP_DISABLED', 'Fattura fornitore disabilitato', {
-            invRowNum,
-            fileId: invData[idxF.FileID],
-            fornitoreId
-          });
-          _addFlagUpdate(flagUpdates, invRowNum, idxF, {
-            RigheImportate: false,
-            ImportaRigheSrc: 'skipped'
-          });
-          skippedInvoices++;
+          
+          try {
+            const createdProducts = PRODUCTS.createBatch(productsToCreateInChunk, productCache, runId);
+            
+            // Aggiorna productHashMap con nuovi prodotti
+            createdProducts.forEach(product => {
+              if (product.lookupKey) {
+                productHashMap.set(product.lookupKey, product);
+              }
+            });
+            
+            LOG.info(runId, 'IMPORT_ROWS_STEP1_BATCH_DONE', 'Batch creation chunk completata', {
+              chunkStartRow,
+              productsCreated: createdProducts.length,
+              hashMapSize: productHashMap.size
+            });
+          } catch (e) {
+            LOG.error(runId, 'IMPORT_ROWS_STEP1_BATCH_ERROR', 'Errore batch creation chunk', {
+              chunkStartRow,
+              error: e.message,
+              productsCount: productsToCreateInChunk.length
+            });
+          }
         }
-
-        // Flush periodico
+        
+        LOG.debug(runId, 'IMPORT_ROWS_STEP1_END', 'STEP 1 completato', {
+          chunkStartRow,
+          parsedInvoices: parsedInvoicesCache.size,
+          productsCreated: productsToCreateInChunk.length
+        });
+        
+        // ===================================================================
+        // STEP 2: PROCESSAMENTO RIGHE (Ora sicuro - tutti i prodotti esistono)
+        // ===================================================================
+        LOG.debug(runId, 'IMPORT_ROWS_STEP2_START', 'STEP 2: Processamento righe', {
+          chunkStartRow,
+          chunkSize: invoicesChunk.length
+        });
+        
+        for (let i = 0; i < invoicesChunk.length; i++) {
+          const invRowNum = chunkStartRow + i;
+          const cacheEntry = parsedInvoicesCache.get(invRowNum);
+          
+          if (!cacheEntry) continue;
+          
+          const { invData, parsedRows, skip } = cacheEntry;
+          const fornitoreId = String(invData[idxF.FornitoreID] ?? '').trim().replace(/^IT/i, '').replace(/^0+/, '');
+          const righeImportateFlag = invData[idxF.RigheImportate];
+          const importaSrc = invData[idxF.ImportaRigheSrc];
+          
+          // 1. Skip se già importata
+          if (righeImportateFlag === true && finalStates.includes(importaSrc)) {
+            continue;
+          }
+          
+          // 2. Fornitore abilitato/disabilitato
+          if (enabledSupplierIds.has(fornitoreId)) {
+            // Fornitore ABILITATO - Processa con XML pre-parsato
+            const { statusSrc, hasImportedRows, importedRowsCount, sommaRigheNetto } = _processInvoice(
+              invData,
+              invRowNum,
+              idxF,
+              productCache,
+              rowsBuffer,
+              righeHeaders,
+              junkRegex,
+              existingRows,
+              runId,
+              productHashMap,
+              newProductsToCreate,
+              parsedRows  // ✅ Passa XML pre-parsato dalla cache
+            );
+            
+            LOG.info(runId, 'IMPORT_ROWS_INVOICE_PROCESSED', 'Fattura processata', {
+              invRowNum,
+              fileId: invData[idxF.FileID],
+              statusSrc,
+              importedRowsCount,
+              sommaRigheNetto
+            });
+            
+            _addFlagUpdate(flagUpdates, invRowNum, idxF, {
+              RigheImportate: !!hasImportedRows,
+              ImportaRigheSrc: statusSrc,
+              RigheImportateNum: importedRowsCount || 0,
+              TotRigheNetto: sommaRigheNetto || 0
+            });
+            
+            processedInvoices++;
+          } else {
+            // Fornitore DISABILITATO
+            LOG.debug(runId, 'IMPORT_ROWS_SKIP_DISABLED', 'Fattura fornitore disabilitato', {
+              invRowNum,
+              fileId: invData[idxF.FileID],
+              fornitoreId
+            });
+            _addFlagUpdate(flagUpdates, invRowNum, idxF, {
+              RigheImportate: false,
+              ImportaRigheSrc: 'skipped'
+            });
+            skippedInvoices++;
+          }
+        }
+        
+        LOG.debug(runId, 'IMPORT_ROWS_STEP2_END', 'STEP 2 completato', {
+          chunkStartRow,
+          processedInvoices,
+          skippedInvoices
+        });
+        
+        // ===================================================================
+        // STEP 3: FLUSH PERIODICO
+        // ===================================================================
         if (rowsBuffer.length >= FLUSH_ROWS_EVERY) {
+          LOG.debug(runId, 'IMPORT_ROWS_STEP3_FLUSH', 'STEP 3: Flush periodico', {
+            chunkStartRow,
+            rowsBufferSize: rowsBuffer.length
+          });
           _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF, newProductsToCreate, productHashMap, runId);
         }
+        
+        // UI progress update
+        if (!isSilent && chunkStartRow % (CHUNK_SIZE * 2) === 0) {
+          const progressRow = Math.min(chunkStartRow + invoicesChunk.length - 1, lastInvoiceRow);
+          STATE.setJSON(App.config.keys.progress, {
+            current: progressRow, total: lastInvoiceRow,
+            message: `Importo righe: ${progressRow}/${lastInvoiceRow}...`
+          });
+          SHARED_UTILS.showToast(`Elaboro fattura ${progressRow}/${lastInvoiceRow}...`, 'Importazione Righe', 3);
+        }
       }
-
-      // UI progress update
-      if (!isSilent && chunkStartRow % (CHUNK_SIZE * 2) === 0) {
-        const progressRow = Math.min(chunkStartRow + invoicesChunk.length - 1, lastInvoiceRow);
-        STATE.setJSON(App.config.keys.progress, {
-          current: progressRow, total: lastInvoiceRow,
-          message: `Importo righe: ${progressRow}/${lastInvoiceRow}...`
-        });
-        SHARED_UTILS.showToast(`Elaboro fattura ${progressRow}/${lastInvoiceRow}...`, 'Importazione Righe', 3);
-      }
-    }
     });
 
     // Check if iterator was interrupted by timeout
@@ -774,7 +902,7 @@ const IMPORT_ROWS = (function () {
    *  - importedRowsCount: numero di righe scritte nel buffer per quella fattura
    *  - sommaRigheNetto: somma PrezzoTotale delle righe importate
    */
-  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkRegex, existingRows, runId, productHashMap, newProductsToCreate) {
+  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkRegex, existingRows, runId, productHashMap, newProductsToCreate, parsedRowsPreloaded) {
     const fileId = invData[idxF.FileID];
     
     LOG.debug(runId, 'IMPORT_ROWS_INVOICE_START', 'Inizio processamento fattura', {
@@ -795,8 +923,15 @@ const IMPORT_ROWS = (function () {
     const TOLLERANZA_EURO = Number(CONFIG.get('ROWS_TOLLERANZA_EURO', 1.00)) || 1.00;
 
     try {
-      // ✅ FASE 1: Batch XML Parsing (separato dalla business logic)
-      const parseResult = _parseXmlBatch(fileId);
+      // ✅ FASE 1: Batch XML Parsing (usa cache se disponibile, altrimenti parsa)
+      let parseResult;
+      if (parsedRowsPreloaded) {
+        // Usa risultato pre-parsato dalla cache (STEP 1)
+        parseResult = { success: true, rows: parsedRowsPreloaded, error: '' };
+      } else {
+        // Fallback: parsa XML se non in cache (legacy compatibility)
+        parseResult = _parseXmlBatch(fileId);
+      }
       
       if (!parseResult.success) {
         statusSrc = 'xml_error';
@@ -878,19 +1013,19 @@ const IMPORT_ROWS = (function () {
           // Da qui in poi, la riga è valida e verrà importata.
           sommaRigheImportate += prezzoTotaleRiga;
 
-          // ✅ OTTIMIZZAZIONE: Lookup prodotti O(1) con Hash Map
+          // ✅ LOOKUP PRODOTTO: Ora sicuro grazie a STEP 1 (pre-creazione)
           let codiceInterno = null;
           let codiceInternoBreve = null;
-          if (tipoRiga === 'ARTICOLO') { // Omaggio è già escluso sopra
+          if (tipoRiga === 'ARTICOLO') {
             // Normalizza codice fornitore per lookup
             const codiceNorm = String(codiceValore || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
             const lookupKey = `${fornitoreIdNorm}|${codiceNorm}`;
             
-            // Lookup O(1) nella Hash Map
-            let foundProduct = productHashMap.get(lookupKey);
+            // Lookup O(1) nella Hash Map (prodotto già creato in STEP 1)
+            const foundProduct = productHashMap.get(lookupKey);
             
             if (foundProduct) {
-              // Prodotto trovato in cache
+              // Prodotto trovato in cache (dovrebbe essere sempre vero dopo STEP 1)
               codiceInternoBreve = foundProduct.codiceInternoBreve;
               codiceInterno = foundProduct.codiceInterno || codiceInternoBreve; // Legacy fallback
               
@@ -900,42 +1035,17 @@ const IMPORT_ROWS = (function () {
                 lookupKey,
                 codiceInternoBreve
               });
-            } else if (!codiceValore.startsWith('TEMP_')) {
-              // Prodotto NON trovato e NON è codice temporaneo → accumula per batch creation
-              const newProduct = {
-                fornitoreId: invData[idxF.FornitoreID],
-                denominazioneFornitore: invData[idxF.DenominazioneFornitore],
-                codiceValore,
-                descrizione,
-                um,
-                categoriaFornitore,
-                lookupKey // Per aggiornare Hash Map dopo creazione
-              };
-              newProductsToCreate.push(newProduct);
-              
-              // ✅ Genera codice temporaneo per questa riga (verrà sostituito dopo batch creation)
-              // Per ora assegna codice placeholder per permettere import riga
-              codiceInternoBreve = `PENDING_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-              codiceInterno = codiceInternoBreve; // Legacy fallback
-              
-              LOG.debug(runId, 'IMPORT_ROWS_PRODUCT_NEW', 'Nuovo prodotto accumulato per batch creation', {
-                fileId,
-                numeroLinea,
-                codiceValore,
-                descrizione: descrizione.substring(0, 50),
-                codicePending: codiceInternoBreve
-              });
-              
-              // ⚠️ NOTA: Codice PENDING verrà sostituito con codice reale dopo batch creation
-              // In alternativa, skippa questa riga e re-importa fattura dopo batch creation
             } else {
-              // Codice TEMP: non creare prodotto, logga warning
-              LOG.warn(runId, 'IMPORT_ROWS_TEMP_SKIP', 'Prodotto con codice TEMP skippato', {
+              // CASO RARO: Prodotto non trovato nonostante STEP 1
+              // Possibile con righe filtrate o errori in STEP 1
+              LOG.warn(runId, 'IMPORT_ROWS_PRODUCT_MISSING', 'Prodotto non trovato dopo STEP 1 - riga saltata', {
                 fileId,
                 numeroLinea,
-                codiceValore
+                lookupKey,
+                codiceValore,
+                descrizione: descrizione.substring(0, 50)
               });
-              continue; // Skip righe con codice temporaneo
+              continue; // Salta questa riga invece di generare PENDING
             }
           }
 
