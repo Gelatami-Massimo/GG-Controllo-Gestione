@@ -1019,7 +1019,7 @@ const IMPORT_ROWS = (function () {
           // Da qui in poi, la riga è valida e verrà importata.
           sommaRigheImportate += prezzoTotaleRiga;
 
-          // ✅ LOOKUP PRODOTTO: Ora sicuro grazie a STEP 1 (pre-creazione)
+          // ✅ LOOKUP PRODOTTO: Ora sicuro grazie a STEP 1 (pre-creazione) + fallback JIT
           let codiceInterno = null;
           let codiceInternoBreve = null;
           if (tipoRiga === 'ARTICOLO') {
@@ -1041,17 +1041,65 @@ const IMPORT_ROWS = (function () {
                 lookupKey,
                 codiceInternoBreve
               });
+            } else if (!codiceValore.startsWith('TEMP_')) {
+              // FALLBACK DI SICUREZZA: Il prodotto non è stato trovato nella mappa (forse il batch creation ha fallito o la chiave è diversa).
+              // Invece di accumulare o saltare, lo cerchiamo/creiamo AL VOLO (Just-In-Time) per salvare la riga.
+              
+              LOG.warn(runId, 'IMPORT_ROWS_JIT_CREATE', 'Prodotto mancante in mappa dopo Step 1. Eseguo creazione JIT.', { 
+                fileId, 
+                lookupKey,
+                descrizione: descrizione.substring(0, 30) 
+              });
+
+              const jitResult = PRODUCTS.findOrCreateProduct(
+                invData[idxF.FornitoreID], // FornitoreID dalla fattura (P.IVA)
+                invData[idxF.DenominazioneFornitore], // Nome fornitore
+                codiceValore,
+                descrizione,
+                um,
+                productCache, // Passa la cache completa
+                categoriaFornitore,
+                runId
+              );
+
+              if (jitResult) {
+                codiceInternoBreve = jitResult.codiceInternoBreve;
+                codiceInterno = jitResult.codiceInterno;
+                
+                // Aggiorna la mappa per le prossime righe della stessa fattura
+                productHashMap.set(lookupKey, {
+                  codiceInternoBreve,
+                  codiceInterno,
+                  codiceFornitore: codiceValore,
+                  descrizione
+                });
+                
+                LOG.info(runId, 'IMPORT_ROWS_JIT_SUCCESS', 'Prodotto creato JIT con successo', {
+                  fileId,
+                  numeroLinea,
+                  lookupKey,
+                  codiceInternoBreve
+                });
+              } else {
+                // Se fallisce anche il JIT, allora è un errore critico di dati
+                LOG.error(runId, 'IMPORT_ROWS_FATAL_SKIP', 'Impossibile creare prodotto nemmeno in JIT. Riga saltata.', { 
+                  fileId,
+                  numeroLinea,
+                  lookupKey,
+                  codiceValore,
+                  descrizione: descrizione.substring(0, 50)
+                });
+                continue;
+              }
             } else {
-              // CASO RARO: Prodotto non trovato nonostante STEP 1
-              // Possibile con righe filtrate o errori in STEP 1
-              LOG.warn(runId, 'IMPORT_ROWS_PRODUCT_MISSING', 'Prodotto non trovato dopo STEP 1 - riga saltata', {
+              // Codice TEMP: log warning e salta (STEP 1 dovrebbe averli gestiti)
+              LOG.warn(runId, 'IMPORT_ROWS_TEMP_SKIP', 'Codice TEMP non trovato in mappa dopo STEP 1 - riga saltata', {
                 fileId,
                 numeroLinea,
-                lookupKey,
                 codiceValore,
                 descrizione: descrizione.substring(0, 50)
               });
-              continue; // Salta questa riga invece di generare PENDING
+              continue;
             }
           }
 
