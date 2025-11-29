@@ -153,13 +153,21 @@ const ERROR_HANDLER = (function() {
      * );
      */
     retryAsync: function(fn, options = {}) {
-      const {
+      // Controllo configurazione globale per disabilitare retry
+      const disableRetries = (typeof CONFIG !== 'undefined' && CONFIG.get('DISABLE_RETRIES', false) === true);
+      
+      let {
         maxRetries = 3,
         baseDelay = 1000,
         timeout = 30000,
         scope = 'ASYNC_OP',
         onRetry = null
       } = options;
+      
+      // Se retry disabilitati globalmente, forza singolo tentativo
+      if (disableRetries) {
+        maxRetries = 0;
+      }
 
       let lastError = null;
       
