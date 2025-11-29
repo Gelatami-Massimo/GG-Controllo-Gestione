@@ -174,9 +174,14 @@ const PRODUCTS = (() => {
       const values = sh.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol).getValues();
 
       values.forEach((r, i) => {
+        // ✅ NORMALIZZA FORNITORE: Rimuovi IT e zeri iniziali per coerenza chiavi
+        const fornitoreIdRaw = String(r[idx.FornitoreID] ?? '').trim();
+        const fornitoreIdNorm = fornitoreIdRaw.replace(/^IT/i, '').replace(/^0+/, '');
+        
         const prodotto = {
           rowNum: headerRow + 1 + i,
-          fornitoreId: String(r[idx.FornitoreID] ?? '').trim(),
+          fornitoreId: fornitoreIdNorm,  // ✅ Salva versione normalizzata
+          fornitoreIdOriginal: fornitoreIdRaw,  // Mantieni originale per riferimento
           codiceFornitore: String(r[idx.CodiceFornitore] ?? '').trim().replace(/^'+/, ''),
           descrizione: String(r[idx.Descrizione] ?? '').trim(),
           um: String(r[idx.UM] ?? '').trim(),
@@ -185,13 +190,13 @@ const PRODUCTS = (() => {
           chiaveDescrizione: idx.ChiaveDescrizione !== undefined ? String(r[idx.ChiaveDescrizione] ?? '').trim() : ''
         };
 
-        // Indicizza per CodiceFornitore (se presente)
+        // Indicizza per CodiceFornitore (se presente) con FornitoreID NORMALIZZATO
         if (prodotto.fornitoreId && prodotto.codiceFornitore) {
           const keyCode = `${prodotto.fornitoreId}|${prodotto.codiceFornitore.toUpperCase()}`;
           cache.byFornitoreCodice.set(keyCode, prodotto);
         }
 
-        // Indicizza per ChiaveDescrizione
+        // Indicizza per ChiaveDescrizione con FornitoreID NORMALIZZATO
         if (prodotto.fornitoreId && prodotto.chiaveDescrizione) {
           const keyDesc = `${prodotto.fornitoreId}|${prodotto.chiaveDescrizione}`;
           cache.byFornitoreDescrizione.set(keyDesc, prodotto);
@@ -235,7 +240,8 @@ const PRODUCTS = (() => {
    * @returns {{codiceInternoBreve: string, codiceInterno: string, isNew: boolean}} Prodotto trovato/creato
    */
   function findOrCreateProduct(fornitoreId, denominazioneFornitore, codFornitore, descrizione, um, cache, categoriaFornitore = '', runId = '') {
-    const normFornId = String(fornitoreId || '').trim();
+    // ✅ NORMALIZZA FORNITORE: Rimuovi IT e zeri iniziali (coerente con lookup keys)
+    const normFornId = String(fornitoreId || '').trim().replace(/^IT/i, '').replace(/^0+/, '');
     // >>> USA LA NUOVA NORMALIZZAZIONE <<<
     const normCodForn = normalizeCodiceFornitore(codFornitore);
     const normDesc = String(descrizione || '').trim();
