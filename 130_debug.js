@@ -1995,3 +1995,8 @@ if (typeof ModuleRegistry !== 'undefined') {
 if (typeof GG !== 'undefined') {
   GG.register('DEBUG', DEBUG);
 }
+
+// Espone DEBUG in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.DEBUG = DEBUG;
+}
