@@ -612,8 +612,33 @@ const PRODUCTS = (() => {
       });
     }
 
-    // Prepara righe per batch insert
-    for (const productData of productsArray) {
+    // ✅ DEDUPLICAZIONE INPUT: Evita di processare lo stesso prodotto due volte
+    const uniqueProducts = [];
+    const seenKeys = new Set();
+    let duplicatesSkipped = 0;
+    
+    for (const p of productsArray) {
+      // Usa lookupKey se disponibile, altrimenti fallback su fornitoreId+codiceValore
+      const key = p.lookupKey || `${p.fornitoreId}|${String(p.codiceValore || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')}`;
+      
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        uniqueProducts.push(p);
+      } else {
+        duplicatesSkipped++;
+      }
+    }
+    
+    if (duplicatesSkipped > 0) {
+      LOG.warn(runId, 'PRODUCTS_BATCH_DEDUP', 'Duplicati rimossi da batch input', {
+        originalCount: productsArray.length,
+        uniqueCount: uniqueProducts.length,
+        duplicatesSkipped
+      });
+    }
+
+    // Prepara righe per batch insert (usa uniqueProducts invece di productsArray)
+    for (const productData of uniqueProducts) {
       const { fornitoreId, denominazioneFornitore, codiceValore, descrizione, um, categoriaFornitore, lookupKey } = productData;
 
       // Genera CodiceInternoBreve univoco
