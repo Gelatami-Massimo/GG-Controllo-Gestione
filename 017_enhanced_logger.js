@@ -6,6 +6,10 @@
 // =============================================================
 
 const ENHANCED_LOGGER = (() => {
+  // Buffer in memoria per scrittura batch
+  const logBuffer = [];
+  const BUFFER_SIZE = 50;
+
   /**
    * Genera un runId univoco per tracciare un'esecuzione completa.
    * Formato: YYYYMMDD_HHMMSS_SSS
@@ -24,6 +28,7 @@ const ENHANCED_LOGGER = (() => {
 
   /**
    * Scrive un log nel foglio Log con formato standardizzato.
+   * Usa buffer in memoria per performance; flush automatico ogni BUFFER_SIZE righe.
    * @param {string} runId - ID univoco esecuzione
    * @param {string} scope - Modulo/funzione (es. IMPORT_ROWS, PRODUCTS_CREATE)
    * @param {string} level - Livello: DEBUG, INFO, WARN, ERROR
@@ -60,14 +65,11 @@ const ENHANCED_LOGGER = (() => {
         }
       } catch (_) { /* best-effort: se CONFIG non pronto, prosegui */ }
 
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      const logSheet = ss.getSheetByName('Log');
-      if (!logSheet) return; // Fallback silenzioso se foglio Log non esiste
-
       const timestamp = new Date();
       const contextStr = Object.keys(context).length > 0 ? JSON.stringify(context) : '';
       
-      logSheet.appendRow([
+      // Aggiungi al buffer
+      logBuffer.push([
         timestamp,
         runId,
         scope,
@@ -75,10 +77,56 @@ const ENHANCED_LOGGER = (() => {
         message,
         contextStr
       ]);
+
+      // Flush automatico se buffer pieno
+      if (logBuffer.length >= BUFFER_SIZE) {
+        _flush();
+      }
     } catch (e) {
-      // Fallback: usa console come ultima risorsa (dovrebbe essere raro)
+      // Fallback: usa console come ultima risorsa
       console.error(`[LOGGER_ERROR] ${runId} | ${scope} | ${level} | ${message}`, e);
     }
+  }
+
+  /**
+   * Scrive il buffer su foglio in un colpo solo (batch write per performance).
+   * @private
+   */
+  function _flush() {
+    if (logBuffer.length === 0) return;
+
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const logSheet = ss.getSheetByName('Log');
+      
+      if (!logSheet) {
+        console.warn('[ENHANCED_LOGGER] Foglio Log non trovato, buffer perso');
+        logBuffer.length = 0; // Svuota comunque per evitare accumulo
+        return;
+      }
+
+      const nextRow = logSheet.getLastRow() + 1;
+      const numRows = logBuffer.length;
+      const numCols = 6;
+
+      // Batch write: una sola chiamata setValues
+      logSheet.getRange(nextRow, 1, numRows, numCols).setValues(logBuffer);
+
+      // Svuota buffer dopo scrittura
+      logBuffer.length = 0;
+    } catch (e) {
+      console.error('[ENHANCED_LOGGER] Errore flush buffer:', e);
+      // Svuota comunque per evitare loop infiniti
+      logBuffer.length = 0;
+    }
+  }
+
+  /**
+   * Flush pubblico: forza scrittura immediata del buffer.
+   * Chiamare nel finally() dei main script per garantire che tutti i log vengano scritti.
+   */
+  function flush() {
+    _flush();
   }
 
   /**
@@ -134,6 +182,7 @@ const ENHANCED_LOGGER = (() => {
     info,
     warn,
     error,
+    flush, // Espone flush pubblico per chiamata nei finally
     ensureLogHeaders
   };
 })();
