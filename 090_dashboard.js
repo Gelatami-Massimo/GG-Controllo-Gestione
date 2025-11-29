@@ -231,12 +231,20 @@ const DASHBOARD = (function () {
     if (ctxDM) {
       try {
         const data = ctxDM.sheet.getRange(ctxDM.headerRow + 1, 1, ctxDM.lastRow - ctxDM.headerRow, ctxDM.lastCol).getValues();
+        const processedKeys = new Set(); // Anti-duplicati: traccia chiavi già processate
         
         data.forEach(row => {
           const sedeKey  = String(row[ctxDM.idx.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
           const annoMese = String(row[ctxDM.idx.AnnoMese] ?? '').trim();
           
           if (/^\d{4}-\d{2}$/.test(annoMese)) {
+            // Controllo duplicati
+            const checkKey = `${sedeKey}_${annoMese}`;
+            if (processedKeys.has(checkKey)) {
+              LOG.warn('DASHBOARD_DUPLICATE', `Trovato duplicato in Dati Mensili per ${sedeKey} nel mese ${annoMese}. I dati verranno sommati, verificare input manuale.`);
+            }
+            processedKeys.add(checkKey);
+            
             if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
             let cur = dataAggregata.get(sedeKey).get(annoMese) || _createEmptyMonth();
             

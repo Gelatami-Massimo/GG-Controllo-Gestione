@@ -992,12 +992,6 @@ function _sortFamilies(famList, VOCE_CEDOLINI) {
 function _getAziendaMap() {
   const aziendaMap = new Map();
   
-  // Mapping P_IVA → Azienda (hardcoded per robustezza)
-  const pIvaToAzienda = {
-    '4230940167': 'Gemma',
-    '4489830986': 'Zaffiro'
-  };
-  
   try {
     const shAziende = SHEETS.get('Aziende');
     if (!shAziende) {
@@ -1015,26 +1009,53 @@ function _getAziendaMap() {
 
     const idx = SHEETS.headerIndex('Aziende');
     
-    // Verifica che le colonne necessarie esistano (P_IVA_Azienda e Nome_Sede)
-    if (idx.P_IVA_Azienda === undefined || idx.Nome_Sede === undefined) {
-      LOG.error('PNL_AZIENDA_MAP', 'Colonne "P_IVA_Azienda" o "Nome_Sede" non trovate nel foglio "Aziende".');
+    // Verifica che le colonne necessarie esistano
+    if (idx.Nome_Sede === undefined) {
+      LOG.error('PNL_AZIENDA_MAP', 'Colonna "Nome_Sede" non trovata nel foglio "Aziende".');
       return aziendaMap;
     }
 
-    const maxCol = Math.max(idx.P_IVA_Azienda, idx.Nome_Sede) + 1;
+    // Se esiste colonna Azienda esplicita, usala; altrimenti usa P_IVA_Azienda per deduzione
+    const hasAziendaCol = idx.Azienda !== undefined;
+    const hasPIvaCol = idx.P_IVA_Azienda !== undefined;
+    
+    const maxCol = Math.max(idx.Nome_Sede, idx.Azienda ?? 0, idx.P_IVA_Azienda ?? 0) + 1;
     const rows = shAziende.getRange(headerRow + 1, 1, lastRow - headerRow, maxCol).getValues();
 
     rows.forEach(row => {
-      const pIva = String(row[idx.P_IVA_Azienda] ?? '').trim();
       const sede = String(row[idx.Nome_Sede] ?? '').trim();
+      if (!sede) return;
       
-      if (sede && pIva) {
-        const azienda = pIvaToAzienda[pIva];
-        if (azienda) {
-          aziendaMap.set(sede, azienda);
-        } else {
-          LOG.warn('PNL_AZIENDA_MAP', `P_IVA non riconosciuta per sede "${sede}": ${pIva}`);
+      let azienda = '';
+      
+      // Priorità 1: Colonna "Azienda" esplicita (se esiste)
+      if (hasAziendaCol) {
+        azienda = String(row[idx.Azienda] ?? '').trim();
+      }
+      
+      // Priorità 2: Deduzione dal Nome_Sede (cerca "Gemma" o "Zaffiro" nel nome)
+      if (!azienda) {
+        const sedeUpper = sede.toUpperCase();
+        if (sedeUpper.includes('GEMMA')) {
+          azienda = 'Gemma';
+        } else if (sedeUpper.includes('ZAFFIRO')) {
+          azienda = 'Zaffiro';
         }
+      }
+      
+      // Priorità 3: Usa P_IVA_Azienda come fallback (se presente)
+      if (!azienda && hasPIvaCol) {
+        const pIva = String(row[idx.P_IVA_Azienda] ?? '').trim();
+        if (pIva) {
+          azienda = pIva; // Usa P.IVA come identificativo generico
+          LOG.info('PNL_AZIENDA_MAP', `Sede "${sede}" associata a P.IVA "${pIva}" (deduzione automatica non riuscita).`);
+        }
+      }
+      
+      if (azienda) {
+        aziendaMap.set(sede, azienda);
+      } else {
+        LOG.warn('PNL_AZIENDA_MAP', `Impossibile determinare azienda per sede "${sede}". Verifica dati foglio Aziende.`);
       }
     });
 

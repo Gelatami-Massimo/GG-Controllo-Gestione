@@ -271,7 +271,7 @@ function runClearCache() {
 function runCreateDashboard() { _runSafely(() => DASHBOARD.create(), 'Dashboard', 'Aggiornamento dashboard...', 'Dashboard aggiornata.'); }
 
 /** Crea o aggiorna il report magazzino. @returns {void} */
-function runCreateWarehouse() { _runSafely(() => WAREHOUSE.create(), 'Warehouse', 'Creazione/Aggiornamento magazzino...', 'Magazzino aggiornato!'); }
+function runCreateWarehouse() { _runSafely(() => MAGAZZINO_CORE.buildMagazzinoByYear(), 'Warehouse', 'Creazione/Aggiornamento magazzino...', 'Magazzino aggiornato!'); }
 
 /** Attiva l'import automatico programmato. @returns {void} */
 function runCreateTrigger() { _runSafely(() => createTimeBasedTrigger(), 'Trigger', 'Installazione import automatico...', 'Operazione trigger completata.'); }

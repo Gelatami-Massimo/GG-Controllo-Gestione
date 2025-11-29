@@ -241,6 +241,20 @@ const PRODUCTS = (() => {
     const normDesc = String(descrizione || '').trim();
     let normUM = String(um || '').trim();
     
+    // 1. Sicurezza: Un prodotto DEVE avere un Fornitore (P.IVA)
+    if (!normFornId) {
+      LOG.warn('PRODUCTS_SKIP', 'Tentativo creazione prodotto senza FornitoreID (P.IVA mancante). Salto.', { descrizione: normDesc });
+      return null;
+    }
+
+    // 2. Sicurezza: Deve avere ALMENO un Codice OPPURE una Descrizione
+    if (!normCodForn && !normDesc) {
+      LOG.warn('PRODUCTS_SKIP', 'Riga senza né Codice né Descrizione. Salto.', { fornitore: normFornId });
+      return null;
+    }
+
+    // Nota: Se manca il Codice ma c'è la Descrizione, procediamo (verrà generato un codice interno basato sulla descrizione).
+    
     if (runId) {
       ENHANCED_LOGGER.debug(runId, 'PRODUCTS_FIND_START', 'Inizio ricerca prodotto', {
         fornitoreId: normFornId,

@@ -29,6 +29,13 @@ const SHEET_CLEANUP = (function () {
       throw new Error('Il nome del foglio è obbligatorio.');
     }
 
+    const PROTECTED_SHEETS = ['Dashboard', 'Conto Economico', 'Report Controllo', 'Config'];
+    if (PROTECTED_SHEETS.some(protectedName => sheetName.includes(protectedName))) {
+      UTIL.showToast(`Operazione annullata: Il foglio "${sheetName}" è protetto (contiene formule).`, 'Sicurezza', 10);
+      LOG.warn('SHEET_CLEANUP', `Tentativo di pulizia bloccato su foglio protetto: ${sheetName}`);
+      return;
+    }
+
     try {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const sheet = ss.getSheetByName(sheetName);

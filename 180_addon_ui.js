@@ -126,7 +126,13 @@ function onContinueImportAction(e) {
       )
       .build();
   } catch (error) {
-    return createErrorResponse_('Errore import: ' + error.message);
+    LOG?.error('ADDON_ACTION', 'Errore import', { error: error.message, stack: error.stack });
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification()
+        .setText('⚠️ L\'operazione sta impiegando più del previsto o si è verificato un errore. Controlla il foglio Log.')
+        .setType(CardService.NotificationType.WARNING)
+      )
+      .build();
   }
 }
 
@@ -146,7 +152,13 @@ function onDashboardAction(e) {
       )
       .build();
   } catch (error) {
-    return createErrorResponse_('Errore dashboard: ' + error.message);
+    LOG?.error('ADDON_ACTION', 'Errore dashboard', { error: error.message, stack: error.stack });
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification()
+        .setText('⚠️ L\'operazione sta impiegando più del previsto o si è verificato un errore. Controlla il foglio Log.')
+        .setType(CardService.NotificationType.WARNING)
+      )
+      .build();
   }
 }
 
@@ -166,7 +178,13 @@ function onPnLAction(e) {
       )
       .build();
   } catch (error) {
-    return createErrorResponse_('Errore P&L: ' + error.message);
+    LOG?.error('ADDON_ACTION', 'Errore P&L', { error: error.message, stack: error.stack });
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification()
+        .setText('⚠️ L\'operazione sta impiegando più del previsto o si è verificato un errore. Controlla il foglio Log.')
+        .setType(CardService.NotificationType.WARNING)
+      )
+      .build();
   }
 }
 
@@ -186,7 +204,13 @@ function onDataValidationAction(e) {
       )
       .build();
   } catch (error) {
-    return createErrorResponse_('Errore validazione: ' + error.message);
+    LOG?.error('ADDON_ACTION', 'Errore validazione', { error: error.message, stack: error.stack });
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification()
+        .setText('⚠️ L\'operazione sta impiegando più del previsto o si è verificato un errore. Controlla il foglio Log.')
+        .setType(CardService.NotificationType.WARNING)
+      )
+      .build();
   }
 }
 
@@ -206,7 +230,13 @@ function onMaintenanceAction(e) {
       )
       .build();
   } catch (error) {
-    return createErrorResponse_('Errore manutenzione: ' + error.message);
+    LOG?.error('ADDON_ACTION', 'Errore manutenzione', { error: error.message, stack: error.stack });
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification()
+        .setText('⚠️ L\'operazione sta impiegando più del previsto o si è verificato un errore. Controlla il foglio Log.')
+        .setType(CardService.NotificationType.WARNING)
+      )
+      .build();
   }
 }
 
@@ -226,7 +256,13 @@ function onClearCacheAction(e) {
       )
       .build();
   } catch (error) {
-    return createErrorResponse_('Errore pulizia cache: ' + error.message);
+    LOG?.error('ADDON_ACTION', 'Errore pulizia cache', { error: error.message, stack: error.stack });
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification()
+        .setText('⚠️ L\'operazione sta impiegando più del previsto o si è verificato un errore. Controlla il foglio Log.')
+        .setType(CardService.NotificationType.WARNING)
+      )
+      .build();
   }
 }
 

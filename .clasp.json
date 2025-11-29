@@ -1,5 +1,5 @@
 {
-  "scriptId": "11KUx-G_KXzE2LvZi77SnO4zULctOPUWGkLglwf2tBgSEzjrwdCFc5noz",
+  "scriptId": "1dQzXBfweOcoORyrMjO-y88lR6z0AN3QOWido1Stlna4g9qpuuuuMyDN_",
   "rootDir": "",
   "parentId": "1yWuW5QwXZ1mLTunM_ZPDe4voynVncBvH-3WI28hbiXg",
   "scriptExtensions": [
@@ -35,7 +35,6 @@
     "090_dashboard.js",
     "094_config_ui.js",
     "100_reporting.js",
-    "110_warehouse.js",
     "120_pnl.js",
     "122_pnl_confronto.js",
     "124_prodotti_cleanup.js",
