@@ -497,6 +497,7 @@ const IMPORT_ROWS = (function () {
 
     // Carica filtro dinamico
     const junkKeywordsSet = _getJunkKeywords();
+    const junkKeywordsArray = Array.from(junkKeywordsSet); // precompute per performance
     ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_JUNK_FILTER', 'Filtro spazzatura caricato', { 
       junkKeywordsCount: junkKeywordsSet.size 
     });
@@ -615,7 +616,7 @@ const IMPORT_ROWS = (function () {
             productCache,
             rowsBuffer,
             righeHeaders,
-            junkKeywordsSet,
+            junkKeywordsArray,
             existingRows,  // ✅ Cache duplicati
             runId,  // ✅ RunId per logging interno
             productHashMap,  // ✅ OTTIMIZZAZIONE: Hash Map O(1)
@@ -747,7 +748,7 @@ const IMPORT_ROWS = (function () {
    *  - importedRowsCount: numero di righe scritte nel buffer per quella fattura
    *  - sommaRigheNetto: somma PrezzoTotale delle righe importate
    */
-  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsSet, existingRows, runId, productHashMap, newProductsToCreate) {
+  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsArray, existingRows, runId, productHashMap, newProductsToCreate) {
     const fileId = invData[idxF.FileID];
     
     ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_INVOICE_START', 'Inizio processamento fattura', {
@@ -786,7 +787,6 @@ const IMPORT_ROWS = (function () {
         }
       } else {
         // ✅ FASE 2: Business Logic (su array di plain objects)
-        const junkKeywordsArray = Array.from(junkKeywordsSet);
         const tipiDaEscludere = ['SCONTO', 'TESTO', 'OMAGGIO'];
         const fornitoreIdNorm = String(invData[idxF.FornitoreID] || '').trim().replace(/^IT/i, '').replace(/^0+/, '');
 

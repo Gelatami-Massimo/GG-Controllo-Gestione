@@ -32,6 +32,15 @@ const ENHANCED_LOGGER = (() => {
    */
   function log(runId, scope, level, message, context = {}) {
     try {
+      // Gate dei log DEBUG per performance quando non in modalità debug
+      try {
+        if (String(level).toUpperCase() === 'DEBUG') {
+          if (!(typeof CONFIG !== 'undefined' && CONFIG && CONFIG.get && CONFIG.get('MODALITA_DEBUG', false) === true)) {
+            return; // salta DEBUG se non abilitato
+          }
+        }
+      } catch (_) { /* ignora se CONFIG non ancora pronto */ }
+
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const logSheet = ss.getSheetByName('Log');
       if (!logSheet) return; // Fallback silenzioso se foglio Log non esiste
