@@ -611,3 +611,8 @@ if (typeof ModuleRegistry !== 'undefined') {
 if (typeof GG !== 'undefined') {
   GG.register('SHEET_ITERATOR', SHEET_ITERATOR);
 }
+
+// Espone SHEET_ITERATOR in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.SHEET_ITERATOR = SHEET_ITERATOR;
+}

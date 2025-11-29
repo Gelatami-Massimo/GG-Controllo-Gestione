@@ -494,3 +494,8 @@ if (typeof ModuleRegistry !== 'undefined') {
 if (typeof GG !== 'undefined') {
   GG.register('DUPLICATE_MANAGER', DUPLICATE_MANAGER);
 }
+
+// Espone DUPLICATE_MANAGER in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.DUPLICATE_MANAGER = DUPLICATE_MANAGER;
+}

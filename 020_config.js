@@ -130,6 +130,11 @@ if (typeof GG !== 'undefined') {
   GG.register('CONFIG', CONFIG);
 }
 
+// Espone CONFIG in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.CONFIG = CONFIG;
+}
+
 const SHEETS = (function () {
   // -----------------------------------------------------------
   // Utils interni
@@ -819,6 +824,11 @@ if (typeof ModuleRegistry !== 'undefined') {
 // Registra SHEETS nel namespace GG
 if (typeof GG !== 'undefined') {
   GG.register('SHEETS', SHEETS);
+}
+
+// Espone SHEETS in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.SHEETS = SHEETS;
 }
 
 /**

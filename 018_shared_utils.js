@@ -652,3 +652,8 @@ if (typeof ModuleRegistry !== 'undefined') {
 if (typeof GG !== 'undefined') {
   GG.register('SHARED_UTILS', SHARED_UTILS);
 }
+
+// Espone SHARED_UTILS in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.SHARED_UTILS = SHARED_UTILS;
+}

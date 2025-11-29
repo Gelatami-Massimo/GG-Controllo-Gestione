@@ -469,3 +469,8 @@ if (typeof ModuleRegistry !== 'undefined') {
 if (typeof GG !== 'undefined') {
   GG.register('CONSTANTS', CONSTANTS);
 }
+
+// Espone CONSTANTS in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.CONSTANTS = CONSTANTS;
+}

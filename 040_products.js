@@ -751,3 +751,8 @@ if (typeof ModuleRegistry !== 'undefined') {
 if (typeof GG !== 'undefined') {
   GG.register('PRODUCTS', PRODUCTS);
 }
+
+// Espone PRODUCTS in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.PRODUCTS = PRODUCTS;
+}

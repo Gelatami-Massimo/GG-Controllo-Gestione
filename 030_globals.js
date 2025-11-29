@@ -204,6 +204,11 @@ if (typeof GG !== 'undefined') {
   GG.register('LOG', LOG);
 }
 
+// Espone LOG in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.LOG = LOG;
+}
+
 
 const UTIL = (function () {
 
@@ -682,6 +687,11 @@ if (typeof GG !== 'undefined') {
   GG.register('UTIL', UTIL);
 }
 
+// Espone UTIL in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.UTIL = UTIL;
+}
+
 
 
 const XMLSAFE = (function () {
@@ -736,6 +746,11 @@ if (typeof ModuleRegistry !== 'undefined') {
 // Registra XMLSAFE nel namespace GG
 if (typeof GG !== 'undefined') {
   GG.register('XMLSAFE', XMLSAFE);
+}
+
+// Espone XMLSAFE in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.XMLSAFE = XMLSAFE;
 }
 
 
@@ -971,4 +986,9 @@ if (typeof ModuleRegistry !== 'undefined') {
 // Registra STATE nel namespace GG
 if (typeof GG !== 'undefined') {
   GG.register('STATE', STATE);
+}
+
+// Espone STATE in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.STATE = STATE;
 }
