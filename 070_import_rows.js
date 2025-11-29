@@ -922,7 +922,7 @@ const IMPORT_ROWS = (function () {
           // Mappa i dati secondo lo schema
           const dataDoc = invData[idxF.Data];
           
-          const rowData = {
+          const outputRowData = {
             'FileID': invData[idxF.FileID],
             'Sede': invData[idxF.Sede],
             'DataDoc': dataDoc,
@@ -949,8 +949,8 @@ const IMPORT_ROWS = (function () {
 
               const row = righeHeaders.map(header => {
              const dataKey = String(header).replace(/ /g, '').replace('ArticoloFornitore', 'ArticoloFornitore');
-             return (rowData[header] !== undefined) ? rowData[header] : 
-               (rowData[dataKey] !== undefined ? rowData[dataKey] : '');
+             return (outputRowData[header] !== undefined) ? outputRowData[header] : 
+               (outputRowData[dataKey] !== undefined ? outputRowData[dataKey] : '');
               });
           
           // ✅ VALIDAZIONE FINALE: Verifica che la riga non sia vuota
