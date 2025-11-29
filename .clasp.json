@@ -51,5 +51,18 @@
     "010_main.js",
     "999_SMOKE_TEST.js"
   ],
-  "skipSubdirectories": false
+  "skipSubdirectories": false,
+  "ignoredFiles": [
+    "**/*.md",
+    "**/*.txt",
+    "**/docs/**",
+    "**/_DA_CANCELLARE/**",
+    "**/tools/**",
+    "**/archive/**",
+    "**/.git/**",
+    "**/.vscode/**",
+    "**/node_modules/**",
+    "tutto_il_codice.txt",
+    "codice_e_html.txt"
+  ]
 }
