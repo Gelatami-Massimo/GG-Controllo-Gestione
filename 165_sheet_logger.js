@@ -71,3 +71,18 @@ const SHEET_LOGGER = (function () {
   };
 
 })();
+
+// Registra SHEET_LOGGER nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('SHEET_LOGGER', []); // No dependencies
+}
+
+// Registra SHEET_LOGGER nel namespace GG
+if (typeof GG !== 'undefined') {
+  GG.register('SHEET_LOGGER', SHEET_LOGGER);
+}
+
+// Espone SHEET_LOGGER in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.SHEET_LOGGER = SHEET_LOGGER;
+}
