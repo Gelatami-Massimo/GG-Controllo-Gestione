@@ -48,10 +48,9 @@
     "140_status.js",
     "150_triggers.js",
     "170_setup.js",
-    "010_main.js",
-    "999_SMOKE_TEST.js"
+    "010_main.js"
   ],
-  "skipSubdirectories": false,
+  "skipSubdirectories": true,
   "ignoredFiles": [
     "**/*.md",
     "**/*.txt",
