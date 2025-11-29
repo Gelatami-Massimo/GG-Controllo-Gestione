@@ -227,15 +227,15 @@ function runReconciliationReport() { _runSafely(() => REPORTING.run(), 'Reportin
  */
 function runCompleteMaintenance() {
   _runSafely(() => {
-    const runId = ENHANCED_LOGGER?.generateRunId ? ENHANCED_LOGGER.generateRunId() : Utilities.getUuid();
-    ENHANCED_LOGGER?.info(runId, 'MAINT_START', 'Avvio manutenzione completa');
+    const runId = LOG?.generateRunId ? LOG.generateRunId() : Utilities.getUuid();
+    LOG?.info(runId, 'MAINT_START', 'Avvio manutenzione completa');
 
     // 0. Verifica e riallinea intestazioni fogli secondo SCHEMAS
     try {
       const summary = (typeof SETUP !== 'undefined' && SETUP.verifyAlignment) ? SETUP.verifyAlignment() : null;
-      ENHANCED_LOGGER?.info(runId, 'MAINT_SETUP_VERIFY', 'Verifica setup eseguita', { summary });
+      LOG?.info(runId, 'MAINT_SETUP_VERIFY', 'Verifica setup eseguita', { summary });
     } catch (e) {
-      ENHANCED_LOGGER?.warn(runId, 'MAINT_SETUP_VERIFY_FAIL', 'Errore verifica setup', { error: e.message });
+      LOG?.warn(runId, 'MAINT_SETUP_VERIFY_FAIL', 'Errore verifica setup', { error: e.message });
     }
 
     // 1. Verifica struttura fogli e applica filtri su TUTTI i fogli
@@ -252,7 +252,7 @@ function runCompleteMaintenance() {
     // 4. Controlla integrità dati (sanity check)
     DEBUG.sanityCheck();
 
-    ENHANCED_LOGGER?.info(runId, 'MAINT_DONE', 'Manutenzione completa terminata');
+    LOG?.info(runId, 'MAINT_DONE', 'Manutenzione completa terminata');
   }, 'Maintenance', 'Manutenzione completa in corso...', 'Manutenzione completata! Fogli verificati, codici formattati, duplicati marcati, integrità controllata.');
 }
 

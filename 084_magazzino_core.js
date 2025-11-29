@@ -17,7 +17,7 @@ const MAGAZZINO_CORE = (() => {
    */
   function buildMagazzinoBaseRows_(dateFilter = null, filterByIngrediente = true, runId = '') {
     if (runId) {
-      ENHANCED_LOGGER.info(runId, 'MAG_BUILD_START', 'Inizio costruzione righe magazzino', {
+      LOG.info(runId, 'MAG_BUILD_START', 'Inizio costruzione righe magazzino', {
         filterByIngrediente,
         hasDateFilter: !!dateFilter
       });
@@ -52,13 +52,13 @@ const MAGAZZINO_CORE = (() => {
     LOG?.info('MAG_CORE', `Mappa prodotti costruita: ${prodottiByKey.size} con codice, ${prodottiByKeyNoCode.size} senza codice.`);
     
     if (runId) {
-      ENHANCED_LOGGER.info(runId, 'MAG_PRODUCT_MAP', 'Mappa prodotti costruita', {
+      LOG.info(runId, 'MAG_PRODUCT_MAP', 'Mappa prodotti costruita', {
         prodottiConCodice: prodottiByKey.size,
         prodottiSenzaCodice: prodottiByKeyNoCode.size
       });
     }
     
-    // Logging già gestito da ENHANCED_LOGGER in MAG_PRODUCT_MAP
+    // Logging già gestito da LOG in MAG_PRODUCT_MAP
 
     // 4. Processa righe fattura
     const rowsBase = _processRighe(shRighe, lastRowRighe, prodottiByKey, prodottiByKeyNoCode, dateFilter, runId);
@@ -128,7 +128,7 @@ const MAGAZZINO_CORE = (() => {
       if (!fornitoreID) {
         skippedNoFornitore++;
         if (runId) {
-          ENHANCED_LOGGER.debug(runId, 'MAG_SKIP_NO_SUPPLIER', 'Prodotto senza FornitoreID', {
+          LOG.debug(runId, 'MAG_SKIP_NO_SUPPLIER', 'Prodotto senza FornitoreID', {
             codiceInterno,
             descrizione: descrizione.substring(0, 30)
           });
@@ -138,7 +138,7 @@ const MAGAZZINO_CORE = (() => {
       if (filterByIngrediente && !ingrediente) {
         skippedNoIngrediente++;
         if (runId) {
-          ENHANCED_LOGGER.debug(runId, 'MAG_SKIP_NO_INGREDIENT', 'Prodotto senza Ingrediente', {
+          LOG.debug(runId, 'MAG_SKIP_NO_INGREDIENT', 'Prodotto senza Ingrediente', {
             codiceInterno,
             descrizione: descrizione.substring(0, 30)
           });
@@ -148,7 +148,7 @@ const MAGAZZINO_CORE = (() => {
       if (nonInUso === true || String(nonInUso).toLowerCase() === 'true' || String(nonInUso).toLowerCase() === 'vero') {
         skippedNonInUso++;
         if (runId) {
-          ENHANCED_LOGGER.debug(runId, 'MAG_SKIP_DISABLED', 'Prodotto disabilitato (NonInUso)', {
+          LOG.debug(runId, 'MAG_SKIP_DISABLED', 'Prodotto disabilitato (NonInUso)', {
             codiceInterno,
             descrizione: descrizione.substring(0, 30)
           });
@@ -194,7 +194,7 @@ const MAGAZZINO_CORE = (() => {
     // Raccogli sample delle chiavi prodotti per debug
     const keysSample = Array.from(prodottiByKey.keys()).slice(0, 5);
 
-    // Logging già gestito da ENHANCED_LOGGER in MAG_SKIP_* scopes
+    // Logging già gestito da LOG in MAG_SKIP_* scopes
     if (false) {
       try {
         const timestamp = new Date();
@@ -260,7 +260,7 @@ const MAGAZZINO_CORE = (() => {
       if (!anno || quantita <= 0 || prezzoTotale === 0) {
         skippedInvalidData++;
         if (runId) {
-          ENHANCED_LOGGER.debug(runId, 'MAG_ROW_SKIP_INVALID', 'Riga invalida', {
+          LOG.debug(runId, 'MAG_ROW_SKIP_INVALID', 'Riga invalida', {
             anno,
             quantita,
             prezzoTotale,
@@ -276,7 +276,7 @@ const MAGAZZINO_CORE = (() => {
         if (isNaN(docDate.getTime()) || docDate < dateFilter.startDate || docDate > dateFilter.endDate) {
           skippedByDateFilter++;
           if (runId) {
-            ENHANCED_LOGGER.debug(runId, 'MAG_ROW_SKIP_DATE', 'Riga fuori intervallo date', {
+            LOG.debug(runId, 'MAG_ROW_SKIP_DATE', 'Riga fuori intervallo date', {
               dataDoc,
               filterStart: dateFilter.startDate.toISOString().substring(0, 10),
               filterEnd: dateFilter.endDate.toISOString().substring(0, 10)
@@ -326,7 +326,7 @@ const MAGAZZINO_CORE = (() => {
         }
         
         if (runId) {
-          ENHANCED_LOGGER.debug(runId, 'MAG_ROW_NO_MATCH', 'Riga non trova prodotto', {
+          LOG.debug(runId, 'MAG_ROW_NO_MATCH', 'Riga non trova prodotto', {
             fornitoreID,
             codiceArticolo,
             descrizione: descrizione.substring(0, 30),
@@ -337,7 +337,7 @@ const MAGAZZINO_CORE = (() => {
         return;
       } else {
         if (runId) {
-          ENHANCED_LOGGER.debug(runId, 'MAG_ROW_MATCHED', 'Riga matched con prodotto', {
+          LOG.debug(runId, 'MAG_ROW_MATCHED', 'Riga matched con prodotto', {
             fornitoreID,
             codiceArticolo,
             codiceInterno: prod.codiceInterno,
@@ -382,7 +382,7 @@ const MAGAZZINO_CORE = (() => {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const logSheet = ss.getSheetByName('Log');
       if (logSheet) {
-        // Logging già gestito da ENHANCED_LOGGER in MAG_ROW_* scopes
+        // Logging già gestito da LOG in MAG_ROW_* scopes
       }
     } catch (e) {
       console.error('Errore scrittura log righe:', e);
@@ -549,8 +549,8 @@ const MAGAZZINO_CORE = (() => {
    * MAGAZZINO_CORE.buildMagazzinoByYear();
    */
   function buildMagazzinoByYear() {
-    const runId = ENHANCED_LOGGER.generateRunId();
-    ENHANCED_LOGGER.info(runId, 'MAG_PRODOTTI_START', 'Inizio report Magazzino Prodotti');
+    const runId = LOG.generateRunId();
+    LOG.info(runId, 'MAG_PRODOTTI_START', 'Inizio report Magazzino Prodotti');
 
     try {
       // Richiedi intervallo di mesi all'utente
@@ -563,7 +563,7 @@ const MAGAZZINO_CORE = (() => {
       
       if (responseStart.getSelectedButton() !== ui.Button.OK) {
         ui.alert('Operazione annullata.');
-        ENHANCED_LOGGER.info(runId, 'MAG_PRODOTTI_CANCELLED', 'Operazione annullata dall\'utente');
+        LOG.info(runId, 'MAG_PRODOTTI_CANCELLED', 'Operazione annullata dall\'utente');
         return;
       }
       
@@ -604,20 +604,20 @@ const MAGAZZINO_CORE = (() => {
       
       const dateFilter = { startDate, endDate };
       
-      // Logging già gestito da ENHANCED_LOGGER in MAG_PRODOTTI_START
+      // Logging già gestito da LOG in MAG_PRODOTTI_START
       
       SHARED_UTILS.showToast(`Creazione Report Magazzino (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino', 10);
 
       // 1. Ottieni righe base con filtro (SENZA filtro Ingrediente per vedere tutti i prodotti)
       const rowsBase = buildMagazzinoBaseRows_(dateFilter, false, runId);
       
-      ENHANCED_LOGGER.info(runId, 'MAG_PRODOTTI_ROWS', 'Righe base generate', {
+      LOG.info(runId, 'MAG_PRODOTTI_ROWS', 'Righe base generate', {
         rowCount: rowsBase.length
       });
 
       if (rowsBase.length === 0) {
         SHARED_UTILS.showToast('Nessun dato da elaborare.', 'Avviso', 5);
-        ENHANCED_LOGGER.warn(runId, 'MAG_PRODOTTI_NO_DATA', 'Nessun dato trovato per intervallo selezionato');
+        LOG.warn(runId, 'MAG_PRODOTTI_NO_DATA', 'Nessun dato trovato per intervallo selezionato');
         return;
       }
 
@@ -784,8 +784,8 @@ const MAGAZZINO_CORE = (() => {
    * MAGAZZINO_CORE.buildMagazzinoIngredientiByYear();
    */
   function buildMagazzinoIngredientiByYear() {
-    const runId = ENHANCED_LOGGER.generateRunId();
-    ENHANCED_LOGGER.info(runId, 'MAG_INGREDIENTI_START', 'Inizio report Magazzino Ingredienti');
+    const runId = LOG.generateRunId();
+    LOG.info(runId, 'MAG_INGREDIENTI_START', 'Inizio report Magazzino Ingredienti');
 
     try {
       // Richiedi intervallo di mesi all'utente
@@ -798,7 +798,7 @@ const MAGAZZINO_CORE = (() => {
       
       if (responseStart.getSelectedButton() !== ui.Button.OK) {
         ui.alert('Operazione annullata.');
-        ENHANCED_LOGGER.info(runId, 'MAG_INGREDIENTI_CANCELLED', 'Operazione annullata dall\'utente');
+        LOG.info(runId, 'MAG_INGREDIENTI_CANCELLED', 'Operazione annullata dall\'utente');
         return;
       }
       
@@ -839,20 +839,20 @@ const MAGAZZINO_CORE = (() => {
       
       const dateFilter = { startDate, endDate };
       
-      // Logging già gestito da ENHANCED_LOGGER in MAG_INGREDIENTI_START
+      // Logging già gestito da LOG in MAG_INGREDIENTI_START
       
       SHARED_UTILS.showToast(`Creazione Report Magazzino Ingredienti (${startParts[0]}/${startParts[1]} - ${endParts[0]}/${endParts[1]})...`, 'Magazzino Ingredienti', 10);
 
       // 1. Ottieni righe base con filtro (CON filtro Ingrediente per vedere solo ingredienti)
       const rowsBase = buildMagazzinoBaseRows_(dateFilter, true, runId);
       
-      ENHANCED_LOGGER.info(runId, 'MAG_INGREDIENTI_ROWS', 'Righe base generate', {
+      LOG.info(runId, 'MAG_INGREDIENTI_ROWS', 'Righe base generate', {
         rowCount: rowsBase.length
       });
 
       if (rowsBase.length === 0) {
         SHARED_UTILS.showToast('Nessun dato da elaborare.', 'Avviso', 5);
-        ENHANCED_LOGGER.warn(runId, 'MAG_INGREDIENTI_NO_DATA', 'Nessun dato trovato per intervallo selezionato');
+        LOG.warn(runId, 'MAG_INGREDIENTI_NO_DATA', 'Nessun dato trovato per intervallo selezionato');
         return;
       }
 

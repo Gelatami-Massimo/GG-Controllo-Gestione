@@ -256,7 +256,7 @@ const PRODUCTS = (() => {
     // Nota: Se manca il Codice ma c'è la Descrizione, procediamo (verrà generato un codice interno basato sulla descrizione).
     
     if (runId) {
-      ENHANCED_LOGGER.debug(runId, 'PRODUCTS_FIND_START', 'Inizio ricerca prodotto', {
+      LOG.debug(runId, 'PRODUCTS_FIND_START', 'Inizio ricerca prodotto', {
         fornitoreId: normFornId,
         codFornitore,
         normCodForn,
@@ -282,7 +282,7 @@ const PRODUCTS = (() => {
       foundByCode = cache.byFornitoreCodice.get(keyCode);
       
       if (runId) {
-        ENHANCED_LOGGER.debug(runId, 'PRODUCTS_SEARCH_CODE', foundByCode ? 'Prodotto trovato by code' : 'Prodotto NON trovato by code', {
+        LOG.debug(runId, 'PRODUCTS_SEARCH_CODE', foundByCode ? 'Prodotto trovato by code' : 'Prodotto NON trovato by code', {
           keyCode,
           found: !!foundByCode,
           codiceInternoBreve: foundByCode?.codiceInternoBreve
@@ -297,7 +297,7 @@ const PRODUCTS = (() => {
       foundByDesc = cache.byFornitoreDescrizione.get(keyDesc);
       
       if (runId) {
-        ENHANCED_LOGGER.debug(runId, 'PRODUCTS_SEARCH_BY_DESC', 'Ricerca per descrizione', {
+        LOG.debug(runId, 'PRODUCTS_SEARCH_BY_DESC', 'Ricerca per descrizione', {
           keyDesc: keyDesc.substring(0, 60),
           found: !!foundByDesc,
           codiceInternoBreve: foundByDesc?.codiceInternoBreve
@@ -317,7 +317,7 @@ const PRODUCTS = (() => {
         cache.byFornitoreDescrizione.set(keyDesc, foundByCode);
         
         if (runId) {
-          ENHANCED_LOGGER.info(runId, 'PRODUCTS_UPDATE_DESC_KEY', 'Aggiunta chiave descrizione a prodotto esistente', {
+          LOG.info(runId, 'PRODUCTS_UPDATE_DESC_KEY', 'Aggiunta chiave descrizione a prodotto esistente', {
             codiceInternoBreve: foundByCode.codiceInternoBreve,
             chiaveDesc: chiaveDesc.substring(0, 50)
           });
@@ -325,7 +325,7 @@ const PRODUCTS = (() => {
       }
       
       if (runId) {
-        ENHANCED_LOGGER.info(runId, 'PRODUCTS_FOUND_BY_CODE', 'Prodotto trovato per codice', {
+        LOG.info(runId, 'PRODUCTS_FOUND_BY_CODE', 'Prodotto trovato per codice', {
           codiceInternoBreve: foundByCode.codiceInternoBreve
         });
       }
@@ -353,7 +353,7 @@ const PRODUCTS = (() => {
         cache.byFornitoreCodice.set(keyCode, foundByDesc);
         
         if (runId) {
-          ENHANCED_LOGGER.info(runId, 'PRODUCTS_AUTOCORRECT', 'Auto-correzione TEMP→real applicata', {
+          LOG.info(runId, 'PRODUCTS_AUTOCORRECT', 'Auto-correzione TEMP→real applicata', {
             codiceInternoBreve: foundByDesc.codiceInternoBreve,
             oldCode: isTempCode ? foundByDesc.codiceFornitore : '(vuoto)',
             newCode: normCodForn
@@ -364,7 +364,7 @@ const PRODUCTS = (() => {
       }
       
       if (runId) {
-        ENHANCED_LOGGER.info(runId, 'PRODUCTS_FOUND_BY_DESC', 'Prodotto trovato per descrizione', {
+        LOG.info(runId, 'PRODUCTS_FOUND_BY_DESC', 'Prodotto trovato per descrizione', {
           codiceInternoBreve: foundByDesc.codiceInternoBreve
         });
       }
@@ -378,7 +378,7 @@ const PRODUCTS = (() => {
 
     // 3. Non trovato → crea nuovo prodotto
     if (runId) {
-      ENHANCED_LOGGER.info(runId, 'PRODUCTS_CREATE_NEW', 'Nessun match - creazione nuovo prodotto', {
+      LOG.info(runId, 'PRODUCTS_CREATE_NEW', 'Nessun match - creazione nuovo prodotto', {
         fornitoreId: normFornId,
         codFornitore: normCodForn,
         descrizione: normDesc.substring(0, 50)
@@ -407,7 +407,7 @@ const PRODUCTS = (() => {
     const codiceInternoBreve = _generateCodiceInternoBreve(fornitoreId, denominazioneFornitore, cache.shortCodes);
     
     if (runId) {
-      ENHANCED_LOGGER.info(runId, 'PRODUCTS_CREATED', 'Nuovo prodotto creato', {
+      LOG.info(runId, 'PRODUCTS_CREATED', 'Nuovo prodotto creato', {
         codiceInternoBreve,
         fornitoreId,
         codFornitore,
@@ -601,7 +601,7 @@ const PRODUCTS = (() => {
     const rowsToWrite = [];
 
     if (runId) {
-      ENHANCED_LOGGER.info(runId, 'PRODUCTS_BATCH_CREATE_START', 'Avvio batch creation prodotti', {
+      LOG.info(runId, 'PRODUCTS_BATCH_CREATE_START', 'Avvio batch creation prodotti', {
         productsCount: productsArray.length
       });
     }
@@ -680,7 +680,7 @@ const PRODUCTS = (() => {
       cache.byCodeBreve.set(codiceInternoBreve, prodotto);
 
       if (runId) {
-        ENHANCED_LOGGER.debug(runId, 'PRODUCTS_BATCH_ITEM', 'Prodotto preparato per batch', {
+        LOG.debug(runId, 'PRODUCTS_BATCH_ITEM', 'Prodotto preparato per batch', {
           codiceInternoBreve,
           codiceValore,
           descrizione: descrizione.substring(0, 50)
@@ -704,7 +704,7 @@ const PRODUCTS = (() => {
       });
 
       if (runId) {
-        ENHANCED_LOGGER.info(runId, 'PRODUCTS_BATCH_CREATE_DONE', 'Batch creation completata', {
+        LOG.info(runId, 'PRODUCTS_BATCH_CREATE_DONE', 'Batch creation completata', {
           productsCreated: rowsToWrite.length,
           startRow,
           endRow: startRow + rowsToWrite.length - 1

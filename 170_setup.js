@@ -130,12 +130,12 @@ const SETUP = (function () {
 
   /**
    * Verifica allineamento fogli rispetto a SHEETS.SCHEMAS e corregge intestazioni mancanti.
-   * Logga un riepilogo dettagliato su `Log` usando ENHANCED_LOGGER.
+   * Logga un riepilogo dettagliato su `Log` usando LOG.
    */
   function verifyAlignment() {
-    const runId = ENHANCED_LOGGER?.generateRunId ? ENHANCED_LOGGER.generateRunId() : Utilities.getUuid();
+    const runId = LOG?.generateRunId ? LOG.generateRunId() : Utilities.getUuid();
     try {
-      ENHANCED_LOGGER?.info(runId, 'SETUP_VERIFY', 'Avvio verifica allineamento fogli');
+      LOG?.info(runId, 'SETUP_VERIFY', 'Avvio verifica allineamento fogli');
       const schemas = SHEETS.SCHEMAS;
       const names = SHEETS.SHEET_NAMES;
       const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -158,19 +158,19 @@ const SETUP = (function () {
           // Riallinea intestazioni se possibile
           try {
             SHEETS._ensureHeaders(sh, realName);
-            ENHANCED_LOGGER?.info(runId, 'SETUP_VERIFY_FIX', `Riallineate intestazioni`, { sheet: realName });
+            LOG?.info(runId, 'SETUP_VERIFY_FIX', `Riallineate intestazioni`, { sheet: realName });
           } catch (e) {
-            ENHANCED_LOGGER?.warn(runId, 'SETUP_VERIFY_FIX_FAIL', `Errore riallineamento`, { sheet: realName, error: e.message });
+            LOG?.warn(runId, 'SETUP_VERIFY_FIX_FAIL', `Errore riallineamento`, { sheet: realName, error: e.message });
           }
         } else {
           summary.push({ sheet: realName, status: 'OK' });
         }
       });
 
-      ENHANCED_LOGGER?.info(runId, 'SETUP_VERIFY_SUMMARY', 'Verifica completata', { summary });
+      LOG?.info(runId, 'SETUP_VERIFY_SUMMARY', 'Verifica completata', { summary });
       return summary;
     } catch (e) {
-      ENHANCED_LOGGER?.error(runId, 'SETUP_VERIFY_ERROR', 'Errore verifica allineamento', { error: e.message });
+      LOG?.error(runId, 'SETUP_VERIFY_ERROR', 'Errore verifica allineamento', { error: e.message });
       throw e;
     }
   }

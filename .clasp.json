@@ -21,7 +21,6 @@
     "020_config.js",
     "030_globals.js",
     "016_error_handler.js",
-    "017_enhanced_logger.js",
     "018_shared_utils.js",
     "031_sheet_iterator.js",
     "032_duplicate_manager.js",

@@ -92,8 +92,25 @@ const LOG = (function () {
     }
   }
 
-  function _log(level, scope, message, context) {
+  function _log(level, runIdOrScope, scopeOrMessage, messageOrContext, contextOrUndefined) {
     try {
+      // Overloading: supporta sia (level, scope, message, context) che (level, runId, scope, message, context)
+      let runId = '';
+      let scope, message, context;
+      
+      if (contextOrUndefined !== undefined) {
+        // 5 argomenti: (level, runId, scope, message, context)
+        runId = String(runIdOrScope || '');
+        scope = scopeOrMessage;
+        message = messageOrContext;
+        context = contextOrUndefined;
+      } else {
+        // 4 argomenti: (level, scope, message, context)
+        scope = runIdOrScope;
+        message = scopeOrMessage;
+        context = messageOrContext || {};
+      }
+
       const cloudLogMessage = `[${level}] ${scope}: ${message}`;
       if (context && Object.keys(context).length > 0) {
            if (context.error instanceof Error) {
@@ -115,29 +132,47 @@ const LOG = (function () {
       if (safeContext.length > 49000) {
         safeContext = safeContext.substring(0, 49000) + '... [TRONCATO]"}';
       }
-      // Allinea all'intestazione SCHEMAS.Log: ['Timestamp', 'RunId', 'Scope', 'Level', 'Message', 'Context']
-      // RunId non è gestito dal logger base: lasciamo colonna vuota per compatibilità con ENHANCED_LOGGER
-      logBuffer.push([new Date(), '', scope || '-', level || 'INFO', message || '-', safeContext]);
+      
+      logBuffer.push([new Date(), runId, scope || '-', level || 'INFO', message || '-', safeContext]);
       
       if (logBuffer.length >= MAX_BUFFER_SIZE) _flush();
 
     } catch (e) {
-      console.error('[LOG FAIL] Errore critico nel logger!', level, scope, message, e?.message);
+      console.error('[LOG FAIL] Errore critico nel logger!', level, runIdOrScope, scopeOrMessage, e?.message);
     }
   }
 
+  /**
+   * Genera un runId univoco per tracciare un'esecuzione completa.
+   * Formato: YYYYMMDD_HHMMSS_SSS
+   */
+  function generateRunId() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const h = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const s = String(now.getSeconds()).padStart(2, '0');
+    const ms = String(now.getMilliseconds()).padStart(3, '0');
+    return `${y}${m}${d}_${h}${min}${s}_${ms}`;
+  }
+
   return {
-    info: (scope, message, context = {}) => _log('INFO', scope, message, context),
-    warn: (scope, message, context = {}) => _log('WARN', scope, message, context),
-    error: (scope, message, context = {}) => _log('ERROR', scope, message, context),
-    debug: (scope, message, context = {}) => {
-      // Assicurati che CONFIG sia definito prima di chiamare LOG.debug
+    generateRunId,
+    info: (...args) => _log('INFO', ...args),
+    warn: (...args) => _log('WARN', ...args),
+    error: (...args) => _log('ERROR', ...args),
+    debug: (...args) => {
+      // Gate DEBUG: controlla CONFIG.MODALITA_DEBUG
       try {
-        if (CONFIG && CONFIG.get('MODALITA_DEBUG', false) === true) _log('DEBUG', scope, message, context);
+        if (CONFIG && CONFIG.get('MODALITA_DEBUG', false) === true) {
+          _log('DEBUG', ...args);
+        }
       } catch (e) {
-        // Fallback se CONFIG non è ancora pronto durante l'init
-        if (String(message || '').includes('MODALITA_DEBUG')) {
-          _log('DEBUG', scope, message, context);
+        // Fallback se CONFIG non è ancora pronto
+        if (String(args[2] || '').includes('MODALITA_DEBUG')) {
+          _log('DEBUG', ...args);
         }
       }
     },

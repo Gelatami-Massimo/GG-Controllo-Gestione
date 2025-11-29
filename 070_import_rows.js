@@ -453,8 +453,8 @@ const IMPORT_ROWS = (function () {
   }
 
   function _mainLoop(isSilent) {
-    const runId = ENHANCED_LOGGER.generateRunId();
-    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_START', 'Inizio import righe', { isSilent });
+    const runId = LOG.generateRunId();
+    LOG.info(runId, 'IMPORT_ROWS_START', 'Inizio import righe', { isSilent });
 
     const startTime = new Date();
     const maxSec = CONFIG.get('MAX_RUNTIME_SEC', 240);
@@ -471,7 +471,7 @@ const IMPORT_ROWS = (function () {
       throw new Error("Schema Righe non trovato in SHEETS.SCHEMAS.");
     }
     
-    ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_SETUP', 'Header caricati', { 
+    LOG.debug(runId, 'IMPORT_ROWS_SETUP', 'Header caricati', { 
       headerRowF, 
       righeHeadersCount: righeHeaders.length 
     });
@@ -501,13 +501,13 @@ const IMPORT_ROWS = (function () {
     // Compila regex unica (case-insensitive) per match veloce delle parole chiave
     const _escapeRegex = s => String(s).replace(/[\-\/\\^$*+?.()|[\]{}]/g, '\\$&');
     const junkRegex = junkKeywordsArray.length ? new RegExp(junkKeywordsArray.map(_escapeRegex).join('|'), 'i') : null;
-    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_JUNK_FILTER', 'Filtro spazzatura caricato', { 
+    LOG.info(runId, 'IMPORT_ROWS_JUNK_FILTER', 'Filtro spazzatura caricato', { 
       junkKeywordsCount: junkKeywordsSet.size 
     });
 
     // Carica cache righe esistenti (prevenzione duplicati)
     const existingRows = _loadExistingRowsCache();
-    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_DUP_CACHE', 'Cache duplicati caricata', { 
+    LOG.info(runId, 'IMPORT_ROWS_DUP_CACHE', 'Cache duplicati caricata', { 
       existingRowsCount: existingRows.size 
     });
     LOG?.info('ROWS_SETUP', `Prevenzione duplicati attiva. Righe esistenti in cache: ${existingRows.size}`);
@@ -520,7 +520,7 @@ const IMPORT_ROWS = (function () {
         enabledSupplierIds.add(String(id).trim().replace(/^IT/i, '').replace(/^0+/, ''));
       }
     });
-    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_SUPPLIERS', 'Fornitori abilitati caricati', { 
+    LOG.info(runId, 'IMPORT_ROWS_SUPPLIERS', 'Fornitori abilitati caricati', { 
       totalSuppliers: suppliersData.size,
       enabledSuppliers: enabledSupplierIds.size 
     });
@@ -531,7 +531,7 @@ const IMPORT_ROWS = (function () {
 
     // ✅ OTTIMIZZAZIONE: Costruisci Hash Map O(1) per lookup istantaneo
     const productHashMap = _buildProductHashMap(productCache);
-    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_HASH_MAP', 'Hash Map prodotti costruita', {
+    LOG.info(runId, 'IMPORT_ROWS_HASH_MAP', 'Hash Map prodotti costruita', {
       productsIndexed: productHashMap.size
     });
 
@@ -585,7 +585,7 @@ const IMPORT_ROWS = (function () {
         }
       },
       processChunk: (invoicesChunk, chunkStartRow) => {
-        ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_CHUNK_START', 'Inizio elaborazione chunk', {
+        LOG.debug(runId, 'IMPORT_ROWS_CHUNK_START', 'Inizio elaborazione chunk', {
           chunkStartRow,
           chunkSize: invoicesChunk.length
         });
@@ -606,7 +606,7 @@ const IMPORT_ROWS = (function () {
             });
           }
           skippedInvoices += invoicesChunk.length;
-          ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_CHUNK_SKIP_DISABLED', 'Chunk saltato: tutti i fornitori disabilitati', {
+          LOG.debug(runId, 'IMPORT_ROWS_CHUNK_SKIP_DISABLED', 'Chunk saltato: tutti i fornitori disabilitati', {
             chunkStartRow,
             chunkSize: invoicesChunk.length
           });
@@ -649,7 +649,7 @@ const IMPORT_ROWS = (function () {
             newProductsToCreate  // ✅ OTTIMIZZAZIONE: Array batch nuovi prodotti
           );
 
-          ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_INVOICE_PROCESSED', 'Fattura processata', {
+          LOG.info(runId, 'IMPORT_ROWS_INVOICE_PROCESSED', 'Fattura processata', {
             invRowNum,
             fileId: invData[idxF.FileID],
             statusSrc,
@@ -669,7 +669,7 @@ const IMPORT_ROWS = (function () {
           // Fornitore DISABILITATO.
           // Marca come 'skipped' ma lascia RigheImportate = FALSE
           // (TRUE significa sempre "righe esistono in Righe").
-          ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_SKIP_DISABLED', 'Fattura fornitore disabilitato', {
+          LOG.debug(runId, 'IMPORT_ROWS_SKIP_DISABLED', 'Fattura fornitore disabilitato', {
             invRowNum,
             fileId: invData[idxF.FileID],
             fornitoreId
@@ -706,7 +706,7 @@ const IMPORT_ROWS = (function () {
 
     // ✅ OTTIMIZZAZIONE: Batch creation nuovi prodotti (se accumulati)
     if (newProductsToCreate.length > 0) {
-      ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_BATCH_CREATE', 'Avvio batch creation nuovi prodotti', {
+      LOG.info(runId, 'IMPORT_ROWS_BATCH_CREATE', 'Avvio batch creation nuovi prodotti', {
         newProductsCount: newProductsToCreate.length
       });
       LOG?.info('ROWS_BATCH_CREATE', `Creazione batch di ${newProductsToCreate.length} nuovi prodotti...`);
@@ -719,14 +719,14 @@ const IMPORT_ROWS = (function () {
         createdProducts.forEach(product => {
           if (product.lookupKey) {
             productHashMap.set(product.lookupKey, product);
-            ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_HASH_UPDATE', 'Hash Map aggiornata con nuovo prodotto', {
+            LOG.debug(runId, 'IMPORT_ROWS_HASH_UPDATE', 'Hash Map aggiornata con nuovo prodotto', {
               lookupKey: product.lookupKey,
               codiceInternoBreve: product.codiceInternoBreve
             });
           }
         });
         
-        ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_BATCH_CREATE_DONE', 'Batch creation completata', {
+        LOG.info(runId, 'IMPORT_ROWS_BATCH_CREATE_DONE', 'Batch creation completata', {
           productsCreated: createdProducts.length,
           hashMapUpdated: true
         });
@@ -737,7 +737,7 @@ const IMPORT_ROWS = (function () {
           stack: e.stack,
           productsCount: newProductsToCreate.length 
         });
-        ENHANCED_LOGGER.error(runId, 'IMPORT_ROWS_BATCH_CREATE_ERROR', 'Errore batch creation', {
+        LOG.error(runId, 'IMPORT_ROWS_BATCH_CREATE_ERROR', 'Errore batch creation', {
           error: e.message,
           productsCount: newProductsToCreate.length
         });
@@ -748,7 +748,7 @@ const IMPORT_ROWS = (function () {
     _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF, newProductsToCreate, productHashMap, runId);
     STATE.clear(CURSOR_KEY);
     
-    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_COMPLETE', 'Importazione righe completata', {
+    LOG.info(runId, 'IMPORT_ROWS_COMPLETE', 'Importazione righe completata', {
       processedInvoices,
       skippedInvoices,
       totalInvoices: processedInvoices + skippedInvoices
@@ -777,7 +777,7 @@ const IMPORT_ROWS = (function () {
   function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkRegex, existingRows, runId, productHashMap, newProductsToCreate) {
     const fileId = invData[idxF.FileID];
     
-    ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_INVOICE_START', 'Inizio processamento fattura', {
+    LOG.debug(runId, 'IMPORT_ROWS_INVOICE_START', 'Inizio processamento fattura', {
       invRowNum,
       fileId
     });
@@ -827,7 +827,7 @@ const IMPORT_ROWS = (function () {
           const codiceValoreForzato = UTIL.forceText(codiceValore);
 
           if (isTempGenerated) {
-            ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_TEMP_CODE', 'Codice TEMP generato', {
+            LOG.debug(runId, 'IMPORT_ROWS_TEMP_CODE', 'Codice TEMP generato', {
               fileId,
               descrizione: descrizione.substring(0, 50),
               codiceValore
@@ -842,7 +842,7 @@ const IMPORT_ROWS = (function () {
           
           if (existingRows && existingRows.has(duplicateKey)) {
             skippedDuplicates++;
-            ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_DUP_SKIP', 'Riga duplicata skippata', {
+            LOG.debug(runId, 'IMPORT_ROWS_DUP_SKIP', 'Riga duplicata skippata', {
               fileId,
               numeroLinea
             });
@@ -852,7 +852,7 @@ const IMPORT_ROWS = (function () {
           // ✅ CALCOLO TIPORIGA - LOGICA ROBUSTA MULTI-FORNITORE
           const tipoRiga = _classifyRowType(qta, prezzoTotaleRiga, descrizione, codiceTipo);
           
-          ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_CLASSIFY', 'TipoRiga classificato', {
+          LOG.debug(runId, 'IMPORT_ROWS_CLASSIFY', 'TipoRiga classificato', {
             fileId,
             numeroLinea,
             tipoRiga,
@@ -865,7 +865,7 @@ const IMPORT_ROWS = (function () {
           const deveEssereEsclusa = isJunk || tipiDaEscludere.includes(tipoRiga);
 
           if (deveEssereEsclusa) {
-            ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_EXCLUDED', 'Riga esclusa', {
+            LOG.debug(runId, 'IMPORT_ROWS_EXCLUDED', 'Riga esclusa', {
               fileId,
               numeroLinea,
               reason: isJunk ? 'junk' : tipoRiga,
@@ -894,7 +894,7 @@ const IMPORT_ROWS = (function () {
               codiceInternoBreve = foundProduct.codiceInternoBreve;
               codiceInterno = foundProduct.codiceInterno || codiceInternoBreve; // Legacy fallback
               
-              ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_PRODUCT_FOUND', 'Prodotto trovato O(1)', {
+              LOG.debug(runId, 'IMPORT_ROWS_PRODUCT_FOUND', 'Prodotto trovato O(1)', {
                 fileId,
                 numeroLinea,
                 lookupKey,
@@ -918,7 +918,7 @@ const IMPORT_ROWS = (function () {
               codiceInternoBreve = `PENDING_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
               codiceInterno = codiceInternoBreve; // Legacy fallback
               
-              ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_PRODUCT_NEW', 'Nuovo prodotto accumulato per batch creation', {
+              LOG.debug(runId, 'IMPORT_ROWS_PRODUCT_NEW', 'Nuovo prodotto accumulato per batch creation', {
                 fileId,
                 numeroLinea,
                 codiceValore,
@@ -930,7 +930,7 @@ const IMPORT_ROWS = (function () {
               // In alternativa, skippa questa riga e re-importa fattura dopo batch creation
             } else {
               // Codice TEMP: non creare prodotto, logga warning
-              ENHANCED_LOGGER.warn(runId, 'IMPORT_ROWS_TEMP_SKIP', 'Prodotto con codice TEMP skippato', {
+              LOG.warn(runId, 'IMPORT_ROWS_TEMP_SKIP', 'Prodotto con codice TEMP skippato', {
                 fileId,
                 numeroLinea,
                 codiceValore
@@ -987,7 +987,7 @@ const IMPORT_ROWS = (function () {
           );
           
           if (!isValidRow) {
-            ENHANCED_LOGGER.warn(runId, 'IMPORT_ROWS_INVALID', 'Riga invalida skippata', {
+            LOG.warn(runId, 'IMPORT_ROWS_INVALID', 'Riga invalida skippata', {
               fileId,
               numeroLinea,
               tipoRiga,
@@ -999,7 +999,7 @@ const IMPORT_ROWS = (function () {
           }
           
           // Logging centralizzato: riga valida aggiunta al buffer
-          ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_ROW_ADDED', 'Riga aggiunta al buffer', {
+          LOG.debug(runId, 'IMPORT_ROWS_ROW_ADDED', 'Riga aggiunta al buffer', {
             fileId,
             numeroLinea,
             codiceInternoBreve,
@@ -1042,14 +1042,14 @@ const IMPORT_ROWS = (function () {
 
     // ✅ Log duplicati skippati
     if (skippedDuplicates > 0) {
-      ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_DUP_SUMMARY', 'Duplicati skippati totali per fattura', {
+      LOG.info(runId, 'IMPORT_ROWS_DUP_SUMMARY', 'Duplicati skippati totali per fattura', {
         fileId,
         skippedDuplicates
       });
       LOG?.info('ROWS_DUP_SKIP', `Skippate ${skippedDuplicates} righe duplicate per fattura ${fileId}`);
     }
 
-    ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_INVOICE_END', 'Fine processamento fattura', {
+    LOG.info(runId, 'IMPORT_ROWS_INVOICE_END', 'Fine processamento fattura', {
       fileId,
       statusSrc,
       importedRowsCount,
