@@ -41,6 +41,25 @@ const ENHANCED_LOGGER = (() => {
         }
       } catch (_) { /* ignora se CONFIG non ancora pronto */ }
 
+      // Soglia log globale: CONFIG.ROWS_LOG_LEVEL (DEBUG|INFO|WARN|ERROR|OFF)
+      try {
+        const toVal = (lvl) => {
+          switch (String(lvl).toUpperCase()) {
+            case 'OFF': return 100;
+            case 'ERROR': return 40;
+            case 'WARN': return 30;
+            case 'INFO': return 20;
+            case 'DEBUG': return 10;
+            default: return 20;
+          }
+        };
+        if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.get) {
+          const threshold = CONFIG.get('ROWS_LOG_LEVEL', 'INFO');
+          if (String(threshold).toUpperCase() === 'OFF') return;
+          if (toVal(level) < toVal(threshold)) return; // sotto soglia ⇒ non scrivere
+        }
+      } catch (_) { /* best-effort: se CONFIG non pronto, prosegui */ }
+
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const logSheet = ss.getSheetByName('Log');
       if (!logSheet) return; // Fallback silenzioso se foglio Log non esiste

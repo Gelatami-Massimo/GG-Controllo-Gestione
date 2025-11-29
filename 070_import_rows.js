@@ -498,6 +498,9 @@ const IMPORT_ROWS = (function () {
     // Carica filtro dinamico
     const junkKeywordsSet = _getJunkKeywords();
     const junkKeywordsArray = Array.from(junkKeywordsSet); // precompute per performance
+    // Compila regex unica (case-insensitive) per match veloce delle parole chiave
+    const _escapeRegex = s => String(s).replace(/[\-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const junkRegex = junkKeywordsArray.length ? new RegExp(junkKeywordsArray.map(_escapeRegex).join('|'), 'i') : null;
     ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_JUNK_FILTER', 'Filtro spazzatura caricato', { 
       junkKeywordsCount: junkKeywordsSet.size 
     });
@@ -587,6 +590,29 @@ const IMPORT_ROWS = (function () {
           chunkSize: invoicesChunk.length
         });
 
+        // Early-skip: se tutti i fornitori del chunk sono disabilitati, salta intero chunk
+        let hasEnabledSupplier = false;
+        for (let j = 0; j < invoicesChunk.length; j++) {
+          const inv = invoicesChunk[j];
+          const fid = String(inv[idxF.FornitoreID] ?? '').trim().replace(/^IT/i, '').replace(/^0+/, '');
+          if (enabledSupplierIds.has(fid)) { hasEnabledSupplier = true; break; }
+        }
+        if (!hasEnabledSupplier) {
+          for (let j = 0; j < invoicesChunk.length; j++) {
+            const invRowNumJ = chunkStartRow + j;
+            _addFlagUpdate(flagUpdates, invRowNumJ, idxF, {
+              RigheImportate: false,
+              ImportaRigheSrc: 'skipped'
+            });
+          }
+          skippedInvoices += invoicesChunk.length;
+          ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_CHUNK_SKIP_DISABLED', 'Chunk saltato: tutti i fornitori disabilitati', {
+            chunkStartRow,
+            chunkSize: invoicesChunk.length
+          });
+          return; // niente da fare per questo chunk
+        }
+
         // Elabora blocco
         for (let i = 0; i < invoicesChunk.length; i++) {
           const invData = invoicesChunk[i];
@@ -616,7 +642,7 @@ const IMPORT_ROWS = (function () {
             productCache,
             rowsBuffer,
             righeHeaders,
-            junkKeywordsArray,
+            junkRegex,
             existingRows,  // ✅ Cache duplicati
             runId,  // ✅ RunId per logging interno
             productHashMap,  // ✅ OTTIMIZZAZIONE: Hash Map O(1)
@@ -748,7 +774,7 @@ const IMPORT_ROWS = (function () {
    *  - importedRowsCount: numero di righe scritte nel buffer per quella fattura
    *  - sommaRigheNetto: somma PrezzoTotale delle righe importate
    */
-  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkKeywordsArray, existingRows, runId, productHashMap, newProductsToCreate) {
+  function _processInvoice(invData, invRowNum, idxF, productCache, rowsBuffer, righeHeaders, junkRegex, existingRows, runId, productHashMap, newProductsToCreate) {
     const fileId = invData[idxF.FileID];
     
     ENHANCED_LOGGER.debug(runId, 'IMPORT_ROWS_INVOICE_START', 'Inizio processamento fattura', {
@@ -797,8 +823,7 @@ const IMPORT_ROWS = (function () {
             continue; // Salta righe senza descrizione
           }
           
-          const descLower = descrizione.toLowerCase();
-          const isJunk = junkKeywordsArray.some(keyword => descLower.includes(keyword));
+          const isJunk = junkRegex ? junkRegex.test(String(descrizione)) : false;
           const codiceValoreForzato = UTIL.forceText(codiceValore);
 
           if (isTempGenerated) {
