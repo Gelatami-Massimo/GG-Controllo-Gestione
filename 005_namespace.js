@@ -17,8 +17,8 @@ var GG = GG || (() => {
     // Versione progetto
     version: '25.1',
     
-    // Timestamp build
-    buildDate: new Date().toISOString(),
+    // Aggiornare manualmente questa data ad ogni deploy importante
+    buildDate: '2025-11-29 (v25.1)',
     
     // Oggetto modules per accesso diretto (legacy)
     modules: modules,
