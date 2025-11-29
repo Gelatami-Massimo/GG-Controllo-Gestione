@@ -20,6 +20,11 @@ const ModuleRegistry = (() => {
      * @throws {Error} Se una dipendenza non è soddisfatta
      */
     register: function(name, dependencies = []) {
+      // Controllo duplicati
+      if (registry[name]) {
+        throw new Error(`❌ ERRORE CRITICO: Il modulo '${name}' è già stato registrato! Verifica duplicati.`);
+      }
+      
       // Controlla dipendenze
       const missing = dependencies.filter(dep => {
         // Controlla se il modulo globale esiste
