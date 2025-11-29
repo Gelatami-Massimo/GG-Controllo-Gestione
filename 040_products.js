@@ -617,7 +617,7 @@ const PRODUCTS = (() => {
       const { fornitoreId, denominazioneFornitore, codiceValore, descrizione, um, categoriaFornitore, lookupKey } = productData;
 
       // Genera CodiceInternoBreve univoco
-      const codiceInternoBreve = _generateCodiceInternoBreve(fornitoreId, denominazioneFornitore, codiceValore, cache);
+      const codiceInternoBreve = _generateCodiceInternoBreve(fornitoreId, denominazioneFornitore, cache.shortCodes);
       
       // Genera CodiceInterno legacy (per compatibilità)
       const normCodForn = normalizeCodiceFornitore(codiceValore);
