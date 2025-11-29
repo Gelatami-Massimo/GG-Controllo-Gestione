@@ -779,3 +779,8 @@ if (typeof ModuleRegistry !== 'undefined') {
 if (typeof GG !== 'undefined') {
   GG.register('DATA_VALIDATOR', DATA_VALIDATOR);
 }
+
+// Espone DATA_VALIDATOR in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.DATA_VALIDATOR = DATA_VALIDATOR;
+}
