@@ -578,7 +578,7 @@ const IMPORT_ROWS = (function () {
       cursorKey: CURSOR_KEY,
       maxRuntimeSec: maxSec,
       onTimeout: () => {
-        _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF);
+        _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF, newProductsToCreate, productHashMap, runId);
         LOG?.warn('ROWS', 'Timeout. Ripresa salvata.');
         if (!isSilent) {
           SHARED_UTILS.showToast('Timeout raggiunto. Clicca "Continua" per riprendere.', 'Pausa', 10);
@@ -683,7 +683,7 @@ const IMPORT_ROWS = (function () {
 
         // Flush periodico
         if (rowsBuffer.length >= FLUSH_ROWS_EVERY) {
-          _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF);
+          _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF, newProductsToCreate, productHashMap, runId);
         }
       }
 
@@ -745,7 +745,7 @@ const IMPORT_ROWS = (function () {
     }
 
     // Scrittura finale
-    _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF);
+    _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF, newProductsToCreate, productHashMap, runId);
     STATE.clear(CURSOR_KEY);
     
     ENHANCED_LOGGER.info(runId, 'IMPORT_ROWS_COMPLETE', 'Importazione righe completata', {
@@ -1062,7 +1062,7 @@ const IMPORT_ROWS = (function () {
   }
 
   // Scrive buffer righe + aggiorna flag + flush prodotti
-  function _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF) {
+  function _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF, newProductsToCreate, productHashMap, runId) {
     if (rowsBuffer.length > 0) {
       try {
         const headerRowR = SHEETS._findHeaderRow(shR, SHEETS.SHEET_NAMES.Righe);
@@ -1082,6 +1082,24 @@ const IMPORT_ROWS = (function () {
     }
     for (const key in flagUpdates) delete flagUpdates[key];
 
+    // Batch creation prodotti accumulati (per garantire scrittura anche in caso di timeout)
+    if (Array.isArray(newProductsToCreate) && newProductsToCreate.length > 0) {
+      try {
+        const created = PRODUCTS.createBatch(newProductsToCreate, productCache, runId || '');
+        if (created && created.length > 0 && productHashMap) {
+          created.forEach(p => {
+            if (p.lookupKey) productHashMap.set(p.lookupKey, p);
+          });
+        }
+        LOG?.info('ROWS_FLUSH', `Creati ${created.length} nuovi prodotti (flush).`);
+      } catch (e) {
+        LOG?.error('ROWS_FLUSH', 'Errore durante batch creation prodotti in flush.', { error: e.message });
+      } finally {
+        if (Array.isArray(newProductsToCreate)) newProductsToCreate.length = 0;
+      }
+    }
+
+    // Flush per compatibilità con eventuali creazioni via findOrCreateProduct
     PRODUCTS.flushNewRows(productCache);
   }
 
