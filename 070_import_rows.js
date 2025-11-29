@@ -682,7 +682,7 @@ const IMPORT_ROWS = (function () {
             if (!productHashMap.has(lookupKey)) {
               // Prodotto mancante: accumula per batch creation
               productsToCreateInChunk.push({
-                fornitoreId: invData[idxF.FornitoreID],
+                fornitoreId: fornitoreIdNorm,  // ✅ USA FORNITORE NORMALIZZATO (coerente con lookupKey)
                 denominazioneFornitore: invData[idxF.DenominazioneFornitore],
                 codiceValore,
                 descrizione,
@@ -1052,7 +1052,7 @@ const IMPORT_ROWS = (function () {
               });
 
               const jitResult = PRODUCTS.findOrCreateProduct(
-                invData[idxF.FornitoreID], // FornitoreID dalla fattura (P.IVA)
+                fornitoreIdNorm, // ✅ USA FORNITORE NORMALIZZATO (coerente con lookupKey)
                 invData[idxF.DenominazioneFornitore], // Nome fornitore
                 codiceValore,
                 descrizione,
