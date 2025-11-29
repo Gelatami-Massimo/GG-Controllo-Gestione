@@ -488,7 +488,7 @@ const DUPLICATE_MANAGER = (function() {
 // =============================================================
 
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('DUPLICATE_MANAGER', ['SHEETS', 'LOG', 'CONSTANTS', 'UTIL']);
+  ModuleRegistry.register('DUPLICATE_MANAGER', ['SHEETS', 'LOG', 'CONSTANTS', 'UTIL', 'SHEET_ITERATOR']);
 }
 
 if (typeof GG !== 'undefined') {
