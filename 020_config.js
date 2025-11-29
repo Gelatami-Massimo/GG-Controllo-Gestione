@@ -30,19 +30,19 @@ const CONFIG = (function () {
         return sRaw; // Ritorna stringa intatta
       }
 
-      // numeri (usa UTIL.number.parse centralizzato)
-      const parsedNum = UTIL.number.parse(sRaw);
+      // numeri (usa SHARED_UTILS.toNumber centralizzato)
+      const parsedNum = SHARED_UTILS.toNumber(sRaw);
       if (parsedNum !== 0 || sRaw === '0' || sRaw === '0.0' || sRaw === '0,0') {
         return parsedNum;
       }
 
       // date ISO
       if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-        const d = UTIL.date.parseXmlDate(sRaw);
+        const d = SHARED_UTILS.date.parseXmlDate(sRaw);
         if (d) return d;
       }
       // date IT: dd/mm/yyyy (con eventuale orario)
-      const parsedItalianDate = UTIL.date.parseItalianDate(sRaw);
+      const parsedItalianDate = SHARED_UTILS.date.parseItalianDate(sRaw);
       if (parsedItalianDate) return parsedItalianDate;
       
       // Date con orario IT (estendi parsing)
@@ -50,7 +50,7 @@ const CONFIG = (function () {
       if (mIT) {
         const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = mIT;
         const d = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`);
-        if (UTIL.date.isValidDate(d)) return d;
+        if (SHARED_UTILS.isValidDate(d)) return d;
       }
     }
     return v; // Ritorna il valore originale se nessun parsing ha avuto successo
