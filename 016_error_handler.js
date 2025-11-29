@@ -550,5 +550,17 @@ const ERROR_HANDLER = (function() {
   };
 })();
 
+// Registra ERROR_HANDLER nel ModuleRegistry
+if (typeof ModuleRegistry !== 'undefined') {
+  ModuleRegistry.register('ERROR_HANDLER', ['LOG']); // Dipende da LOG per logging
+}
+
 // Register module in GG namespace
-GG.register('ERROR_HANDLER', ERROR_HANDLER);
+if (typeof GG !== 'undefined') {
+  GG.register('ERROR_HANDLER', ERROR_HANDLER);
+}
+
+// Espone ERROR_HANDLER in globalThis per dependency tracking
+if (typeof globalThis !== 'undefined') {
+  globalThis.ERROR_HANDLER = ERROR_HANDLER;
+}
