@@ -2,192 +2,153 @@
 // PROGETTO: GG GESTIONE GELATAMI V1
 // FILE: 090_dashboard.js
 // RUOLO: Dashboard finanziaria con KPI, MOL, totali annuali/mensili.
-// NOTE: Genera foglio Dashboard con grafici e sezioni formattate.
+// NOTE: REFACTORED v2 - Usa SHARED_UTILS per accesso fogli, date e sicurezza.
 // =============================================================
 
 const DASHBOARD = (function () {
 
   /**
    * Crea o aggiorna il foglio Dashboard con KPI finanziari, MOL e dati annuali/mensili.
-   * 
-   * Workflow:
-   * 1. Calcola dati P&L da foglio Dati Mensili:
-   *    a. Aggregazione GLOBALE (tutte sedi combinate)
-   *    b. Aggregazione per SEDE (separata per ogni unità)
-   * 2. Per ogni anno e sede:
-   *    - Mese per mese: Fatturato, Costo Fornitori (Netto/Totale), Costo Personale
-   *    - Totali annuali: Incidenza Costo Netto %, Incidenza Personale %, MOL Netto
-   * 3. Scrive sezioni formattate con:
-   *    - Tabelle dati mensili (8 colonne)
-   *    - Righe totali annuali con formule SUM()
-   *    - Formati valuta (€) e percentuali
-   * 4. Autoresize colonne e attiva foglio
-   * 
-   * Output: Foglio "Dashboard" pronto per analisi visuale
-   * 
-   * @returns {void}
-   * 
-   * @example
-   * DASHBOARD.create();
    */
   function create() {
-    SHARED_UTILS.showToast('Aggiornamento Dashboard...', 'Dashboard', 10);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    // Wrapper SafeExecute: gestisce try-catch, logging errori e toast UI
+    return SHARED_UTILS.safeExecute(
+      () => {
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    _ensureDatiMensiliSheet(ss); // Assicura che 'Dati Mensili' esista
+        // Assicura esistenza fogli dipendenti
+        _ensureDatiMensiliSheet(ss);
 
-    let sh = ss.getSheetByName('Dashboard');
-    if (!sh) sh = ss.insertSheet('Dashboard', 0);
+        let sh = ss.getSheetByName('Dashboard');
+        if (!sh) sh = ss.insertSheet('Dashboard', 0);
 
-    // Pulizia robusta
-    sh.clear();
-    try { sh.getCharts().forEach(chart => sh.removeChart(chart)); } catch (e) {}
-    try { sh.setFrozenRows(0); sh.setFrozenColumns(0); } catch (e) {}
-    try { sh.getDataRange().breakApart(); } catch (e) {}
+        // Pulizia robusta
+        sh.clear();
+        try { sh.getCharts().forEach(chart => sh.removeChart(chart)); } catch (e) {}
+        try { sh.setFrozenRows(0); sh.setFrozenColumns(0); } catch (e) {}
+        try { sh.getDataRange().breakApart(); } catch (e) {}
 
-    // Calcolo dati P&L
-    const pnlDataBySede   = _calculatePnlBySede();         // { sede -> { anno -> { data: [], annualTotals: {} } } }
-    const combinedPnlData = _calculateCombinedPnl(pnlDataBySede); // { anno -> { data: [], annualTotals: {} } }
+        // --- FASE 1: Calcolo Dati ---
+        // Calcola i dati aggregati per sede e poi combinati globalmente
+        const pnlDataBySede    = _calculatePnlBySede();
+        const combinedPnlData = _calculateCombinedPnl(pnlDataBySede);
 
-    let currentRow = 1;
-    // Intestazioni tabella dati mensili (8 colonne: aggiunto MOL Netto)
-    const headers = [[
-      'Mese',
-      'Fatturato',
-      'Costo Fornitori (Netto)',
-      'Costo Fornitori (Totale)',
-      'Costo Personale',
-      'Inc. Costo Netto (%)',
-      'Inc. Personale (%)',
-      'MOL Netto'
-    ]];
-    const numCols = headers[0].length;
+        // --- FASE 2: Scrittura Report ---
+        let currentRow = 1;
+        
+        const headers = [[
+          'Mese',
+          'Fatturato',
+          'Costo Fornitori (Netto)',
+          'Costo Fornitori (Totale)',
+          'Costo Personale',
+          'Inc. Costo Netto (%)',
+          'Inc. Personale (%)',
+          'MOL Netto'
+        ]];
+        
+        const currencyFormat = '€ #,##0.00;[Red](€ #,##0.00);€ 0.00';
+        const percentFormat  = '0.00%';
 
-    // Formati
-    const currencyFormat = '€ #,##0.00;[Red](€ #,##0.00);€ 0.00';
-    const percentFormat  = '0.00%';
-
-    // Sezione GLOBALE: anni in ordine decrescente numerico
-    const anniGlobali = Object.keys(combinedPnlData).map(Number).sort((a, b) => b - a);
-    anniGlobali.forEach((anno, index) => {
-      if (index > 0) currentRow += 2; // spazio tra anni
-      currentRow = _writeSection(sh, {
-        title: `RIEPILOGO FINANZIARIO GLOBALE - ANNO ${anno}`,
-        headers,
-        pnlAnnualData: combinedPnlData[anno],
-        startRow: currentRow,
-        formatCurrency: currencyFormat,
-        formatPercent: percentFormat
-      });
-    });
-
-    // Sezioni per SEDE (ordine alfabetico sedi, anni decrescenti)
-    currentRow += 2;
-    Object.keys(pnlDataBySede).sort().forEach(sede => {
-      const anniSede = Object.keys(pnlDataBySede[sede]).map(Number).sort((a, b) => b - a);
-      anniSede.forEach((anno, index) => {
-        if (index > 0) currentRow += 2;
-        const pnlData = pnlDataBySede[sede][anno];
-        if (pnlData && pnlData.data && pnlData.data.length > 0) {
+        // 2a. Sezione GLOBALE (Anni decrescenti)
+        const anniGlobali = Object.keys(combinedPnlData).map(Number).sort((a, b) => b - a);
+        anniGlobali.forEach((anno, index) => {
+          if (index > 0) currentRow += 2;
           currentRow = _writeSection(sh, {
-            title: `DETTAGLIO FINANZIARIO - SEDE: ${sede} - ANNO ${anno}`,
+            title: `RIEPILOGO FINANZIARIO GLOBALE - ANNO ${anno}`,
             headers,
-            pnlAnnualData: pnlData,
+            pnlAnnualData: combinedPnlData[anno],
             startRow: currentRow,
             formatCurrency: currencyFormat,
             formatPercent: percentFormat
           });
+        });
+
+        // 2b. Sezioni per SEDE
+        currentRow += 2;
+        Object.keys(pnlDataBySede).sort().forEach(sede => {
+          const anniSede = Object.keys(pnlDataBySede[sede]).map(Number).sort((a, b) => b - a);
+          anniSede.forEach((anno, index) => {
+            if (index > 0) currentRow += 2;
+            const pnlData = pnlDataBySede[sede][anno];
+            if (pnlData && pnlData.data && pnlData.data.length > 0) {
+              currentRow = _writeSection(sh, {
+                title: `DETTAGLIO FINANZIARIO - SEDE: ${sede} - ANNO ${anno}`,
+                headers,
+                pnlAnnualData: pnlData,
+                startRow: currentRow,
+                formatCurrency: currencyFormat,
+                formatPercent: percentFormat
+              });
+            }
+          });
+          currentRow += 2;
+        });
+
+        // Autoresize finale
+        if (sh.getLastRow() > 1) {
+          try { sh.autoResizeColumns(1, headers[0].length); } catch (e) {}
         }
-      });
-      currentRow += 2;
-    });
 
-    // Autoresize
-    if (sh.getLastRow() > 1 && numCols > 1) {
-      try { sh.autoResizeColumns(1, numCols); }
-      catch (e) { LOG?.warn('DASHBOARD_RESIZE', 'Impossibile ridimensionare automaticamente le colonne.', { error: e.message }); }
-    }
-
-    ss.setActiveSheet(sh);
-    LOG?.info('DASHBOARD', 'Dashboard aggiornata.');
-    UTIL.showToast('Dashboard aggiornata!', 'Completato');
+        ss.setActiveSheet(sh);
+        return { success: true };
+      },
+      'DASHBOARD',
+      {
+        errorMessage: 'Errore aggiornamento Dashboard',
+        showToast: true,
+        onSuccess: () => LOG.info('DASHBOARD', 'Dashboard aggiornata con successo.')
+      }
+    );
   }
 
   /**
-   * Scrive una sezione (Globale o Sede/Anno) e restituisce la prossima riga disponibile.
-   * Usa mappa header -> colonna per formule dinamiche.
+   * Scrive una sezione (Globale o Sede/Anno) sul foglio.
    * @private
    */
   function _writeSection(sh, config) {
     try {
       const { title, headers, pnlAnnualData, startRow, formatCurrency, formatPercent } = config;
-      const headerNames   = headers[0]; // Array dei nomi delle colonne
-      const numDataCols   = headerNames.length;
-      const dataRows      = pnlAnnualData?.data || [];
-      const dataRowsCount = dataRows.length;
+      const headerNames    = headers[0];
+      const numDataCols    = headerNames.length;
+      const dataRows       = pnlAnnualData?.data || [];
+      const dataRowsCount  = dataRows.length;
 
-      // Mappa Nome Header -> Lettera Colonna (index 0 -> 'A')
+      // Mappa Nome Header -> Lettera Colonna (es. 'Fatturato' -> 'B')
       const headerMap = {};
       headerNames.forEach((name, index) => {
-        if (name) headerMap[name] = UTIL.getColumnLetter(index);
+        if (name) headerMap[name] = SHARED_UTILS.getColumnLetter(index);
       });
 
-      const requiredForFormula = ['Fatturato', 'Costo Fornitori (Netto)', 'Costo Fornitori (Totale)', 'Costo Personale', 'MOL Netto'];
-      const missingInMap = requiredForFormula.filter(h => !headerMap[h]);
-      if (missingInMap.length > 0) {
-        throw new Error(`Nomi header richiesti per le formule non trovati: ${missingInMap.join(', ')}`);
-      }
-
-      // Prepara colonne formattazione (usate più avanti)
-      const currencyCols = [
-        headerMap['Fatturato'],
-        headerMap['Costo Fornitori (Netto)'],
-        headerMap['Costo Fornitori (Totale)'],
-        headerMap['Costo Personale'],
-        headerMap['MOL Netto']
-      ];
-      const percentCols = [
-        headerMap['Inc. Costo Netto (%)'],
-        headerMap['Inc. Personale (%)']
-      ];
-
-      // Riga di inizio dati e fine dati
+      // Calcolo indici righe
       const startDataRow = startRow + 2;
       const endDataRow   = startDataRow + dataRowsCount - 1;
-
-      // Righe: Totale Anno e MOL Netto
       const totalRowIndex    = endDataRow + 1;
       const molNettoRowIndex = totalRowIndex + 1;
 
-      // Titolo e Header
-      if (numDataCols > 1) {
-        sh.getRange(startRow, 2, 1, numDataCols - 1)
-          .merge()
-          .setValue(title)
-          .setFontWeight('bold')
-          .setHorizontalAlignment('center')
-          .setBackground('#e0e0e0');
-      } else {
-        sh.getRange(startRow, 1).setValue(title).setFontWeight('bold');
-      }
-      sh.getRange(startRow + 1, 1, 1, numDataCols)
-        .setValues(headers)
-        .setFontWeight('bold');
+      // Scrittura Titolo e Header
+      const titleRange = numDataCols > 1 ? sh.getRange(startRow, 2, 1, numDataCols - 1).merge() : sh.getRange(startRow, 1);
+      titleRange.setValue(title).setFontWeight('bold').setHorizontalAlignment('center').setBackground('#e0e0e0');
+      sh.getRange(startRow + 1, 1, 1, numDataCols).setValues(headers).setFontWeight('bold');
 
-      // Dati mensili
+      // Scrittura Dati Mensili
       if (dataRowsCount > 0) {
-        const dataRange = sh.getRange(startDataRow, 1, dataRowsCount, numDataCols);
-        dataRange.setValues(dataRows);
-
-        // Formattazione dati
+        sh.getRange(startDataRow, 1, dataRowsCount, numDataCols).setValues(dataRows);
+        
+        // Formattazione colonne
+        const currencyCols = ['Fatturato', 'Costo Fornitori (Netto)', 'Costo Fornitori (Totale)', 'Costo Personale', 'MOL Netto'];
+        const percentCols  = ['Inc. Costo Netto (%)', 'Inc. Personale (%)'];
+        
         if (formatCurrency) {
-          currencyCols.forEach(colLetter => {
-            if (colLetter) sh.getRange(`${colLetter}${startDataRow}:${colLetter}${endDataRow}`).setNumberFormat(formatCurrency);
+          currencyCols.forEach(colName => {
+            const colL = headerMap[colName];
+            if(colL) sh.getRange(`${colL}${startDataRow}:${colL}${endDataRow}`).setNumberFormat(formatCurrency);
           });
         }
         if (formatPercent) {
-          percentCols.forEach(colLetter => {
-            if (colLetter) sh.getRange(`${colLetter}${startDataRow}:${colLetter}${endDataRow}`).setNumberFormat(formatPercent);
+          percentCols.forEach(colName => {
+            const colL = headerMap[colName];
+            if(colL) sh.getRange(`${colL}${startDataRow}:${colL}${endDataRow}`).setNumberFormat(formatPercent);
           });
         }
       }
@@ -197,208 +158,159 @@ const DASHBOARD = (function () {
       totalRow.getCell(1, 1).setValue('TOTALE ANNO').setFontWeight('bold').setBackground('#f3f3f3');
 
       if (dataRowsCount > 0) {
-        // Formule di somma sulle colonne economiche
-        const colsToSum = [
-          headerMap['Fatturato'],
-          headerMap['Costo Fornitori (Netto)'],
-          headerMap['Costo Fornitori (Totale)'],
-          headerMap['Costo Personale'],
-          headerMap['MOL Netto']
-        ];
-        colsToSum.forEach(colLetter => {
-          if (!colLetter) return;
-          const colIndex = headerNames.findIndex(h => headerMap[h] === colLetter) + 1;
-          if (colIndex > 0) {
-            totalRow.getCell(1, colIndex).setFormula(`=SUM(${colLetter}${startDataRow}:${colLetter}${endDataRow})`);
+        // Formule Somma
+        const colsToSum = ['Fatturato', 'Costo Fornitori (Netto)', 'Costo Fornitori (Totale)', 'Costo Personale', 'MOL Netto'];
+        colsToSum.forEach(colName => {
+          const colL = headerMap[colName];
+          const colIdx = headerNames.indexOf(colName) + 1;
+          if (colL && colIdx > 0) {
+            totalRow.getCell(1, colIdx).setFormula(`=SUM(${colL}${startDataRow}:${colL}${endDataRow})`);
           }
         });
 
-        // Incidenze su totale fatturato
-        const totalFatturatoCellRef  = `${headerMap['Fatturato']}${totalRowIndex}`;
-        const totalCostoNettoCellRef = `${headerMap['Costo Fornitori (Netto)']}${totalRowIndex}`;
-        const totalPersonaleCellRef  = `${headerMap['Costo Personale']}${totalRowIndex}`;
-        const incCostoNettoColIndex  = headerNames.indexOf('Inc. Costo Netto (%)') + 1;
-        const incPersonaleColIndex   = headerNames.indexOf('Inc. Personale (%)') + 1;
-
-        if (incCostoNettoColIndex > 0) totalRow.getCell(1, incCostoNettoColIndex).setFormula(`=IFERROR(${totalCostoNettoCellRef}/${totalFatturatoCellRef},0)`);
-        if (incPersonaleColIndex > 0) totalRow.getCell(1, incPersonaleColIndex).setFormula(`=IFERROR(${totalPersonaleCellRef}/${totalFatturatoCellRef},0)`);
+        // Formule Incidenze
+        const totalFatt = `${headerMap['Fatturato']}${totalRowIndex}`;
+        const totalCosto = `${headerMap['Costo Fornitori (Netto)']}${totalRowIndex}`;
+        const totalPers  = `${headerMap['Costo Personale']}${totalRowIndex}`;
+        
+        const idxIncCosto = headerNames.indexOf('Inc. Costo Netto (%)') + 1;
+        if (idxIncCosto > 0) totalRow.getCell(1, idxIncCosto).setFormula(`=IFERROR(${totalCosto}/${totalFatt},0)`);
+        
+        const idxIncPers = headerNames.indexOf('Inc. Personale (%)') + 1;
+        if (idxIncPers > 0) totalRow.getCell(1, idxIncPers).setFormula(`=IFERROR(${totalPers}/${totalFatt},0)`);
       } else {
         totalRow.offset(0, 1, 1, numDataCols - 1).setValue(0);
       }
+      
+      // Formatta riga totale
+      if (formatCurrency) totalRow.setNumberFormat(formatCurrency); // Applica genericamente poi sovrascrivi %
+      const idxP1 = headerNames.indexOf('Inc. Costo Netto (%)') + 1;
+      const idxP2 = headerNames.indexOf('Inc. Personale (%)') + 1;
+      if(idxP1>0) totalRow.getCell(1, idxP1).setNumberFormat(formatPercent);
+      if(idxP2>0) totalRow.getCell(1, idxP2).setNumberFormat(formatPercent);
 
-      // Formattazione riga totale
-      if (formatCurrency) {
-        currencyCols.forEach(colLetter => {
-          if (colLetter) sh.getRange(`${colLetter}${totalRowIndex}`).setNumberFormat(formatCurrency);
-        });
-      }
-      if (formatPercent) {
-        percentCols.forEach(colLetter => {
-          if (colLetter) sh.getRange(`${colLetter}${totalRowIndex}`).setNumberFormat(formatPercent);
-        });
-      }
 
-      // Riga MOL NETTO (annuale): scrive SOLO nella colonna MOL Netto
-      const molNettoRow = sh.getRange(molNettoRowIndex, 1, 1, numDataCols);
-      molNettoRow.getCell(1, 1)
-        .setValue('MOL NETTO')
-        .setFontWeight('bold')
-        .setFontStyle('italic')
-        .setBackground('#e0e0e0');
+      // Riga MOL NETTO
+      const molRow = sh.getRange(molNettoRowIndex, 1, 1, numDataCols);
+      molRow.getCell(1, 1).setValue('MOL NETTO').setFontWeight('bold').setFontStyle('italic').setBackground('#e0e0e0');
 
       if (dataRowsCount > 0) {
-        const molColLetter        = headerMap['MOL Netto'];
-        const fattColLetter       = headerMap['Fatturato'];
-        const costoNettoColLetter = headerMap['Costo Fornitori (Netto)'];
-        const personaleColLetter  = headerMap['Costo Personale'];
-        const molColIndex         = headerNames.indexOf('MOL Netto') + 1;
-
-        if (molColIndex > 0 && fattColLetter && costoNettoColLetter && personaleColLetter) {
-          const molFormula = `=${fattColLetter}${totalRowIndex}-${costoNettoColLetter}${totalRowIndex}-${personaleColLetter}${totalRowIndex}`;
-          molNettoRow.getCell(1, molColIndex).setFormula(molFormula);
+        const molColIdx = headerNames.indexOf('MOL Netto') + 1;
+        if (molColIdx > 0) {
+          const f = headerMap['Fatturato'];
+          const c = headerMap['Costo Fornitori (Netto)'];
+          const p = headerMap['Costo Personale'];
+          molRow.getCell(1, molColIdx).setFormula(`=${f}${totalRowIndex}-${c}${totalRowIndex}-${p}${totalRowIndex}`);
         }
-
-        // Pulisce le altre colonne (tranne la prima e quella del MOL)
-        headerNames.forEach((name, index) => {
-          const colIndex = index + 1;
-          if (colIndex > 1 && colIndex !== molColIndex) {
-            molNettoRow.getCell(1, colIndex).setValue('-');
-          }
-        });
-      } else {
-        molNettoRow.offset(0, 1, 1, numDataCols - 1).setValue(0);
+        // Pulisci celle intermedie
+        for(let i=2; i<numDataCols; i++) {
+             if(i !== molColIdx) molRow.getCell(1, i).setValue('-');
+        }
+      }
+      if (formatCurrency && headerMap['MOL Netto']) {
+         sh.getRange(`${headerMap['MOL Netto']}${molNettoRowIndex}`).setNumberFormat(formatCurrency);
       }
 
-      // Formattazione riga MOL
-      const molColLetterFormat = headerMap['MOL Netto'];
-      if (formatCurrency && molColLetterFormat) {
-        sh.getRange(`${molColLetterFormat}${molNettoRowIndex}`).setNumberFormat(formatCurrency);
-      }
-      if (formatPercent) {
-        percentCols.forEach(colLetter => {
-          if (colLetter) sh.getRange(`${colLetter}${molNettoRowIndex}`).setNumberFormat(formatPercent);
-        });
-      }
-
-      // Prossima riga
       return molNettoRowIndex + 2;
 
     } catch (e) {
-      LOG?.error('DASHBOARD_WRITE', `Errore scrittura sezione: ${config.title}`, { error: e.message, stack: e.stack });
-      return config.startRow + (config.pnlAnnualData?.data?.length || 0) + 5; // fallback
+      LOG.error('DASHBOARD_WRITE', `Errore scrittura sezione: ${config.title}`, { error: e.message });
+      return config.startRow + 10; // Fallback per non sovrascrivere
     }
   }
 
   /**
-   * Calcola P&L per Sede/Anno, con MOL mensile calcolato.
+   * Calcola P&L per Sede/Anno leggendo i dati dai fogli.
+   * REFACTORED: Usa getSheetContext per lettura veloce in memoria.
    */
   function _calculatePnlBySede() {
-    const dataAggregata = new Map(); // K: Sede, V: Map<AnnoMese, {fatturato, personale, costoFornitoriNetto, costoFornitoriTotale}>
+    const dataAggregata = new Map(); 
 
-    // 1) Dati Mensili (fatturato / personale) - OTTIMIZZATO con SHEET_ITERATOR
-    const shDM = SHEETS.get(SHEETS.SHEET_NAMES.Dati_Mensili);
-    if (shDM) {
+    // 1. Lettura 'Dati Mensili'
+    const ctxDM = SHARED_UTILS.getSheetContext(SHEETS.SHEET_NAMES.Dati_Mensili);
+    if (ctxDM) {
       try {
-        SHEET_ITERATOR.forEach('Dati_Mensili', {
-          columns: ['Sede', 'AnnoMese', 'Fatturato', 'Costo_Personale'],
-          skipEmpty: true,
-          processor: (row, rowNum, idx) => {
-            const sedeKey  = String(row[idx.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
-            const annoMese = String(row[idx.AnnoMese] ?? '').trim();
-            if (/^\d{4}-\d{2}$/.test(annoMese)) {
-              if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
-              let cur = dataAggregata.get(sedeKey).get(annoMese)
-                || { fatturato: 0, personale: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0 };
-              cur.fatturato += UTIL.number.parse(row[idx.Fatturato]);
-              if (idx.Costo_Personale !== undefined) {
-                cur.personale += UTIL.number.parse(row[idx.Costo_Personale]);
-              }
-              dataAggregata.get(sedeKey).set(annoMese, cur);
+        const data = ctxDM.sheet.getRange(ctxDM.headerRow + 1, 1, ctxDM.lastRow - ctxDM.headerRow, ctxDM.lastCol).getValues();
+        
+        data.forEach(row => {
+          const sedeKey  = String(row[ctxDM.idx.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
+          const annoMese = String(row[ctxDM.idx.AnnoMese] ?? '').trim();
+          
+          if (/^\d{4}-\d{2}$/.test(annoMese)) {
+            if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
+            let cur = dataAggregata.get(sedeKey).get(annoMese) || _createEmptyMonth();
+            
+            cur.fatturato += SHARED_UTILS.toNumber(row[ctxDM.idx.Fatturato]);
+            if (ctxDM.idx.Costo_Personale !== undefined) {
+              cur.personale += SHARED_UTILS.toNumber(row[ctxDM.idx.Costo_Personale]);
             }
+            dataAggregata.get(sedeKey).set(annoMese, cur);
           }
         });
-      } catch (e) { 
-        LOG?.error('DASHBOARD_CALC', 'Errore lettura Dati Mensili.', { error: e.message }); 
-      }
-    } else {
-      LOG?.warn('DASHBOARD_CALC', 'Foglio Dati Mensili non trovato.');
+      } catch (e) { LOG.error('DASHBOARD_CALC', 'Errore lettura Dati Mensili', { error: e.message }); }
     }
 
-    // 2) Costi Fornitori da Fatture (imponibile = netto, documento = totale) - OTTIMIZZATO
-    const shF = SHEETS.get(SHEETS.SHEET_NAMES.Fatture);
-    if (shF) {
+    // 2. Lettura 'Fatture' (Costi Fornitori)
+    const ctxF = SHARED_UTILS.getSheetContext(SHEETS.SHEET_NAMES.Fatture);
+    if (ctxF) {
       try {
-        SHEET_ITERATOR.forEach('Fatture', {
-          columns: ['Sede', 'Data', 'TotImponibile', 'TotDocumento'],
-          skipEmpty: true,
-          processor: (row, rowNum, idx) => {
-            const sedeKey = String(row[idx.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
-            const data    = row[idx.Data];
-            const costoNetto  = UTIL.number.parse(row[idx.TotImponibile]);
-            const costoTotale = UTIL.number.parse(row[idx.TotDocumento]);
-            if (SHARED_UTILS.isValidDate(data)) {
-              const ymObj = SHARED_UTILS.date.extractYearMonth(data);
-              const annoMese = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
-              if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
-              let cur = dataAggregata.get(sedeKey).get(annoMese)
-                || { fatturato: 0, personale: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0 };
-              cur.costoFornitoriNetto  += costoNetto;
-              cur.costoFornitoriTotale += costoTotale;
-              dataAggregata.get(sedeKey).set(annoMese, cur);
-            }
+        // Verifica colonne minime
+        if (ctxF.idx.TotImponibile === undefined || ctxF.idx.TotDocumento === undefined) {
+           throw new Error("Colonne TotImponibile/TotDocumento mancanti in Fatture");
+        }
+
+        const data = ctxF.sheet.getRange(ctxF.headerRow + 1, 1, ctxF.lastRow - ctxF.headerRow, ctxF.lastCol).getValues();
+        
+        data.forEach(row => {
+          const sedeKey = String(row[ctxF.idx.Sede] ?? 'Non Assegnata').trim() || 'Non Assegnata';
+          const dataVal = row[ctxF.idx.Data];
+          
+          if (SHARED_UTILS.isValidDate(dataVal)) {
+            const ymObj = SHARED_UTILS.date.extractYearMonth(dataVal);
+            const annoMese = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
+            
+            const costoNetto  = SHARED_UTILS.toNumber(row[ctxF.idx.TotImponibile]);
+            const costoTotale = SHARED_UTILS.toNumber(row[ctxF.idx.TotDocumento]);
+            
+            if (!dataAggregata.has(sedeKey)) dataAggregata.set(sedeKey, new Map());
+            let cur = dataAggregata.get(sedeKey).get(annoMese) || _createEmptyMonth();
+            
+            cur.costoFornitoriNetto  += costoNetto;
+            cur.costoFornitoriTotale += costoTotale;
+            dataAggregata.get(sedeKey).set(annoMese, cur);
           }
         });
-      } catch (e) { 
-        LOG?.error('DASHBOARD_CALC', 'Errore lettura Fatture.', { error: e.message }); 
-      }
-    } else {
-      LOG?.warn('DASHBOARD_CALC', 'Foglio Fatture non trovato.');
+      } catch (e) { LOG.error('DASHBOARD_CALC', 'Errore lettura Fatture', { error: e.message }); }
     }
 
-    // 3) Output: { sede -> { anno -> { data: [...], annualTotals: {...} } } }
+    // 3. Formattazione Output
     const output = {};
     dataAggregata.forEach((datiMeseMap, sede) => {
       if (!output[sede]) output[sede] = {};
-      const yearlyTotals = {}; // { anno: { ... } }
+      const yearlyTotals = {}; 
 
       datiMeseMap.forEach((valori, annoMese) => {
         const [annoStr, meseStr] = annoMese.split('-');
         const anno = parseInt(annoStr, 10);
 
         if (!output[sede][anno]) {
-          output[sede][anno] = { data: [], annualTotals: { fatturato: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0, personale: 0, mol: 0 } };
+          output[sede][anno] = { data: [], annualTotals: _createEmptyTotals() };
         }
-        if (!yearlyTotals[anno]) {
-          yearlyTotals[anno] = { fatturato: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0, personale: 0, mol: 0 };
-        }
+        if (!yearlyTotals[anno]) yearlyTotals[anno] = _createEmptyTotals();
 
-        // Totali annuali
-        yearlyTotals[anno].fatturato           += valori.fatturato;
-        yearlyTotals[anno].costoFornitoriNetto  += valori.costoFornitoriNetto;
-        yearlyTotals[anno].costoFornitoriTotale += valori.costoFornitoriTotale;
-        yearlyTotals[anno].personale           += valori.personale;
+        _accumulateTotals(yearlyTotals[anno], valori);
 
-        // Incidenze mensili
+        // Calcoli riga
         const incCostoNetto = valori.fatturato !== 0 ? (valori.costoFornitoriNetto / valori.fatturato) : 0;
         const incPersonale  = valori.fatturato !== 0 ? (valori.personale / valori.fatturato) : 0;
+        const molMensile    = (valori.fatturato - valori.costoFornitoriNetto - valori.personale);
 
-        // MOL mensile
-        const molMensile = (valori.fatturato - valori.costoFornitoriNetto - valori.personale);
-
-        // Riga dati (8 colonne)
         output[sede][anno].data.push([
-          meseStr,
-          valori.fatturato,
-          valori.costoFornitoriNetto,
-          valori.costoFornitoriTotale,
-          valori.personale,
-          incCostoNetto,
-          incPersonale,
-          molMensile
+          meseStr, valori.fatturato, valori.costoFornitoriNetto, valori.costoFornitoriTotale, valori.personale,
+          incCostoNetto, incPersonale, molMensile
         ]);
       });
 
-      // Assegna i totali annuali (incluso MOL annuale calcolato da totali)
       for (const anno in yearlyTotals) {
         if (output[sede][anno]) {
           const t = yearlyTotals[anno];
@@ -407,22 +319,21 @@ const DASHBOARD = (function () {
         }
       }
 
-      // Ordina i mesi (stringhe '01'..'12')
       for (const anno in output[sede]) {
         if (output[sede][anno].data) {
           output[sede][anno].data.sort((a, b) => a[0].localeCompare(b[0]));
         }
       }
     });
+
     return output;
   }
 
   /**
-   * Calcola P&L aggregato (tutte le sedi), per Anno, con MOL mensile.
+   * Calcola aggregato globale.
    */
   function _calculateCombinedPnl(pnlDataBySede) {
-    // Anno -> { meseStr -> accumulati }
-    const agg = new Map(); // K: anno (number), V: Map<meseStr, { fatturato, costoFornitoriNetto, costoFornitoriTotale, personale }>
+    const agg = new Map(); // Anno -> Map<Mese, Totals>
 
     for (const [, anniObj] of Object.entries(pnlDataBySede)) {
       for (const [annoStr, annoData] of Object.entries(anniObj)) {
@@ -431,9 +342,9 @@ const DASHBOARD = (function () {
 
         if (annoData?.data) {
           annoData.data.forEach(row => {
-            // row = [meseStr, fatturato, costoNetto, costoTotale, personale, incCostoNetto, incPersonale, molMensile]
             const meseStr = row[0];
-            const cur = agg.get(anno).get(meseStr) || { fatturato: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0, personale: 0 };
+            let cur = agg.get(anno).get(meseStr) || _createEmptyTotals();
+            
             cur.fatturato            += row[1];
             cur.costoFornitoriNetto  += row[2];
             cur.costoFornitoriTotale += row[3];
@@ -444,77 +355,64 @@ const DASHBOARD = (function () {
       }
     }
 
-    // Costruzione output
-    const output = {}; // { anno -> { data: [...], annualTotals: {...} } }
+    const output = {};
     for (const [anno, mesiMap] of agg.entries()) {
       const dataRows = [];
-      const annualTotals = { fatturato: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0, personale: 0, mol: 0 };
-
-      // Ordina mesi
+      const annualTotals = _createEmptyTotals();
       const mesiOrd = Array.from(mesiMap.keys()).sort((a, b) => a.localeCompare(b));
+      
       mesiOrd.forEach(meseStr => {
         const v = mesiMap.get(meseStr);
         const incCostoNetto = v.fatturato !== 0 ? (v.costoFornitoriNetto / v.fatturato) : 0;
         const incPersonale  = v.fatturato !== 0 ? (v.personale / v.fatturato) : 0;
         const molMensile    = v.fatturato - v.costoFornitoriNetto - v.personale;
 
-        dataRows.push([
-          meseStr,
-          v.fatturato,
-          v.costoFornitoriNetto,
-          v.costoFornitoriTotale,
-          v.personale,
-          incCostoNetto,
-          incPersonale,
-          molMensile
-        ]);
-
-        annualTotals.fatturato           += v.fatturato;
-        annualTotals.costoFornitoriNetto  += v.costoFornitoriNetto;
-        annualTotals.costoFornitoriTotale += v.costoFornitoriTotale;
-        annualTotals.personale            += v.personale;
+        dataRows.push([ meseStr, v.fatturato, v.costoFornitoriNetto, v.costoFornitoriTotale, v.personale, incCostoNetto, incPersonale, molMensile ]);
+        _accumulateTotals(annualTotals, v);
       });
-
+      
       annualTotals.mol = annualTotals.fatturato - annualTotals.costoFornitoriNetto - annualTotals.personale;
       output[anno] = { data: dataRows, annualTotals };
     }
-
     return output;
   }
 
-  /**
-   * Assicura l'esistenza e le intestazioni del foglio 'Dati Mensili'.
-   */
+  // --- Helpers interni ---
+  function _createEmptyMonth() {
+    return { fatturato: 0, personale: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0 };
+  }
+  function _createEmptyTotals() {
+    return { fatturato: 0, costoFornitoriNetto: 0, costoFornitoriTotale: 0, personale: 0, mol: 0 };
+  }
+  function _accumulateTotals(target, source) {
+    target.fatturato            += source.fatturato;
+    target.costoFornitoriNetto  += source.costoFornitoriNetto;
+    target.costoFornitoriTotale += source.costoFornitoriTotale;
+    target.personale            += source.personale;
+  }
+
   function _ensureDatiMensiliSheet(ss) {
-    try {
+    SHARED_UTILS.safeExecute(() => {
       const sheetName = SHEETS.SHEET_NAMES.Dati_Mensili;
       const schema = SHEETS.SCHEMAS[sheetName];
-      if (!schema) {
-        LOG?.error('DASHBOARD_ENSURE', `Schema non definito per '${sheetName}'.`);
-        return;
-      }
+      if (!schema) throw new Error(`Schema non definito per '${sheetName}'.`);
 
       let sh = ss.getSheetByName(sheetName);
       if (!sh) {
         sh = ss.insertSheet(sheetName);
         LOG?.info('DASHBOARD_ENSURE', `Foglio '${sheetName}' creato.`);
       }
-
       SHEETS._ensureHeaders(sh, schema, sheetName);
-    } catch (e) {
-      LOG?.error('DASHBOARD_ENSURE', `Errore creazione/verifica '${SHEETS.SHEET_NAMES.Dati_Mensili}'.`, { error: e.message });
-    }
+    }, 'DASHBOARD_ENSURE', { showToast: false });
   }
 
   return { create };
 })();
 
-// Registra DASHBOARD nel ModuleRegistry
+// Registra DASHBOARD
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('DASHBOARD', ['SHEETS', 'LOG', 'UTIL', 'SHARED_UTILS']);
+  ModuleRegistry.register('DASHBOARD', ['SHEETS', 'LOG', 'SHARED_UTILS']);
 }
-
-// Registra DASHBOARD nel namespace GG
 if (typeof GG !== 'undefined') {
   GG.register('DASHBOARD', DASHBOARD);
 }
