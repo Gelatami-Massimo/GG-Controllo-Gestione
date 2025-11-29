@@ -147,13 +147,17 @@ const SHARED_UTILS = (function () {
       return result;
     } catch (e) {
       // Logging errore strutturato
-      LOG.error(contextName, errorMessage, { 
-        error: e.message, 
-        stack: e.stack,
-        name: e.name,
-        fileName: e.fileName || 'unknown',
-        lineNumber: e.lineNumber || 'unknown'
-      });
+      if (typeof LOG !== 'undefined' && LOG && LOG.error) {
+        LOG.error(contextName, errorMessage, { 
+          error: e.message, 
+          stack: e.stack,
+          name: e.name,
+          fileName: e.fileName || 'unknown',
+          lineNumber: e.lineNumber || 'unknown'
+        });
+      } else {
+        console.error(`[FALLBACK LOG] ${contextName}: ${errorMessage}`, e);
+      }
 
       // Toast UI (se abilitato e disponibile)
       if (showToast) {
@@ -171,9 +175,13 @@ const SHARED_UTILS = (function () {
         try {
           onError(e);
         } catch (callbackError) {
-          LOG.error('SHARED_UTILS', `Errore critico in callback onError di ${contextName}`, { 
-            error: callbackError.message 
-          });
+          if (typeof LOG !== 'undefined' && LOG && LOG.error) {
+            LOG.error('SHARED_UTILS', `Errore critico in callback onError di ${contextName}`, { 
+              error: callbackError.message 
+            });
+          } else {
+            console.error(`[FALLBACK LOG] SHARED_UTILS: Errore critico in callback onError di ${contextName}`, callbackError);
+          }
         }
       }
 
