@@ -349,9 +349,17 @@ const MAGAZZINO_CORE = (() => {
       // Calcola quantità base
       const { pzBase, kgBase } = _calculateBaseQuantities(quantita, prod.umBaseNorm, prod.pzPerCt, prod.kgPerPz);
 
+      // Estrai mese dalla data documento (se disponibile)
+      let mese = null;
+      if (dataDoc instanceof Date && !isNaN(dataDoc.getTime())) {
+        mese = dataDoc.getMonth() + 1; // 1-12
+      }
+
       // Aggiungi rowBase
       rowsBase.push({
         anno,
+        mese,  // ⭐ Aggiunto per KPI_ANALYSIS
+        dataDoc,  // ⭐ Aggiunto per riferimento completo
         codiceInterno: prod.codiceInterno,
         codiceFornitore: prod.codiceFornitore,
         denominazioneFornitore: prod.denominazioneFornitore || denominazioneFornitore,
@@ -1026,7 +1034,8 @@ const MAGAZZINO_CORE = (() => {
   return {
     buildMagazzinoByYear,
     buildMagazzinoIngredientiByYear,
-    updatePrezziMediMagazzino
+    updatePrezziMediMagazzino,
+    buildMagazzinoBaseRows_  // ⭐ Esposta per KPI_ANALYSIS
   };
 
 })();
