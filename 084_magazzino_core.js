@@ -234,6 +234,7 @@ const MAGAZZINO_CORE = (() => {
     // Colonne opzionali
     const hasUM = idx['UM'] !== undefined;
     const hasDataDoc = idx['DataDoc'] !== undefined;
+    const hasSede = idx['Sede'] !== undefined;
 
     const data = shRighe.getRange(2, 1, lastRow - 1, headers.length).getValues();
     const rowsBase = [];
@@ -255,6 +256,7 @@ const MAGAZZINO_CORE = (() => {
       const prezzoTotale = Number(row[idx.PrezzoTotale]) || 0;
       const reparto = String(row[idx.Reparto] || '').trim();
       const denominazioneFornitore = String(row[idx.DenominazioneFornitore] || '').trim();
+      const sedeRaw = hasSede ? String(row[idx.Sede] || '').trim() : '';
 
       // Filtri base
       if (!anno || quantita <= 0 || prezzoTotale === 0) {
@@ -360,6 +362,7 @@ const MAGAZZINO_CORE = (() => {
         anno,
         mese,  // ⭐ Aggiunto per KPI_ANALYSIS
         dataDoc,  // ⭐ Aggiunto per riferimento completo
+        sede: sedeRaw,
         codiceInterno: prod.codiceInterno,
         codiceFornitore: prod.codiceFornitore,
         denominazioneFornitore: prod.denominazioneFornitore || denominazioneFornitore,

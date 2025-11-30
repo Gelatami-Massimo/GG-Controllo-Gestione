@@ -145,149 +145,118 @@ const KPI_ANALYSIS = (function() {
   }
 
   /**
-   * Recupera numero scontrini da foglio "Dati Mensili".
-   * 
-   * Cerca dinamicamente le colonne:
-   * - "Sede" (obbligatoria)
-   * - "AnnoMese" o "Anno-Mese" (obbligatoria)
-   * - "N.Scontrini" o "N. Scontrini" o "N.Doc" (con fallback)
-   * 
-   * @param {string} anno - Anno di riferimento (es. "2025")
-   * @param {string} runId - ID esecuzione per logging
-   * @returns {Map<string, Map<number, number>>} Map<Sede, Map<MeseNumerico, NumeroScontrini>>
-   * @private
+   * Recupera numero scontrini da Dati Mensili (struttura cedolini) per azienda e mese.
+   * Esclude Hotel, supporta AnnoMese o Anno+Mese, e colonne "N. Scontrini" o "N. Doc".
+   * @returns {Map<string, Map<number, number>>} Map<Azienda, Map<Mese, N.Scontrini>>
    */
   function _getReceiptCounts(anno, runId) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheetName = 'Dati Mensili';
-    const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-    
+    const sh = ss.getSheetByName(sheetName);
     if (!sh) {
       LOG.warn(runId, 'KPI_NO_RECEIPTS_SHEET', `Foglio "${sheetName}" non trovato`);
       return new Map();
     }
 
     try {
+      const headerRow = (typeof SHEETS !== 'undefined' && SHEETS._findHeaderRow)
+        ? SHEETS._findHeaderRow(sh, sheetName)
+        : 1;
+      const idx = (typeof SHEETS !== 'undefined' && SHEETS.headerIndex)
+        ? SHEETS.headerIndex(sheetName)
+        : null;
+      const lastCol = sh.getLastColumn();
+      const headers = sh.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+
+      let sedeCol = -1, annoMeseCol = -1, annoCol = -1, meseCol = -1, repCol = -1, azCol = -1, scontriniCol = -1;
+      if (idx) {
+        sedeCol = idx.Sede ?? -1;
+        annoMeseCol = idx.AnnoMese ?? -1;
+        annoCol = idx.Anno ?? -1;
+        meseCol = idx.Mese ?? -1;
+        repCol = idx.Reparto ?? -1;
+        azCol = idx.Azienda ?? -1;
+        scontriniCol = (idx['N._Scontrini'] !== undefined) ? idx['N._Scontrini'] : (idx['N._Doc'] ?? -1);
+      } else {
+        headers.forEach((h, i) => {
+          const key = String(h).trim().toUpperCase().replace(/\s+/g, '');
+          if (key === 'SEDE') sedeCol = i;
+          else if (key === 'ANNOMESE' || key === 'ANNO-MESE' || key === 'ANNO_MESE') annoMeseCol = i;
+          else if (key === 'ANNO') annoCol = i;
+          else if (key === 'MESE') meseCol = i;
+          else if (key === 'REPARTO') repCol = i;
+          else if (key === 'AZIENDA') azCol = i;
+          else if (key === 'N.SCONTRINI' || key === 'NSCONTRINI' || key === 'N.DOC' || key === 'NDOC') scontriniCol = i;
+        });
+      }
+
       const lastRow = sh.getLastRow();
-      if (lastRow < 2) {
+      if (lastRow <= headerRow) {
         LOG.warn(runId, 'KPI_RECEIPTS_EMPTY', `Foglio "${sheetName}" vuoto`);
         return new Map();
       }
 
-      // Leggi header (riga 1)
-      const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-      
-      // ✅ Cerca colonne dinamicamente con logging
-      let sedeCol = -1;
-      let annoMeseCol = -1;
-      let meseCol = -1;  // ⭐ Colonna "Mese" separata
-      let scontriniCol = -1;
-
-      headers.forEach((header, idx) => {
-        const h = String(header).trim().toUpperCase().replace(/\s+/g, ''); // Rimuovi tutti gli spazi
-        
-        if (h === 'SEDE') {
-          sedeCol = idx;
-        } else if (h === 'ANNOMESE' || h === 'ANNO-MESE' || h === 'ANNO_MESE' || h === 'ANNOMESE') {
-          annoMeseCol = idx;
-        } else if (h === 'MESE') {
-          meseCol = idx;  // ⭐ Colonna mese separata
-        } else if (h === 'N.SCONTRINI' || h === 'N.SCONTRINI' || h === 'NSCONTRINI' || h === 'N.DOC' || h === 'N.DOC' || h === 'NDOC') {
-          scontriniCol = idx;
-        }
-      });
-
-      // Log headers trovati per debug
       LOG.info(runId, 'KPI_RECEIPTS_HEADERS', 'Headers foglio Dati Mensili', {
+        headerRow,
         totalHeaders: headers.length,
-        sedeCol,
-        annoMeseCol,
-        meseCol,
-        scontriniCol,
+        sedeCol, annoMeseCol, annoCol, meseCol, repCol, azCol, scontriniCol,
         firstHeaders: headers.slice(0, 15).map((h, i) => `${i}: ${String(h).trim()}`)
       });
 
-      // Validazione colonne obbligatorie
       if (sedeCol === -1) {
         LOG.error(runId, 'KPI_NO_SEDE_COL', 'Colonna "Sede" non trovata in Dati Mensili');
         return new Map();
       }
-
-      if (annoMeseCol === -1) {
-        LOG.error(runId, 'KPI_NO_ANNOMESE_COL', 'Colonna "AnnoMese" non trovata in Dati Mensili');
-        return new Map();
-      }
-
       if (scontriniCol === -1) {
-        LOG.warn(runId, 'KPI_NO_RECEIPTS_COL', 'Colonna scontrini non trovata in Dati Mensili (cercato: N.Scontrini, N.Doc)');
+        LOG.warn(runId, 'KPI_NO_RECEIPTS_COL', 'Colonna scontrini non trovata (cerca N. Scontrini o N. Doc)');
         return new Map();
       }
 
-      LOG.info(runId, 'KPI_RECEIPTS_COLS', 'Colonne identificate in Dati Mensili', {
-        sedeCol,
-        annoMeseCol,
-        scontriniCol
-      });
+      let companyMap = null;
+      try { if (typeof SHEETS !== 'undefined' && SHEETS.getCompanyMap) companyMap = SHEETS.getCompanyMap(); } catch(_) {}
 
-      // Leggi dati
-      const data = sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getValues();
+      const numRows = lastRow - headerRow;
+      const data = sh.getRange(headerRow + 1, 1, numRows, lastCol).getValues();
       const scontriniMap = new Map();
       let rowsProcessed = 0;
       let rowsSkipped = 0;
 
-      data.forEach((row, i) => {
-        const sede = String(row[sedeCol] || '').trim();
-        const annoMeseVal = String(row[annoMeseCol] || '').trim();
-        const scontriniVal = row[scontriniCol];
+      data.forEach(row => {
+        const sede = String(row[sedeCol] ?? '').trim();
+        if (!sede) { rowsSkipped++; return; }
+        const annoMeseVal = annoMeseCol !== -1 ? String(row[annoMeseCol] ?? '').trim() : '';
+        const annoVal = annoCol !== -1 ? String(row[annoCol] ?? '').trim() : '';
+        const meseVal = meseCol !== -1 ? row[meseCol] : '';
+        const repartoVal = repCol !== -1 ? String(row[repCol] ?? '').trim().toUpperCase() : '';
+        const aziendaVal = azCol !== -1 ? String(row[azCol] ?? '').trim() : '';
+        const rawScontrini = row[scontriniCol];
 
-        // ⭐ Supporto per colonna Mese separata (se AnnoMese è vuoto)
-        let meseNum = null;
+        if (repartoVal === 'HOTEL') { rowsSkipped++; return; }
 
-        // Tentativo 1: Estrai da AnnoMese (formato "YYYY-MM")
-        if (annoMeseVal && annoMeseVal.includes('-')) {
-          const meseParts = annoMeseVal.split('-');
-          if (meseParts.length === 2 && meseParts[0] === anno) {
-            meseNum = parseInt(meseParts[1], 10);
+        let monthNum = null; let okYear = false;
+        if (annoMeseVal && /^\d{4}-\d{2}$/.test(annoMeseVal)) {
+          okYear = annoMeseVal.startsWith(anno);
+          monthNum = parseInt(annoMeseVal.split('-')[1], 10);
+        } else if (annoVal) {
+          okYear = (annoVal === anno);
+          if (meseVal !== '') {
+            monthNum = typeof meseVal === 'number' ? meseVal : parseInt(String(meseVal).trim(), 10);
           }
         }
+        if (!okYear || !monthNum || isNaN(monthNum) || monthNum < 1 || monthNum > 12) { rowsSkipped++; return; }
 
-        // Tentativo 2: Usa colonna Mese separata se disponibile
-        if (!meseNum && meseCol !== -1) {
-          const meseVal = row[meseCol];
-          if (typeof meseVal === 'number') {
-            meseNum = meseVal;
-          } else {
-            meseNum = parseInt(String(meseVal).trim(), 10);
-          }
+        let azienda = aziendaVal || null;
+        if (!azienda && companyMap) azienda = companyMap.get(sede) || null;
+        if (!azienda) {
+          const sUp = sede.toUpperCase();
+          if (sUp.includes('GEMMA')) azienda = 'Gemma'; else if (sUp.includes('ZAFFIRO')) azienda = 'Zaffiro';
         }
+        if (!azienda) { rowsSkipped++; return; }
 
-        // Validazione mese
-        if (!meseNum || isNaN(meseNum) || meseNum < 1 || meseNum > 12) {
-          rowsSkipped++;
-          return;
-        }
-
-        // Filtra per anno (se non già fatto)
-        if (!annoMeseVal.startsWith(anno)) {
-          // Verifica anno da colonna separata se presente
-          const annoVal = row[headers.findIndex(h => String(h).trim().toUpperCase() === 'ANNO')];
-          if (String(annoVal).trim() !== anno) {
-            rowsSkipped++;
-            return;
-          }
-        }
-
+        const numScontrini = (typeof rawScontrini === 'number') ? rawScontrini : parseInt(String(rawScontrini).replace(/[^0-9]/g, ''), 10) || 0;
+        if (!scontriniMap.has(azienda)) scontriniMap.set(azienda, new Map());
+        scontriniMap.get(azienda).set(monthNum, numScontrini);
         rowsProcessed++;
-
-        // Converti scontrini in numero
-        const numScontrini = Number(scontriniVal) || 0;
-
-        // Inizializza mappa sede se non esiste
-        if (!scontriniMap.has(sede)) {
-          scontriniMap.set(sede, new Map());
-        }
-
-        // Salva conteggio scontrini
-        scontriniMap.get(sede).set(meseNum, numScontrini);
       });
 
       LOG.info(runId, 'KPI_RECEIPTS_LOADED', 'Conteggi scontrini caricati', {
@@ -300,10 +269,7 @@ const KPI_ANALYSIS = (function() {
       return scontriniMap;
 
     } catch (e) {
-      LOG.error(runId, 'KPI_RECEIPTS_ERROR', 'Errore lettura conteggi scontrini', {
-        error: e.message,
-        stack: e.stack
-      });
+      LOG.error(runId, 'KPI_RECEIPTS_ERROR', 'Errore lettura conteggi scontrini', { error: e.message, stack: e.stack });
       return new Map();
     }
   }
@@ -352,6 +318,13 @@ const KPI_ANALYSIS = (function() {
 
       // ✅ Trasforma rowsBase in formato KPI
       const rawPurchases = [];
+      // Mappa Sede -> Azienda (Gemma/Zaffiro) se disponibile
+      let companyMap = null;
+      try {
+        if (typeof SHEETS !== 'undefined' && SHEETS.getCompanyMap) {
+          companyMap = SHEETS.getCompanyMap();
+        }
+      } catch (_) {}
 
       rowsBase.forEach(rb => {
         // Salta righe senza mese (dati incompleti)
@@ -359,17 +332,29 @@ const KPI_ANALYSIS = (function() {
           return;
         }
 
-        // Determina sede dal reparto
-        let sede = 'Gelateria'; // Default
+        // Escludi Hotel dal KPI (richiesta: niente aggregati Hotel)
         const repartoUpper = String(rb.reparto || '').trim().toUpperCase();
-        
         if (repartoUpper === 'HOTEL') {
-          sede = 'Hotel';
-        } else if (repartoUpper === 'ZAFFIRO') {
-          sede = 'Zaffiro';
-        } else if (repartoUpper === 'GEMMA') {
-          sede = 'Gemma';
+          return;
         }
+
+        // Determina azienda (Gemma/Zaffiro) dalla sede delle righe magazzino
+        let azienda = null;
+        const sedeRaw = String(rb.sede || '').trim();
+        if (companyMap && sedeRaw) {
+          azienda = companyMap.get(sedeRaw) || null;
+        }
+        if (!azienda && sedeRaw) {
+          const sUp = sedeRaw.toUpperCase();
+          if (sUp.includes('GEMMA')) azienda = 'Gemma';
+          else if (sUp.includes('ZAFFIRO')) azienda = 'Zaffiro';
+        }
+        // Fallback prudente: usa direttamente sedeRaw se già è Gemma/Zaffiro
+        if (!azienda && (sedeRaw.toUpperCase() === 'GEMMA' || sedeRaw.toUpperCase() === 'ZAFFIRO')) {
+          azienda = sedeRaw;
+        }
+        // Se ancora non determinata, metti come 'Sede Non Assegnata' per evitare mismatch silenziosi
+        const sede = azienda || 'Sede Non Assegnata';
 
         rawPurchases.push({
           sede,
