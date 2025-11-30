@@ -64,6 +64,12 @@ function onOpen() {
     .addItem('✅ Validazione Dati Completa', App.ui.fn.runDataValidation)
   );
 
+  // --- Vendite Manuali ---
+  menu.addSubMenu(ui.createMenu('🛒 Vendite Manuali')
+    .addItem('📋 Crea Foglio Vendite', 'runCreateSalesEntrySheet')
+    .addItem('📥 Importa Vendite', 'runImportSalesFromSheet')
+  );
+
   // --- Manutenzione ---
   menu.addSubMenu(ui.createMenu('🔧 Manutenzione')
     .addItem('✨ Manutenzione Completa', App.ui.fn.runCompleteMaintenance)
@@ -472,6 +478,128 @@ function runSyncProdotti() {
     'Products',
     'Sincronizzazione prodotti in corso...',
     'Sincronizzazione prodotti completata!'
+  );
+}
+
+/**
+ * Crea il foglio per inserimento vendite manuali.
+ * Richiede anno e mese, genera foglio con prodotti raggruppati per ingrediente.
+ * @returns {void}
+ */
+function runCreateSalesEntrySheet() {
+  _runSafely(
+    () => {
+      const ui = SpreadsheetApp.getUi();
+      
+      // Richiedi anno
+      const yearResponse = ui.prompt(
+        '📅 Anno di riferimento',
+        'Inserisci l\'anno (es. 2025):',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (yearResponse.getSelectedButton() !== ui.Button.OK) {
+        return; // Operazione annullata
+      }
+      
+      const year = yearResponse.getResponseText().trim();
+      if (!/^\d{4}$/.test(year)) {
+        ui.alert('❌ Errore', 'Anno non valido. Inserire un anno a 4 cifre (es. 2025).', ui.ButtonSet.OK);
+        return;
+      }
+      
+      // Richiedi mese
+      const monthResponse = ui.prompt(
+        '📅 Mese di riferimento',
+        'Inserisci il mese (01-12):',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (monthResponse.getSelectedButton() !== ui.Button.OK) {
+        return; // Operazione annullata
+      }
+      
+      const month = monthResponse.getResponseText().trim();
+      if (!/^(0[1-9]|1[0-2])$/.test(month)) {
+        ui.alert('❌ Errore', 'Mese non valido. Inserire un mese tra 01 e 12.', ui.ButtonSet.OK);
+        return;
+      }
+      
+      // Crea foglio vendite
+      if (typeof MANUAL_SALES !== 'undefined' && MANUAL_SALES.createSalesEntrySheet) {
+        MANUAL_SALES.createSalesEntrySheet(year, month);
+      } else {
+        throw new Error('Modulo MANUAL_SALES non disponibile');
+      }
+    },
+    'ManualSales',
+    'Creazione foglio vendite in corso...',
+    'Foglio vendite creato con successo!'
+  );
+}
+
+/**
+ * Importa le vendite dal foglio manuale al sistema.
+ * Richiede anno e mese, legge il foglio e importa i dati.
+ * @returns {void}
+ */
+function runImportSalesFromSheet() {
+  _runSafely(
+    () => {
+      const ui = SpreadsheetApp.getUi();
+      
+      // Richiedi anno
+      const yearResponse = ui.prompt(
+        '📅 Anno di riferimento',
+        'Inserisci l\'anno (es. 2025):',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (yearResponse.getSelectedButton() !== ui.Button.OK) {
+        return; // Operazione annullata
+      }
+      
+      const year = yearResponse.getResponseText().trim();
+      if (!/^\d{4}$/.test(year)) {
+        ui.alert('❌ Errore', 'Anno non valido. Inserire un anno a 4 cifre (es. 2025).', ui.ButtonSet.OK);
+        return;
+      }
+      
+      // Richiedi mese
+      const monthResponse = ui.prompt(
+        '📅 Mese di riferimento',
+        'Inserisci il mese (01-12):',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (monthResponse.getSelectedButton() !== ui.Button.OK) {
+        return; // Operazione annullata
+      }
+      
+      const month = monthResponse.getResponseText().trim();
+      if (!/^(0[1-9]|1[0-2])$/.test(month)) {
+        ui.alert('❌ Errore', 'Mese non valido. Inserire un mese tra 01 e 12.', ui.ButtonSet.OK);
+        return;
+      }
+      
+      // Importa vendite
+      if (typeof MANUAL_SALES !== 'undefined' && MANUAL_SALES.importSalesFromSheet) {
+        const result = MANUAL_SALES.importSalesFromSheet(year, month);
+        
+        // Mostra riepilogo
+        let message = `✅ Importazione completata!\n\n`;
+        message += `📥 Vendite importate: ${result.imported}\n`;
+        message += `⏭️ Righe saltate: ${result.skipped}\n`;
+        message += `❌ Errori: ${result.errors}`;
+        
+        ui.alert('📊 Riepilogo Importazione', message, ui.ButtonSet.OK);
+      } else {
+        throw new Error('Modulo MANUAL_SALES non disponibile');
+      }
+    },
+    'ManualSales',
+    'Importazione vendite in corso...',
+    'Importazione vendite completata!'
   );
 }
 
