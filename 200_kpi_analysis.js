@@ -372,10 +372,18 @@ const KPI_ANALYSIS = (function() {
         const quantita = Number(row[idxR.Quantita]) || 0;
         const um = String(row[idxR.UM] || 'PZ').trim().toUpperCase();
         const euro = Number(row[idxR.TotRigaLordo]) || 0;
-        const reparto = String(row[idxR.Reparto] || 'Gelateria').trim();
+        const reparto = String(row[idxR.Reparto] || '').trim();
 
-        // Determina sede dal reparto
-        const sede = reparto.toUpperCase() === 'HOTEL' ? 'Hotel' : 'Gelateria';
+        // ⭐ Determina sede dal reparto con mappatura robusta
+        let sede = 'Gelateria'; // Default
+        const repartoUpper = reparto.toUpperCase();
+        
+        if (repartoUpper === 'HOTEL') {
+          sede = 'Hotel';
+        } else if (repartoUpper === 'ZAFFIRO' || repartoUpper === 'GEMMA') {
+          sede = repartoUpper.charAt(0) + repartoUpper.slice(1).toLowerCase(); // "Zaffiro" o "Gemma"
+        }
+        // Altri valori (vuoto, "Gelateria", etc.) → "Gelateria"
 
         // Estrai mese (1-12)
         const mese = dataFattura.getMonth() + 1;
