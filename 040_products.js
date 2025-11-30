@@ -190,9 +190,11 @@ const PRODUCTS = (() => {
           chiaveDescrizione: idx.ChiaveDescrizione !== undefined ? String(r[idx.ChiaveDescrizione] ?? '').trim() : ''
         };
 
-        // Indicizza per CodiceFornitore (se presente) con FornitoreID NORMALIZZATO
+        // Indicizza per CodiceFornitore (se presente)
         if (prodotto.fornitoreId && prodotto.codiceFornitore) {
-          const keyCode = `${prodotto.fornitoreId}|${prodotto.codiceFornitore.toUpperCase()}`;
+          // ✅ FIX: Normalizza il codice come in fase di ricerca per garantire il match
+          const codiceNorm = normalizeCodiceFornitore(prodotto.codiceFornitore);
+          const keyCode = `${prodotto.fornitoreId}|${codiceNorm}`;
           cache.byFornitoreCodice.set(keyCode, prodotto);
         }
 

@@ -74,6 +74,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🔄 Duplicati Fatture', App.ui.fn.runMarkDuplicateInvoices)
     .addItem('🗑️ Pulisci Cache', App.ui.fn.runClearCache)
+    .addItem('🧹 Elimina Duplicati Esatti (Prodotti)', 'runCleanupExactDuplicates')
     .addItem('🗑️ Pulisci Righe Vuote', 'runDeleteEmptyRowsFromRigheSheet')
     .addSeparator()
   );
@@ -265,6 +266,16 @@ function runClearCache() {
   } catch (e) {
     ui.alert('Errore', `Impossibile pulire cache: ${e.message}`, ui.ButtonSet.OK);
   }
+}
+
+/** Esegue pulizia duplicati esatti in Prodotti (Distruttiva). @returns {void} */
+function runCleanupExactDuplicates() {
+  _runSafely(
+    () => cleanupExactDuplicates(),
+    'Maintenance',
+    'Avvio analisi duplicati esatti...',
+    'Operazione completata.'
+  );
 }
 
 /** Aggiorna la dashboard finanziaria con i dati più recenti. @returns {void} */

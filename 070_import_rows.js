@@ -1221,6 +1221,31 @@ const IMPORT_ROWS = (function () {
 
   // Scrive buffer righe + aggiorna flag + flush prodotti
   function _flushAll(shR, rowsBuffer, shF, flagUpdates, productCache, headerRowF, newProductsToCreate, productHashMap, runId) {
+    // ✅ Deduplica buffer righe in memoria prima della scrittura
+    if (rowsBuffer.length > 0) {
+      const uniqueRows = [];
+      const seenKeys = new Set();
+      
+      // Deduplica basata su contenuto intero della riga (JSON stringified)
+      rowsBuffer.forEach(row => {
+        const key = JSON.stringify(row);
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          uniqueRows.push(row);
+        }
+      });
+      
+      if (uniqueRows.length < rowsBuffer.length) {
+        LOG.warn(runId, 'ROWS_FLUSH_DEDUP', `Duplicati rimossi dal buffer: ${rowsBuffer.length - uniqueRows.length}`, {
+          originalCount: rowsBuffer.length,
+          uniqueCount: uniqueRows.length
+        });
+        // Sostituisci il buffer con quello pulito
+        rowsBuffer.length = 0;
+        uniqueRows.forEach(r => rowsBuffer.push(r));
+      }
+    }
+    
     if (rowsBuffer.length > 0) {
       try {
         const headerRowR = SHEETS._findHeaderRow(shR, SHEETS.SHEET_NAMES.Righe);
