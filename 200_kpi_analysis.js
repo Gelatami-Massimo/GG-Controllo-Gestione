@@ -176,21 +176,34 @@ const KPI_ANALYSIS = (function() {
       // Leggi header (riga 1)
       const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
       
-      // ✅ Cerca colonne dinamicamente
+      // ✅ Cerca colonne dinamicamente con logging
       let sedeCol = -1;
       let annoMeseCol = -1;
+      let meseCol = -1;  // ⭐ Colonna "Mese" separata
       let scontriniCol = -1;
 
       headers.forEach((header, idx) => {
-        const h = String(header).trim().toUpperCase();
+        const h = String(header).trim().toUpperCase().replace(/\s+/g, ''); // Rimuovi tutti gli spazi
         
         if (h === 'SEDE') {
           sedeCol = idx;
-        } else if (h === 'ANNOMESE' || h === 'ANNO-MESE' || h === 'ANNO_MESE') {
+        } else if (h === 'ANNOMESE' || h === 'ANNO-MESE' || h === 'ANNO_MESE' || h === 'ANNOMESE') {
           annoMeseCol = idx;
-        } else if (h === 'N.SCONTRINI' || h === 'N. SCONTRINI' || h === 'NSCONTRINI' || h === 'N.DOC' || h === 'N. DOC') {
+        } else if (h === 'MESE') {
+          meseCol = idx;  // ⭐ Colonna mese separata
+        } else if (h === 'N.SCONTRINI' || h === 'N.SCONTRINI' || h === 'NSCONTRINI' || h === 'N.DOC' || h === 'N.DOC' || h === 'NDOC') {
           scontriniCol = idx;
         }
+      });
+
+      // Log headers trovati per debug
+      LOG.info(runId, 'KPI_RECEIPTS_HEADERS', 'Headers foglio Dati Mensili', {
+        totalHeaders: headers.length,
+        sedeCol,
+        annoMeseCol,
+        meseCol,
+        scontriniCol,
+        firstHeaders: headers.slice(0, 15).map((h, i) => `${i}: ${String(h).trim()}`)
       });
 
       // Validazione colonne obbligatorie
@@ -218,35 +231,52 @@ const KPI_ANALYSIS = (function() {
       // Leggi dati
       const data = sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getValues();
       const scontriniMap = new Map();
+      let rowsProcessed = 0;
+      let rowsSkipped = 0;
 
       data.forEach((row, i) => {
         const sede = String(row[sedeCol] || '').trim();
         const annoMeseVal = String(row[annoMeseCol] || '').trim();
         const scontriniVal = row[scontriniCol];
 
-        // Filtra per anno
+        // ⭐ Supporto per colonna Mese separata (se AnnoMese è vuoto)
+        let meseNum = null;
+
+        // Tentativo 1: Estrai da AnnoMese (formato "YYYY-MM")
+        if (annoMeseVal && annoMeseVal.includes('-')) {
+          const meseParts = annoMeseVal.split('-');
+          if (meseParts.length === 2 && meseParts[0] === anno) {
+            meseNum = parseInt(meseParts[1], 10);
+          }
+        }
+
+        // Tentativo 2: Usa colonna Mese separata se disponibile
+        if (!meseNum && meseCol !== -1) {
+          const meseVal = row[meseCol];
+          if (typeof meseVal === 'number') {
+            meseNum = meseVal;
+          } else {
+            meseNum = parseInt(String(meseVal).trim(), 10);
+          }
+        }
+
+        // Validazione mese
+        if (!meseNum || isNaN(meseNum) || meseNum < 1 || meseNum > 12) {
+          rowsSkipped++;
+          return;
+        }
+
+        // Filtra per anno (se non già fatto)
         if (!annoMeseVal.startsWith(anno)) {
-          return;
+          // Verifica anno da colonna separata se presente
+          const annoVal = row[headers.findIndex(h => String(h).trim().toUpperCase() === 'ANNO')];
+          if (String(annoVal).trim() !== anno) {
+            rowsSkipped++;
+            return;
+          }
         }
 
-        // Estrai mese numerico (es. "2025-01" -> 1)
-        const meseParts = annoMeseVal.split('-');
-        if (meseParts.length !== 2) {
-          LOG.warn(runId, 'KPI_INVALID_ANNOMESE', 'Formato AnnoMese non valido', {
-            rowNum: i + 2,
-            annoMeseVal
-          });
-          return;
-        }
-
-        const meseNum = parseInt(meseParts[1], 10);
-        if (isNaN(meseNum) || meseNum < 1 || meseNum > 12) {
-          LOG.warn(runId, 'KPI_INVALID_MONTH', 'Mese non valido', {
-            rowNum: i + 2,
-            meseNum
-          });
-          return;
-        }
+        rowsProcessed++;
 
         // Converti scontrini in numero
         const numScontrini = Number(scontriniVal) || 0;
@@ -262,7 +292,9 @@ const KPI_ANALYSIS = (function() {
 
       LOG.info(runId, 'KPI_RECEIPTS_LOADED', 'Conteggi scontrini caricati', {
         totalSeats: scontriniMap.size,
-        totalRecords: data.length
+        totalRecords: data.length,
+        rowsProcessed,
+        rowsSkipped
       });
 
       return scontriniMap;
