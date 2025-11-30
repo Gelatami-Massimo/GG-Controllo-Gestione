@@ -350,23 +350,40 @@ const KPI_ANALYSIS = (function() {
       }
 
       const lastRowR = shRighe.getLastRow();
+      
+      if (lastRowR <= headerRowR) {
+        LOG.warn(runId, 'KPI_ROWS_EMPTY', 'Foglio Righe vuoto');
+        return [];
+      }
+      
       const valuesR = shRighe.getRange(headerRowR + 1, 1, lastRowR - headerRowR, shRighe.getLastColumn()).getValues();
       
       const rawPurchases = [];
+      let totalRowsProcessed = 0;
+      let validDates = 0;
+      let matchedDates = 0;
 
       // ✅ STEP 3: Processa righe
       valuesR.forEach((row, i) => {
+        totalRowsProcessed++;
         const dataFattura = row[idxR.DataFattura];
         
         // Validazione data
         if (!(dataFattura instanceof Date) || isNaN(dataFattura.getTime())) {
           return;
         }
+        validDates++;
 
+        // ⭐ Normalizza date per confronto (ignora ore/minuti/secondi)
+        const dataFatturaNorm = new Date(dataFattura.getFullYear(), dataFattura.getMonth(), dataFattura.getDate());
+        const startNorm = new Date(dateFilter.start.getFullYear(), dateFilter.start.getMonth(), dateFilter.start.getDate());
+        const endNorm = new Date(dateFilter.end.getFullYear(), dateFilter.end.getMonth(), dateFilter.end.getDate());
+        
         // Filtro date
-        if (dataFattura < dateFilter.start || dataFattura > dateFilter.end) {
+        if (dataFatturaNorm < startNorm || dataFatturaNorm > endNorm) {
           return;
         }
+        matchedDates++;
 
         const codice = String(row[idxR.CodiceInternoBreve] || '').trim();
         const quantita = Number(row[idxR.Quantita]) || 0;
@@ -445,8 +462,23 @@ const KPI_ANALYSIS = (function() {
 
       LOG.info(runId, 'KPI_RAW_PURCHASES', 'Dati acquisti processati', {
         totalRows: rawPurchases.length,
-        filteredFromTotal: valuesR.length
+        totalRowsInSheet: valuesR.length,
+        totalRowsProcessed,
+        validDates,
+        matchedDates,
+        dateFilterStart: dateFilter.start.toISOString(),
+        dateFilterEnd: dateFilter.end.toISOString()
       });
+
+      // ⚠️ Diagnostica se nessun dato trovato
+      if (rawPurchases.length === 0) {
+        LOG.warn(runId, 'KPI_NO_DATA_DETAILS', 'Nessun acquisto trovato - dettagli', {
+          totalRowsInSheet: valuesR.length,
+          rowsWithValidDates: validDates,
+          rowsMatchingDateFilter: matchedDates,
+          yearRequested: dateFilter.start.getFullYear()
+        });
+      }
 
       return rawPurchases;
 
