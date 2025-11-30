@@ -60,6 +60,8 @@ function onOpen() {
     .addItem('📦 Magazzino Prodotti', 'buildMagazzinoByYear')
     .addItem('🧪 Magazzino Ingredienti', 'buildMagazzinoIngredientiByYear')
     .addSeparator()
+    .addItem('📉 KPI Consumi (Acquisti/Scontrini)', 'runKpiConsumptionReport')
+    .addSeparator()
     .addItem('🔍 Audit Integrità Dati', App.ui.fn.runReconciliationReport)
     .addItem('✅ Validazione Dati Completa', App.ui.fn.runDataValidation)
   );
@@ -656,6 +658,26 @@ function runImportInventoryCountData() {
     'Inventory',
     'Importazione conteggi inventario in corso...',
     'Importazione inventario completata!'
+  );
+}
+
+/**
+ * Genera report KPI consumi (Acquisti / N. Scontrini).
+ * Calcola KG/Scontrino, PZ/Scontrino, €/Scontrino per Sede/Mese/Categoria.
+ * @returns {void}
+ */
+function runKpiConsumptionReport() {
+  _runSafely(
+    () => {
+      if (typeof KPI_ANALYSIS !== 'undefined' && KPI_ANALYSIS.runConsumptionReport) {
+        KPI_ANALYSIS.runConsumptionReport();
+      } else {
+        throw new Error('Modulo KPI_ANALYSIS non disponibile');
+      }
+    },
+    'KPI Analysis',
+    'Generazione report KPI consumi in corso...',
+    'Report KPI consumi completato!'
   );
 }
 
