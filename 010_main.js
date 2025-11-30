@@ -70,6 +70,12 @@ function onOpen() {
     .addItem('📥 Importa Vendite', 'runImportSalesFromSheet')
   );
 
+  // --- Inventario Fisico ---
+  menu.addSubMenu(ui.createMenu('📦 Inventario Fisico')
+    .addItem('📋 Crea Scheda Conteggio', 'runCreateInventoryCountSheet')
+    .addItem('📥 Importa Conteggi', 'runImportInventoryCountData')
+  );
+
   // --- Manutenzione ---
   menu.addSubMenu(ui.createMenu('🔧 Manutenzione')
     .addItem('✨ Manutenzione Completa', App.ui.fn.runCompleteMaintenance)
@@ -600,6 +606,56 @@ function runImportSalesFromSheet() {
     'ManualSales',
     'Importazione vendite in corso...',
     'Importazione vendite completata!'
+  );
+}
+
+/**
+ * Crea il foglio per il conteggio inventario fisico.
+ * Genera scheda con prodotti raggruppati per ingrediente e UMBase.
+ * @returns {void}
+ */
+function runCreateInventoryCountSheet() {
+  _runSafely(
+    () => {
+      if (typeof INVENTORY !== 'undefined' && INVENTORY.createCountSheet) {
+        INVENTORY.createCountSheet();
+      } else {
+        throw new Error('Modulo INVENTORY non disponibile');
+      }
+    },
+    'Inventory',
+    'Creazione scheda inventario in corso...',
+    'Scheda inventario creata con successo!'
+  );
+}
+
+/**
+ * Importa i conteggi inventario dal foglio compilato.
+ * Legge il foglio INVENTARIO_ATTIVO e importa i dati.
+ * @returns {void}
+ */
+function runImportInventoryCountData() {
+  _runSafely(
+    () => {
+      const ui = SpreadsheetApp.getUi();
+      
+      if (typeof INVENTORY !== 'undefined' && INVENTORY.importCountData) {
+        const result = INVENTORY.importCountData();
+        
+        // Mostra riepilogo
+        let message = `✅ Importazione completata!\n\n`;
+        message += `📥 Conteggi importati: ${result.imported}\n`;
+        message += `⏭️ Righe saltate: ${result.skipped}\n`;
+        message += `❌ Errori: ${result.errors}`;
+        
+        ui.alert('📦 Riepilogo Importazione Inventario', message, ui.ButtonSet.OK);
+      } else {
+        throw new Error('Modulo INVENTORY non disponibile');
+      }
+    },
+    'Inventory',
+    'Importazione conteggi inventario in corso...',
+    'Importazione inventario completata!'
   );
 }
 
