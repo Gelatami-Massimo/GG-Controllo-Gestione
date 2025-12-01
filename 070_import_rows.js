@@ -501,13 +501,19 @@ const IMPORT_ROWS = (function () {
       LOG?.warn('ROWS_SETUP', `Colonne opzionali mancanti in Fatture (eseguire DEV_EnsureSheetsAndFormats): ${missingOptional.join(', ')}`);
     }
 
-    // Carica filtro dinamico
+    // Carica filtro dinamico e applica Word Boundaries (\b) per match esatti di parole
     const junkKeywordsSet = _getJunkKeywords();
-    const junkKeywordsArray = Array.from(junkKeywordsSet); // precompute per performance
-    // Compila regex unica (case-insensitive) per match veloce delle parole chiave
+    const junkKeywordsArray = Array.from(junkKeywordsSet);
     const _escapeRegex = s => String(s).replace(/[\-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const junkRegex = junkKeywordsArray.length ? new RegExp(junkKeywordsArray.map(_escapeRegex).join('|'), 'i') : null;
-    LOG.info(runId, 'IMPORT_ROWS_JUNK_FILTER', 'Filtro spazzatura caricato', { 
+
+    // FIX: Usa \b (boundary) per cercare la parola intera.
+    // Es: "IVA" matcherà "Totale IVA" ma NON matcherà "MANIVA"
+    const junkRegexPattern = junkKeywordsArray
+      .map(k => `\\b${_escapeRegex(k)}\\b`) 
+      .join('|');
+
+    const junkRegex = junkKeywordsArray.length ? new RegExp(junkRegexPattern, 'i') : null;
+    LOG.info(runId, 'IMPORT_ROWS_JUNK_FILTER', 'Filtro spazzatura caricato con word boundaries', { 
       junkKeywordsCount: junkKeywordsSet.size 
     });
 
