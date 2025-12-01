@@ -176,7 +176,22 @@ const KPI_ANALYSIS = (function() {
         meseCol = idx.Mese ?? -1;
         repCol = idx.Reparto ?? -1;
         azCol = idx.Azienda ?? -1;
-        scontriniCol = (idx['N._Scontrini'] !== undefined) ? idx['N._Scontrini'] : (idx['N._Doc'] ?? -1);
+        // Supporta più varianti di intestazione per "Numero Scontrini"
+        const candidateKeys = [
+          'N._Scontrini',   // es. "N. Scontrini"
+          'N.Scontrini',    // es. "N.Scontrini" (senza spazio)
+          'N_Scontrini',    // es. "N Scontrini"
+          'N°_Scontrini',   // es. "N° Scontrini"
+          'Nº_Scontrini',   // es. "Nº Scontrini"
+          'NScontrini',     // es. "NScontrini"
+          'Scontrini',      // es. "Scontrini"
+          'N._Doc',         // fallback: "N. Doc"
+          'N_Doc',          // possibile variante
+          'N.Doc'           // possibile variante
+        ];
+        for (const key of candidateKeys) {
+          if (idx[key] !== undefined) { scontriniCol = idx[key]; break; }
+        }
       } else {
         headers.forEach((h, i) => {
           const key = String(h).trim().toUpperCase().replace(/\s+/g, '');
@@ -186,7 +201,10 @@ const KPI_ANALYSIS = (function() {
           else if (key === 'MESE') meseCol = i;
           else if (key === 'REPARTO') repCol = i;
           else if (key === 'AZIENDA') azCol = i;
-          else if (key === 'N.SCONTRINI' || key === 'NSCONTRINI' || key === 'N.DOC' || key === 'NDOC') scontriniCol = i;
+          else if (
+            key === 'N.SCONTRINI' || key === 'NSCONTRINI' || key === 'N°SCONTRINI' || key === 'NºSCONTRINI' ||
+            key === 'SCONTRINI' || key === 'N.DOC' || key === 'NDOC' || key === 'N_DOC' || key === 'N.DOCUMENTI'
+          ) scontriniCol = i;
         });
       }
 
