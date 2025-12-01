@@ -635,10 +635,10 @@ const IMPORT_HEADERS = (function () {
             '',
             defaultImportRows
           ]);
-          supplierInfo = { famiglia: '', categoria: '', reparto: '' };
+          supplierInfo = { nome: '', famiglia: '', categoria: '', reparto: '' };
           supplierDataMap.set(supplierIdNorm, supplierInfo);
         } else if (!supplierInfo) {
-          supplierInfo = { famiglia: '', categoria: '', reparto: '' };
+          supplierInfo = { nome: '', famiglia: '', categoria: '', reparto: '' };
         }
 
         const isCreditNote = (data.doc.tipo || '').toLowerCase().includes('nota di credito');
@@ -673,7 +673,7 @@ const IMPORT_HEADERS = (function () {
           LinkXML: data.fileUrl,
           LinkPDF: '',
           FornitoreID: supplierIdNorm,
-          DenominazioneFornitore: data.fornitore.denom,
+          DenominazioneFornitore: (supplierInfo && supplierInfo.nome) ? supplierInfo.nome : data.fornitore.denom,
           Famiglia: supplierInfo.famiglia,
           Categoria: supplierInfo.categoria,
           Reparto: reparto,
@@ -877,10 +877,14 @@ const IMPORT_HEADERS = (function () {
         );
         return map;
       }
-      // Reparto è opzionale, quindi includiamo solo se esiste
-      const lastCol = idx.Reparto !== undefined
-        ? Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria, idx.Reparto) + 1
-        : Math.max(idx.FornitoreID, idx.Famiglia, idx.Categoria) + 1;
+      // Reparto e Denominazione sono opzionali, quindi includiamo solo se esistono
+      const lastCol = Math.max(
+        idx.FornitoreID,
+        idx.Famiglia,
+        idx.Categoria,
+        idx.Reparto !== undefined ? idx.Reparto : 0,
+        idx.Denominazione !== undefined ? idx.Denominazione : 0
+      ) + 1;
       const data = sheet
         .getRange(headerRow + 1, 1, sheet.getLastRow() - headerRow, lastCol)
         .getValues();
@@ -895,6 +899,7 @@ const IMPORT_HEADERS = (function () {
           .replace(/^0+/, '');
         if (normalizedId) {
           map.set(normalizedId, {
+            nome: idx.Denominazione !== undefined ? String(row[idx.Denominazione] || '').trim() : '',
             famiglia: String(row[idx.Famiglia] ?? '').trim(),
             categoria: String(row[idx.Categoria] ?? '').trim(),
             reparto: idx.Reparto !== undefined ? String(row[idx.Reparto] ?? '').trim() : ''
