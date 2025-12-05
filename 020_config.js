@@ -361,7 +361,12 @@ const SHEETS = (function () {
     const lastRow = sh.getLastRow();
     const lastCol = sh.getLastColumn() || 1;
 
-    if (lastRow < 1 && lastCol <= 1 && sh.getRange('A1').getValue() === '') {
+    // ✅ FIX: Verifica se il foglio è REALMENTE vuoto (A1 vuoto E nessun contenuto)
+    // Google Sheets crea fogli con 1000 righe x 26 colonne vuote, quindi lastRow/lastCol non bastano
+    const isReallyEmpty = (lastRow === 0 || sh.getRange('A1').getValue() === '') && 
+                         sh.getDataRange().getValues().flat().every(cell => cell === '' || cell === null || cell === undefined);
+
+    if (isReallyEmpty) {
       try {
         const headerRange = sh.getRange(1, 1, 1, schemaHeaders.length);
         headerRange.setValues([schemaHeaders]);
