@@ -374,18 +374,55 @@ const INVENTORY = (() => {
         const rowNum = i + 2;
         const [nomeGruppo, categoria, fornitore, umBase, quantita, note, codiciJSON] = row;
 
+        // Debug logging per le prime 3 righe
+        if (i < 3) {
+          LOG.debug(runId, 'INVENTORY_IMPORT_ROW', `Riga ${rowNum} esempio`, {
+            nomeGruppo: String(nomeGruppo).substring(0, 50),
+            categoria: String(categoria).substring(0, 30),
+            umBase,
+            quantita,
+            hasJSON: !!codiciJSON,
+            jsonLength: String(codiciJSON).length
+          });
+        }
+
+        // Salta righe completamente vuote (tutte le celle vuote)
+        if (!nomeGruppo && !categoria && !quantita && !codiciJSON) {
+          return; // Non contare come skipped, è solo padding vuoto
+        }
+
         // Salta righe senza quantità
-        if (!quantita || Number(quantita) <= 0) {
-          skipped.push({ rowNum, reason: 'Quantità mancante o zero' });
+        if (!quantita || quantita === '' || Number(quantita) <= 0) {
+          skipped.push({ rowNum, reason: 'Quantità mancante o zero', nomeGruppo: String(nomeGruppo).substring(0, 40) });
           return;
         }
 
         try {
           // Decodifica JSON codici interni
-          const codiciInterni = JSON.parse(codiciJSON);
+          if (!codiciJSON || String(codiciJSON).trim() === '') {
+            errors.push({ rowNum, error: 'Colonna CodiciInterni vuota', nomeGruppo: String(nomeGruppo).substring(0, 40) });
+            return;
+          }
+
+          let codiciInterni;
+          try {
+            codiciInterni = JSON.parse(codiciJSON);
+          } catch (jsonError) {
+            errors.push({ 
+              rowNum, 
+              error: `JSON non valido: ${jsonError.message}`, 
+              nomeGruppo: String(nomeGruppo).substring(0, 40),
+              jsonPreview: String(codiciJSON).substring(0, 50)
+            });
+            return;
+          }
           
           if (!Array.isArray(codiciInterni) || codiciInterni.length === 0) {
-            errors.push({ rowNum, error: 'JSON codici non valido o vuoto' });
+            errors.push({ 
+              rowNum, 
+              error: 'JSON non è un array o è vuoto', 
+              nomeGruppo: String(nomeGruppo).substring(0, 40) 
+            });
             return;
           }
 
@@ -405,7 +442,12 @@ const INVENTORY = (() => {
           });
 
         } catch (e) {
-          errors.push({ rowNum, error: e.message });
+          errors.push({ 
+            rowNum, 
+            error: e.message, 
+            stack: e.stack ? e.stack.substring(0, 200) : '',
+            nomeGruppo: String(nomeGruppo).substring(0, 40)
+          });
         }
       });
 
@@ -450,14 +492,47 @@ const INVENTORY = (() => {
 
       LOG.info(runId, 'INVENTORY_IMPORT_DONE', 'Importazione completata', result);
 
-      // Mostra riepilogo all'utente
-      SpreadsheetApp.getUi().alert(
-        '✅ Importazione Inventario Completata',
-        `Dati salvati nel foglio "Inventari_DB":\n\n` +
+      // Mostra riepilogo all'utente con dettagli errori
+      let message = `Dati ${imported.length > 0 ? 'salvati nel foglio "Inventari_DB"' : 'NON salvati (nessun prodotto valido)'}:\n\n` +
         `✓ Importati: ${imported.length} prodotti\n` +
         `⊗ Saltati: ${skipped.length} (quantità zero o mancante)\n` +
-        `✗ Errori: ${errors.length}\n\n` +
-        `Data inventario: ${dataInventario.toLocaleString('it-IT')}`,
+        `✗ Errori: ${errors.length}\n\n`;
+
+      if (imported.length > 0) {
+        message += `Data inventario: ${dataInventario.toLocaleString('it-IT')}\n\n`;
+      }
+
+      // Aggiungi dettagli errori se presenti
+      if (errors.length > 0 && errors.length <= 5) {
+        message += `\n📋 Dettagli errori:\n`;
+        errors.forEach(err => {
+          message += `• Riga ${err.rowNum}: ${err.error}\n`;
+          if (err.nomeGruppo) message += `  Prodotto: ${err.nomeGruppo}\n`;
+        });
+      } else if (errors.length > 5) {
+        message += `\n📋 Primi 5 errori:\n`;
+        errors.slice(0, 5).forEach(err => {
+          message += `• Riga ${err.rowNum}: ${err.error}\n`;
+          if (err.nomeGruppo) message += `  Prodotto: ${err.nomeGruppo}\n`;
+        });
+        message += `\n(${errors.length - 5} errori aggiuntivi. Vedi Log per dettagli completi.)\n`;
+      }
+
+      // Suggerimenti se nessun dato importato
+      if (imported.length === 0) {
+        message += `\n⚠️ SUGGERIMENTI:\n`;
+        if (skipped.length > 0) {
+          message += `• Compila la colonna "Quantità Conteggio" (E) nel foglio INVENTARIO_ATTIVO\n`;
+        }
+        if (errors.length > 0) {
+          message += `• Ricrea il foglio inventario (potrebbe essere corrotto)\n`;
+          message += `• Menu: 📦 Inventario Fisico → 📋 Crea Scheda Conteggio\n`;
+        }
+      }
+
+      SpreadsheetApp.getUi().alert(
+        imported.length > 0 ? '✅ Importazione Inventario Completata' : '⚠️ Importazione Fallita',
+        message,
         SpreadsheetApp.getUi().ButtonSet.OK
       );
 
