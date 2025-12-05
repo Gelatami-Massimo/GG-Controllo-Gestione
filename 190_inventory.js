@@ -340,7 +340,7 @@ const INVENTORY = (() => {
   /**
    * Importa i dati inventario dal foglio compilato.
    * Legge il foglio "INVENTARIO_ATTIVO", decodifica i JSON dei codici interni,
-   * e crea report delle giacenze fisiche per ogni prodotto.
+   * e salva le giacenze fisiche nel foglio "Inventari_DB".
    * 
    * @returns {Object} Risultato importazione con statistiche
    */
@@ -368,6 +368,7 @@ const INVENTORY = (() => {
       const imported = [];
       const skipped = [];
       const errors = [];
+      const dataInventario = new Date();
 
       data.forEach((row, i) => {
         const rowNum = i + 2;
@@ -391,12 +392,15 @@ const INVENTORY = (() => {
           // Registra giacenza per ogni codice del gruppo
           codiciInterni.forEach(codice => {
             imported.push({
+              dataInventario,
               codiceInternoBreve: codice,
+              descrizione: '', // Verrà arricchito da Prodotti se necessario
+              categoria,
               quantita: Number(quantita),
               umBase,
-              categoria,
-              nomeGruppo,
-              note: note || ''
+              gruppoInventario: nomeGruppo,
+              note: note || '',
+              operatore: Session.getActiveUser().getEmail() || 'Sistema'
             });
           });
 
@@ -404,6 +408,37 @@ const INVENTORY = (() => {
           errors.push({ rowNum, error: e.message });
         }
       });
+
+      // ✅ STEP: Salva nel foglio Inventari_DB
+      if (imported.length > 0) {
+        const dbSheet = SHEETS.get(SHEETS.SHEET_NAMES.Inventari_DB);
+        if (!dbSheet) {
+          throw new Error('Foglio "Inventari_DB" non trovato. Eseguire Setup Fogli prima.');
+        }
+
+        const headerRow = SHEETS._findHeaderRow(dbSheet, SHEETS.SHEET_NAMES.Inventari_DB);
+        const startRow = Math.max(dbSheet.getLastRow() + 1, headerRow + 1);
+
+        // Prepara righe per scrittura
+        const rowsToWrite = imported.map(item => [
+          item.dataInventario,
+          item.codiceInternoBreve,
+          item.descrizione,
+          item.categoria,
+          item.quantita,
+          item.umBase,
+          item.gruppoInventario,
+          item.note,
+          item.operatore
+        ]);
+
+        dbSheet.getRange(startRow, 1, rowsToWrite.length, 9).setValues(rowsToWrite);
+        
+        LOG.info(runId, 'INVENTORY_DB_WRITE', 'Dati scritti su Inventari_DB', {
+          rowsWritten: rowsToWrite.length,
+          startRow
+        });
+      }
 
       const result = {
         success: true,
@@ -415,8 +450,16 @@ const INVENTORY = (() => {
 
       LOG.info(runId, 'INVENTORY_IMPORT_DONE', 'Importazione completata', result);
 
-      // TODO: Implementare scrittura su foglio "Giacenze" o database
-      // Per ora ritorna solo il risultato dell'analisi
+      // Mostra riepilogo all'utente
+      SpreadsheetApp.getUi().alert(
+        '✅ Importazione Inventario Completata',
+        `Dati salvati nel foglio "Inventari_DB":\n\n` +
+        `✓ Importati: ${imported.length} prodotti\n` +
+        `⊗ Saltati: ${skipped.length} (quantità zero o mancante)\n` +
+        `✗ Errori: ${errors.length}\n\n` +
+        `Data inventario: ${dataInventario.toLocaleString('it-IT')}`,
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
 
       return result;
 

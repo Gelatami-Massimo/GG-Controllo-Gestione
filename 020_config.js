@@ -200,7 +200,12 @@ const SHEETS = (function () {
     // --- Filtro Righe Spazzatura ---
     'Filtro Righe Spazzatura': ['ParolaChiaveDaIgnorare', 'Note'],
     // --- Righe Duplicate ---
-    'Righe_Duplicate': ['FileID', 'NumeroDoc', 'NumeroLinea', 'CodiceValore', 'Descrizione', 'RowIndex']
+    'Righe_Duplicate': ['FileID', 'NumeroDoc', 'NumeroLinea', 'CodiceValore', 'Descrizione', 'RowIndex'],
+    // --- Database Inventari Fisici ---
+    'Inventari_DB': [
+      'DataInventario', 'CodiceInternoBreve', 'Descrizione', 'CategoriaProdotto',
+      'QuantitaConteggio', 'UMBase', 'GruppoInventario', 'Note', 'Operatore'
+    ]
   };
 
   // Mappa nomi sicuri -> nomi reali (es. Dati_Mensili -> "Dati Mensili")
@@ -650,6 +655,11 @@ const SHEETS = (function () {
       [SHEET_NAMES.Righe_Duplicate]: [
         { format: '@', cols: ['FileID', 'NumeroDoc', 'NumeroLinea', 'CodiceValore', 'Descrizione'] },
         { format: '#,##0', cols: ['RowIndex'] }
+      ],
+      [SHEET_NAMES.Inventari_DB]: [
+        { format: 'dd/mm/yyyy', cols: ['DataInventario'] },
+        { format: '@', cols: ['CodiceInternoBreve', 'Descrizione', 'CategoriaProdotto', 'UMBase', 'GruppoInventario', 'Note', 'Operatore'] },
+        { format: '#,##0.####', cols: ['QuantitaConteggio'] }
       ]
     };
 
