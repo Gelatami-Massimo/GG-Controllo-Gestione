@@ -437,7 +437,7 @@ const INVENTORY = (() => {
               umBase,
               gruppoInventario: nomeGruppo,
               note: note || '',
-              operatore: Session.getActiveUser().getEmail() || 'Sistema'
+                            operatore: Session.getEffectiveUser().getEmail() || 'Sistema'
             });
           });
 
