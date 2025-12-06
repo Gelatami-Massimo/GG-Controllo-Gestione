@@ -303,14 +303,28 @@ const MAGAZZINO_CORE = (() => {
 
       // Filtro per data (se specificato e se la colonna esiste)
       if (dateFilter && hasDataDoc && dataDoc) {
-        const docDate = new Date(dataDoc);
+        let docDate;
+        
+        // Gestisci sia Date objects che stringhe
+        if (dataDoc instanceof Date) {
+          docDate = dataDoc;
+        } else {
+          // Prova a parsare la data (Google Sheets dovrebbe già fornire un Date object)
+          docDate = new Date(dataDoc);
+        }
+        
+        // Verifica validità e confronta
         if (isNaN(docDate.getTime()) || docDate < dateFilter.startDate || docDate > dateFilter.endDate) {
           skippedByDateFilter++;
-          if (runId) {
+          if (runId && skippedByDateFilter <= 3) { // Log solo i primi 3 per evitare spam
             LOG.debug(runId, 'MAG_ROW_SKIP_DATE', 'Riga fuori intervallo date', {
-              dataDoc,
+              dataDoc: dataDoc instanceof Date ? dataDoc.toISOString() : String(dataDoc),
+              docDateParsed: docDate.toISOString(),
               filterStart: dateFilter.startDate.toISOString().substring(0, 10),
-              filterEnd: dateFilter.endDate.toISOString().substring(0, 10)
+              filterEnd: dateFilter.endDate.toISOString().substring(0, 10),
+              isValid: !isNaN(docDate.getTime()),
+              isBefore: docDate < dateFilter.startDate,
+              isAfter: docDate > dateFilter.endDate
             });
           }
           return; // Salta questa riga, fuori dall'intervallo
@@ -665,9 +679,22 @@ const MAGAZZINO_CORE = (() => {
       
       // Costruisci date filtro (primo giorno del mese iniziale, ultimo giorno del mese finale)
       const startDate = new Date(startYear, startMonth - 1, 1);
-      const endDate = new Date(endYear, endMonth, 0); // Ultimo giorno del mese
+      // Per l'ultimo giorno del mese: crea il primo giorno del mese successivo e sottrai 1 millisecondo
+      const endDate = new Date(endYear, endMonth, 1);
+      endDate.setMilliseconds(endDate.getMilliseconds() - 1);
       
       const dateFilter = { startDate, endDate };
+      
+      if (runId) {
+        LOG.info(runId, 'MAG_DATE_FILTER', 'Filtro date impostato', {
+          inputStart: `${startParts[0]}/${startParts[1]}`,
+          inputEnd: `${endParts[0]}/${endParts[1]}`,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          startDateLocal: startDate.toLocaleDateString('it-IT'),
+          endDateLocal: endDate.toLocaleDateString('it-IT')
+        });
+      }
       
       // Logging già gestito da LOG in MAG_PRODOTTI_START
       
@@ -900,9 +927,21 @@ const MAGAZZINO_CORE = (() => {
       
       // Costruisci date filtro (primo giorno del mese iniziale, ultimo giorno del mese finale)
       const startDate = new Date(startYear, startMonth - 1, 1);
-      const endDate = new Date(endYear, endMonth, 0); // Ultimo giorno del mese
+      // Per l'ultimo giorno del mese: crea il primo giorno del mese successivo e sottrai 1 millisecondo
+      const endDate = new Date(endYear, endMonth, 1);
+      endDate.setMilliseconds(endDate.getMilliseconds() - 1);
       
       const dateFilter = { startDate, endDate };
+      
+      if (runId) {
+        LOG.info(runId, 'MAG_ING_DATE_FILTER', 'Filtro date impostato (Ingredienti)', {
+          inputStart: `${startParts[0]}/${startParts[1]}`,
+          inputEnd: `${endParts[0]}/${endParts[1]}`,\n          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          startDateLocal: startDate.toLocaleDateString('it-IT'),
+          endDateLocal: endDate.toLocaleDateString('it-IT')
+        });
+      }
       
       // Logging già gestito da LOG in MAG_INGREDIENTI_START
       
