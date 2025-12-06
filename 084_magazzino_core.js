@@ -253,6 +253,17 @@ const MAGAZZINO_CORE = (() => {
     const hasUM = idx['UM'] !== undefined;
     const hasDataDoc = idx['DataDoc'] !== undefined;
     const hasSede = idx['Sede'] !== undefined;
+    
+    // Log configurazione colonne per diagnostica
+    if (runId) {
+      LOG.info(runId, 'MAG_RIGHE_COLUMNS', 'Configurazione colonne foglio Righe', {
+        hasUM,
+        hasDataDoc,
+        hasSede,
+        totalColumns: headers.length,
+        columnNames: headers.slice(0, 15) // Prime 15 colonne
+      });
+    }
 
     const data = shRighe.getRange(2, 1, lastRow - 1, headers.length).getValues();
     const rowsBase = [];
@@ -344,25 +355,30 @@ const MAGAZZINO_CORE = (() => {
         // Raccogli sample (primi 10)
         if (noMatchSamples.length < 10) {
           const keyAttempted = codiceArticolo 
-            ? `${fornitoreID}||${codiceArticolo}`
+            ? `${fornitoreID}||${codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase()}`
             : `${fornitoreID}||${descrizione.toUpperCase()}||${um.toUpperCase()}`;
           noMatchSamples.push({
             fornitoreID,
             codiceArticolo,
+            codiceArticoloNorm: codiceArticolo ? codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase() : '',
             descrizione: descrizione.substring(0, 30),
             um,
             keyAttempted,
-            hasCode: !!codiceArticolo
+            hasCode: !!codiceArticolo,
+            hasUM: !!um,
+            matchReason
           });
         }
         
-        if (runId) {
-          LOG.debug(runId, 'MAG_ROW_NO_MATCH', 'Riga non trova prodotto', {
+        if (runId && noMatchSamples.length <= 10) {
+          LOG.warn(runId, 'MAG_ROW_NO_MATCH', 'Riga non trova prodotto', {
             fornitoreID,
             codiceArticolo,
+            codiceNorm: codiceArticolo ? codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase() : '',
             descrizione: descrizione.substring(0, 30),
             um,
-            matchReason
+            matchReason,
+            keyTentata: codiceArticolo ? `${fornitoreID}||${codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase()}` : `${fornitoreID}||${descrizione.toUpperCase()}||${um.toUpperCase()}`
           });
         }
         return;
@@ -416,6 +432,15 @@ const MAGAZZINO_CORE = (() => {
       hasDataDoc,
       dateFilterActive: !!dateFilter
     });
+    
+    // Log sample righe non matchate per diagnostica
+    if (runId && noMatchSamples.length > 0) {
+      LOG.warn(runId, 'MAG_NO_MATCH_SAMPLES', 'Sample righe non matchate', {
+        totalNoMatch: skippedNoMatch,
+        sampleCount: noMatchSamples.length,
+        samples: noMatchSamples
+      });
+    }
     
     // Log diretto nel foglio Log
     try {
