@@ -936,7 +936,8 @@ const MAGAZZINO_CORE = (() => {
       if (runId) {
         LOG.info(runId, 'MAG_ING_DATE_FILTER', 'Filtro date impostato (Ingredienti)', {
           inputStart: `${startParts[0]}/${startParts[1]}`,
-          inputEnd: `${endParts[0]}/${endParts[1]}`,\n          startDate: startDate.toISOString(),
+          inputEnd: `${endParts[0]}/${endParts[1]}`,
+          startDate: startDate.toISOString(),
           endDate: endDate.toISOString(),
           startDateLocal: startDate.toLocaleDateString('it-IT'),
           endDateLocal: endDate.toLocaleDateString('it-IT')
