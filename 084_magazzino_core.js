@@ -111,16 +111,17 @@ const MAGAZZINO_CORE = (() => {
       const descrizione = String(row[idx.Descrizione] || '').trim();
       const um = String(row[idx.UM] || '').trim();
       const ingrediente = String(row[idx.Ingrediente] || '').trim();
-      const nonInUso = row[idx.NonInUso];
+      const nonInUsoRaw = row[idx.NonInUso];
+      const isNonInUso = nonInUsoRaw === true || String(nonInUsoRaw).trim().toLowerCase() === 'vero';
 
       // Raccolta sample per debug (primi 5)
       if (nonInUsoSamples.length < 5) {
         nonInUsoSamples.push({
           codiceInterno,
           descrizione: descrizione.substring(0, 20),
-          nonInUso,
-          type: typeof nonInUso,
-          stringValue: String(nonInUso)
+          nonInUso: nonInUsoRaw,
+          type: typeof nonInUsoRaw,
+          isNonInUso // Aggiunto per vedere il risultato del check
         });
       }
 
@@ -145,12 +146,13 @@ const MAGAZZINO_CORE = (() => {
         }
         return;
       }
-      if (nonInUso === true || String(nonInUso).toLowerCase() === 'true' || String(nonInUso).toLowerCase() === 'vero') {
+      if (isNonInUso) {
         skippedNonInUso++;
         if (runId) {
           LOG.debug(runId, 'MAG_SKIP_DISABLED', 'Prodotto disabilitato (NonInUso)', {
             codiceInterno,
-            descrizione: descrizione.substring(0, 30)
+            descrizione: descrizione.substring(0, 30),
+            nonInUsoValue: nonInUsoRaw
           });
         }
         return;
@@ -171,7 +173,7 @@ const MAGAZZINO_CORE = (() => {
         denominazioneFornitore: String(row[idx.DenominazioneFornitore] || '').trim(),
         categoriaProdotto: String(row[idx.CategoriaProdotto] || '').trim(),
         ingrediente,
-        nonInUso,
+        nonInUso: isNonInUso, // Usa il valore booleano calcolato
         umBaseNorm,
         pzPerCt: Number(row[idx.PZxCT]) || 0,
         kgPerPz: Number(row[idx.KGxPZ]) || 0
