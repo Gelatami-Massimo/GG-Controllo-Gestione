@@ -314,15 +314,16 @@ const MAGAZZINO_CORE = (() => {
         }
         
         // Verifica validità e confronta
-        if (isNaN(docDate.getTime()) || docDate < dateFilter.startDate || docDate > dateFilter.endDate) {
+        const docDateValid = !isNaN(docDate.getTime());
+        if (!docDateValid || docDate < dateFilter.startDate || docDate > dateFilter.endDate) {
           skippedByDateFilter++;
           if (runId && skippedByDateFilter <= 3) { // Log solo i primi 3 per evitare spam
             LOG.debug(runId, 'MAG_ROW_SKIP_DATE', 'Riga fuori intervallo date', {
               dataDoc: dataDoc instanceof Date ? dataDoc.toISOString() : String(dataDoc),
-              docDateParsed: docDate.toISOString(),
+              docDateParsed: docDateValid ? docDate.toISOString() : 'INVALID_DATE',
               filterStart: dateFilter.startDate.toISOString().substring(0, 10),
               filterEnd: dateFilter.endDate.toISOString().substring(0, 10),
-              isValid: !isNaN(docDate.getTime()),
+              isValid: docDateValid,
               isBefore: docDate < dateFilter.startDate,
               isAfter: docDate > dateFilter.endDate
             });
