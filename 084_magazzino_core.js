@@ -184,6 +184,18 @@ const MAGAZZINO_CORE = (() => {
         const codiceNorm = codiceFornitore.replace(/[^A-Z0-9]/gi, '').toUpperCase();
         const key = `${fornitoreID}||${codiceNorm}`;
         prodottiByKey.set(key, prodData);
+        
+        // Log primi 10 prodotti con chiave generata per debug
+        if (prodottiByKey.size <= 10 && runId) {
+          LOG.debug(runId, 'MAG_PRODUCT_KEY', 'Chiave prodotto generata', {
+            codiceInterno,
+            fornitoreID,
+            codiceFornitoreRaw: codiceFornitore,
+            codiceNormalizzato: codiceNorm,
+            keyGenerata: key,
+            descrizione: descrizione.substring(0, 40)
+          });
+        }
       }
 
       // Mappa alternativa per prodotti senza codice (KeyNoCode)
@@ -194,15 +206,19 @@ const MAGAZZINO_CORE = (() => {
     });
 
     // Raccogli sample delle chiavi prodotti per debug
-    const keysSample = Array.from(prodottiByKey.keys()).slice(0, 5);
+    const keysSample = Array.from(prodottiByKey.keys()).slice(0, 10);
 
-    // Logging già gestito da LOG in MAG_SKIP_* scopes
-    if (false) {
-      try {
-        const timestamp = new Date();
-      } catch (e) {
-        console.error('Errore log filtri prodotti:', e);
-      }
+    // Logging dettagliato per diagnostica matching
+    if (runId) {
+      LOG.info(runId, 'MAG_PRODUCT_STATS', 'Statistiche caricamento prodotti', {
+        totalProcessed: processed,
+        skippedNoFornitore,
+        skippedNoIngrediente,
+        skippedNonInUso,
+        prodottiByKeySize: prodottiByKey.size,
+        prodottiByKeyNoCodeSize: prodottiByKeyNoCode.size,
+        sampleKeys: keysSample
+      });
     }
 
     return { prodottiByKey, prodottiByKeyNoCode };
@@ -300,6 +316,17 @@ const MAGAZZINO_CORE = (() => {
         const keyRiga = `${fornitoreID}||${codiceNorm}`;
         prod = prodottiByKey.get(keyRiga);
         matchReason = prod ? 'matched_by_code' : 'no_match_code';
+        
+        // Log dettagliato per le prime 10 righe che non matchano
+        if (!prod && noMatchSamples.length < 10 && runId) {
+          LOG.debug(runId, 'MAG_NO_MATCH_DETAIL', 'Dettaglio mancato match per codice', {
+            fornitoreID,
+            codiceArticoloRaw: codiceArticolo,
+            codiceNormalizzato: codiceNorm,
+            keyTentata: keyRiga,
+            descrizione: descrizione.substring(0, 40)
+          });
+        }
       } else if (descrizione && um) {
         // Cerca con KeyNoCode (FornitoreID + Descrizione + UM)
         const keyNoCode = `${fornitoreID}||${descrizione.toUpperCase()}||${um.toUpperCase()}`;
