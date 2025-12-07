@@ -102,15 +102,6 @@ function onOpen() {
     .addItem('⏸️ Disattiva Import Auto', App.ui.fn.runDeleteTriggers)
   );
 
-  // --- Stress Test LockService ---
-  menu.addSubMenu(ui.createMenu('🧪 Stress Test')
-    .addItem('🔒 Con Lock (Sequential)', 'stressTestWithLock')
-    .addItem('⚠️ Senza Lock (Vulnerable)', 'stressTestWithoutLock')
-    .addItem('🌐 Concorrenza Reale (Multi-Tab)', 'stressTestConcurrentReal')
-    .addSeparator()
-    .addItem('🗑️ Cleanup Test', 'cleanupStressTest')
-  );
-
   // --- Strumenti Avanzati (PERICOLOSI) ---
   menu.addSeparator();
   menu.addSubMenu(ui.createMenu('🛠️ Strumenti Avanzati')
