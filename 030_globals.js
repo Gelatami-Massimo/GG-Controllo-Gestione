@@ -386,18 +386,18 @@ const UTIL = (function () {
     const elNs = element.getNamespace();
     let found = null;
     if (elNs) {
-      try { found = element.getChild(name, elNs); } catch (_) {}
+      try { found = element.getChild(name, elNs); } catch (_) { /* Ignora errore intenzionalmente: fallback namespace */ }
       if (found) return found;
     }
     if (extraNs) {
-      try { found = element.getChild(name, extraNs); } catch (_) {}
+      try { found = element.getChild(name, extraNs); } catch (_) { /* Ignora errore intenzionalmente: fallback namespace */ }
       if (found) return found;
     }
-    try { found = element.getChild(name, FPA_NS); } catch (_) {}
+    try { found = element.getChild(name, FPA_NS); } catch (_) { /* Ignora errore intenzionalmente: fallback namespace */ }
     if (found) return found;
-    try { found = element.getChild(name, FPA_NS10); } catch (_) {}
+    try { found = element.getChild(name, FPA_NS10); } catch (_) { /* Ignora errore intenzionalmente: fallback namespace */ }
     if (found) return found;
-    try { found = element.getChild(name); } catch (_) {}
+    try { found = element.getChild(name); } catch (_) { /* Ignora errore intenzionalmente: fallback senza namespace */ }
     return found;
   }
   
@@ -425,7 +425,7 @@ const UTIL = (function () {
     try {
       if (typeof node.getText === 'function') return String(node.getText()).trim();
       if (typeof node.getValue === 'function') return String(node.getValue()).trim();
-    } catch (e) {}
+    } catch (e) { /* Ignora errore intenzionalmente: fallback conversione stringa */ }
     return String(node).trim();
   }
 
@@ -737,6 +737,15 @@ const XMLSAFE = (function () {
   function parseDriveXml(fileId) {
     try {
       const file = DriveApp.getFileById(fileId);
+      
+      // ⚠️ SAFETY GUARD: Verifica dimensione file prima del parsing
+      const fileSize = file.getSize();
+      if (fileSize > 5242880) { // 5MB in bytes
+        const errorMsg = `ERRORE CRITICO: Il file XML "${file.getName()}" supera i 5MB (${(fileSize / 1048576).toFixed(2)}MB). Impossibile parsare in Apps Script per limiti di memoria.`;
+        LOG.error('XMLSAFE', errorMsg, { fileId, fileSizeBytes: fileSize, fileSizeMB: (fileSize / 1048576).toFixed(2) });
+        throw new Error(errorMsg);
+      }
+      
       const blob = file.getBlob();
       let content;
 
@@ -793,11 +802,25 @@ if (typeof globalThis !== 'undefined') {
 
 
 const STATE = (function () {
-  const P = PropertiesService.getScriptProperties();
-  const CACHE = CacheService.getScriptCache();
+  let _props = null;
+  let _cache = null;
   const CACHE_EXPIRATION_SEC = 21600;
   const MAX_PROP_SIZE = 500000;
   const MAX_CACHE_CHUNK_SIZE = 95000;
+
+  const getProps = () => {
+    if (!_props) {
+      _props = PropertiesService.getScriptProperties();
+    }
+    return _props;
+  };
+
+  const getCache = () => {
+    if (!_cache) {
+      _cache = CacheService.getScriptCache();
+    }
+    return _cache;
+  };
 
   const standard = {
     /**
@@ -806,7 +829,7 @@ const STATE = (function () {
      * @param {string} key - Chiave da leggere
      * @returns {string|null} Valore memorizzato o null se non esiste
      */
-    get: (key) => P.getProperty(key),
+    get: (key) => getProps().getProperty(key),
     
     /**
      * Scrive un valore in PropertiesService.
@@ -823,7 +846,7 @@ const STATE = (function () {
            LOG.error('STATE_SET', `Valore troppo grande (> ${MAX_PROP_SIZE / 1024}KB) per PropertiesService, chiave: ${key}.`, { size: strValue.length });
            throw new Error(`Valore troppo grande per ScriptProperties. Chiave: ${key}.`);
        }
-       P.setProperty(key, strValue);
+      getProps().setProperty(key, strValue);
     },
     /**
      * Elimina una chiave da PropertiesService.
@@ -831,7 +854,7 @@ const STATE = (function () {
      * @param {string} key - Chiave da eliminare
      * @returns {void}
      */
-    clear: (key) => P.deleteProperty(key),
+    clear: (key) => getProps().deleteProperty(key),
     /**
      * Legge e parsa JSON da PropertiesService.
      * 
@@ -840,13 +863,13 @@ const STATE = (function () {
      * @returns {*} Oggetto parsato o fallback
      */
     getJSON(key, fallback = null) {
-      const raw = P.getProperty(key);
+      const raw = getProps().getProperty(key);
       if (!raw) return fallback;
       try {
           return JSON.parse(raw);
       } catch (e) {
           LOG.warn('STATE_PARSE', `Impossibile parsare JSON da PropertiesService per chiave: ${key}. Valore grezzo: '${raw.substring(0,100)}...'`, { error: e.message });
-          try { P.deleteProperty(key); } catch(_) {}
+          try { getProps().deleteProperty(key); } catch(_) {}
           return fallback;
       }
     },
@@ -865,7 +888,7 @@ const STATE = (function () {
           LOG.error('STATE_SET_JSON', `JSON troppo grande (> ${MAX_PROP_SIZE / 1024}KB) per PropertiesService, chiave: ${key}. Usare STATE.cache?`, { size: serialized.length });
           throw new Error(`Dati JSON troppo grandi per ScriptProperties (${(serialized.length / 1024).toFixed(1)} KB). Chiave: ${key}.`);
         }
-        P.setProperty(key, serialized);
+        getProps().setProperty(key, serialized);
       } catch (e) {
         LOG.error('STATE_SET_JSON', `Impossibile serializzare/salvare JSON in PropertiesService per chiave: ${key}`, { error: e.message });
         throw e;
@@ -888,7 +911,7 @@ const STATE = (function () {
       if (dataArray.length === 0) {
         const oldKeys = [];
         for (let i = 0; i < 50; i++) oldKeys.push(`${baseKey}_${i}`);
-        try { CACHE.removeAll(oldKeys); } catch (_) {}
+        try { getCache().removeAll(oldKeys); } catch (_) {}
         LOG.debug('STATE_CACHE_LARGE', `Array vuoto per ${baseKey}. Puliti chunk precedenti.`);
         return 0;
       }
@@ -934,11 +957,11 @@ const STATE = (function () {
       for (let i = chunkIndex; i < chunkIndex + 50; i++) {
         keysToClean.push(`${baseKey}_${i}`);
       }
-      try { if (keysToClean.length > 0) CACHE.removeAll(keysToClean); } catch (_) {}
+      try { if (keysToClean.length > 0) getCache().removeAll(keysToClean); } catch (_) {}
 
       try {
         if (Object.keys(chunksToSave).length > 0) {
-          CACHE.putAll(chunksToSave, CACHE_EXPIRATION_SEC);
+          getCache().putAll(chunksToSave, CACHE_EXPIRATION_SEC);
         }
         LOG.debug('STATE_CACHE_LARGE', `Salvati ${dataArray.length} elementi in ${chunkIndex} chunk(s) per ${baseKey}.`);
         return chunkIndex;
@@ -962,7 +985,7 @@ const STATE = (function () {
       let combinedArray = [];
 
       try {
-        const chunksData = CACHE.getAll(keys);
+        const chunksData = getCache().getAll(keys);
 
         for (let i = 0; i < numChunks; i++) {
           const chunkKey = keys[i];
@@ -1005,7 +1028,7 @@ const STATE = (function () {
       const chunksToTry = (Number.isInteger(numChunks) && numChunks > 0) ? numChunks + 50 : 100;
       const keys = Array.from({ length: chunksToTry }, (_, i) => `${baseKey}_${i}`);
       try {
-          CACHE.removeAll(keys);
+          getCache().removeAll(keys);
           LOG.debug('STATE_CACHE_CLEAR', `Tentativo rimozione ${keys.length} chunk(s) per ${baseKey}.`);
       }
       catch (e) { LOG.warn('STATE_CACHE_CLEAR', `Errore (potrebbe essere normale) durante pulizia cache per ${baseKey}.`, { error: e.message }); }

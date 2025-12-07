@@ -228,7 +228,7 @@ const SHEETS = (function () {
         Object.keys(_cache).forEach(k => delete _cache[k]);
         LOG?.debug('SHEETS_CACHE', 'Cache intestazioni completamente invalidata.');
       }
-    } catch (_) {}
+    } catch (_) { /* Ignora errore intenzionalmente (cleanup cache best-effort) */ }
   }
 
   function _findHeaderRow(sh, sheetName, forceRefresh = false) {
@@ -439,7 +439,7 @@ const SHEETS = (function () {
         if (sh.getFrozenRows() < headerRow) {
           try {
             sh.setFrozenRows(headerRow);
-          } catch (_) {}
+          } catch (_) { /* Ignora errore intenzionalmente (freeze best-effort) */ }
           if (headerRow === 1 && sh.getFrozenRows() !== 1) {
             sh.setFrozenRows(1);
           }

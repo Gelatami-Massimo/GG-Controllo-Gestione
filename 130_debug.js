@@ -22,7 +22,7 @@ const DEBUG = (function () {
    */
   function sanityCheck() {
     Logger.log('DEBUG.sanityCheck: Funzione avviata.');
-    console.log('DEBUG.sanityCheck: Funzione avviata.');
+    LOG.debug('DEBUG', 'sanityCheck: Funzione avviata.');
     LOG.info('SANITY_CHECK', 'Avvio controllo integrità...');
     let errors = 0;
     let warnings = 0;

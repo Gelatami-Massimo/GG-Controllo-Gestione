@@ -405,7 +405,7 @@ const IMPORT_HEADERS = (function () {
             const lastUpdated = file.getLastUpdated();
             const ymObj = UTIL.date.extractYearMonth(lastUpdated);
             yearMonth = `${ymObj.anno}-${String(ymObj.mese).padStart(2, '0')}`;
-          } catch (_) {}
+          } catch (_) { /* Ignora errore intenzionalmente: fallback anno/mese non critico */ }
         }
         if (!folderPath) {
           try {
@@ -414,7 +414,7 @@ const IMPORT_HEADERS = (function () {
               cartellInputId,
               inputFolderName
             );
-          } catch (_) {}
+          } catch (_) { /* Ignora errore intenzionalmente: percorso cartella opzionale */ }
         }
       }
 
