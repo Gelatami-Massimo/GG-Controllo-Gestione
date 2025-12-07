@@ -91,6 +91,9 @@ function onOpen() {
     .addItem('🧹 Elimina Duplicati Esatti (Prodotti)', 'runCleanupExactDuplicates')
     .addItem('🗑️ Pulisci Righe Vuote', 'runDeleteEmptyRowsFromRigheSheet')
     .addSeparator()
+    .addItem('💾 Esegui Backup adesso', 'runBackupNow')
+    .addItem('⏰ Installa trigger Backup', 'runInstallBackupTrigger')
+    .addSeparator()
   );
 
   // --- Configurazione ---
@@ -303,6 +306,40 @@ function runCreateTrigger() { _runSafely(() => createTimeBasedTrigger(), 'Trigge
 
 /** Disattiva tutti i trigger di import automatico. @returns {void} */
 function runDeleteTriggers() { _runSafely(() => deleteTriggers(), 'Trigger', 'Rimozione import automatico...', 'Operazione trigger completata.'); }
+
+/** Esegue immediatamente un backup rotativo ERP. @returns {void} */
+function runBackupNow() {
+  _runSafely(
+    () => {
+      const result = (typeof BACKUP_SERVICE !== 'undefined' && BACKUP_SERVICE.runNightlyBackup)
+        ? BACKUP_SERVICE.runNightlyBackup()
+        : runNightlyBackup();
+      const ui = SpreadsheetApp.getUi();
+      const backupName = result?.backupName || 'Backup completato';
+      const trashed = result?.trashedCount ?? 0;
+      ui.alert('💾 Backup ERP', `${backupName}\nFile vecchi eliminati: ${trashed}`, ui.ButtonSet.OK);
+    },
+    'Backup',
+    'Esecuzione backup in corso...',
+    'Backup completato!'
+  );
+}
+
+/** Installa il trigger notturno per il backup ERP. @returns {void} */
+function runInstallBackupTrigger() {
+  _runSafely(
+    () => {
+      if (typeof BACKUP_SERVICE !== 'undefined' && BACKUP_SERVICE.setupBackupTrigger) {
+        BACKUP_SERVICE.setupBackupTrigger();
+      } else {
+        setupBackupTrigger();
+      }
+    },
+    'Backup',
+    'Installazione trigger backup...',
+    'Trigger backup notturno installato!'
+  );
+}
 
 /** Genera il foglio Conto Economico (P&L). @returns {void} */
 function runCreatePnlSheet() { _runSafely(() => createPnlSheet(), 'PNL', 'Creazione/Aggiornamento P&L...', 'P&L aggiornato.'); }

@@ -9,6 +9,27 @@
 
 const SHARED_UTILS = (function () {
 
+  /**
+   * Esegue una callback protetta da ScriptLock con rilascio garantito.
+   * @param {Function} callback - Funzione da eseguire sotto lock.
+   * @param {number} [timeoutMs=30000] - Timeout acquisizione lock.
+   * @returns {*} Risultato della callback.
+   * @throws {Error} Se il lock non è ottenibile entro il timeout.
+   */
+  function withScriptLock(callback, timeoutMs = 30000) {
+    const lock = LockService.getScriptLock();
+    try {
+      const success = lock.tryLock(timeoutMs);
+      if (!success) {
+        throw new Error('Impossibile ottenere il Lock: sistema occupato.');
+      }
+      return callback();
+    } finally {
+      // Rilascio lock garantito
+      lock.releaseLock();
+    }
+  }
+
   // ============================================================
   // PATTERN #1: SHEET ACCESS CONSOLIDATION (~50 occorrenze)
   // ============================================================

@@ -87,13 +87,12 @@ const INVENTORY = (() => {
 
         sheet.getRange(2, 1, dataRows.length, headers.length).setValues(dataRows);
         
-        // Formattazione zebrata
-        for (let i = 0; i < dataRows.length; i++) {
-          const rowNum = i + 2;
-          const rowRange = sheet.getRange(rowNum, 1, 1, headers.length);
-          if (i % 2 === 0) {
-            rowRange.setBackground('#E8F5E9'); // Verde chiaro
-          }
+        // Formattazione zebrata (batch optimization - single I/O call)
+        const backgrounds = dataRows.map((_, i) =>
+          Array(headers.length).fill(i % 2 === 0 ? '#E8F5E9' : '#FFFFFF') // Verde chiaro per pari
+        );
+        if (backgrounds.length > 0) {
+          sheet.getRange(2, 1, backgrounds.length, headers.length).setBackgrounds(backgrounds);
         }
 
         LOG.info(runId, 'INVENTORY_ROWS', 'Righe inserite', { count: dataRows.length });

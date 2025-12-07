@@ -276,7 +276,8 @@ const MAGAZZINO_CORE = (() => {
 
     data.forEach(row => {
       const anno = row[idx.Anno];
-      const dataDoc = hasDataDoc ? row[idx.DataDoc] : null;
+      const dataDocRaw = hasDataDoc ? row[idx.DataDoc] : null;
+      const docDate = _parseDocDate(dataDocRaw);
       const fornitoreID = String(row[idx.FornitoreID] || '').trim();
       const codiceArticolo = String(row[idx['Codice Articolo Fornitore']] || '').trim();
       const descrizione = String(row[idx.Descrizione] || '').trim();
@@ -302,24 +303,13 @@ const MAGAZZINO_CORE = (() => {
       }
 
       // Filtro per data (se specificato e se la colonna esiste)
-      if (dateFilter && hasDataDoc && dataDoc) {
-        let docDate;
-        
-        // Gestisci sia Date objects che stringhe
-        if (dataDoc instanceof Date) {
-          docDate = dataDoc;
-        } else {
-          // Prova a parsare la data (Google Sheets dovrebbe già fornire un Date object)
-          docDate = new Date(dataDoc);
-        }
-        
-        // Verifica validità e confronta
-        const docDateValid = !isNaN(docDate.getTime());
+      if (dateFilter && hasDataDoc && dataDocRaw) {
+        const docDateValid = docDate instanceof Date && !isNaN(docDate.getTime());
         if (!docDateValid || docDate < dateFilter.startDate || docDate > dateFilter.endDate) {
           skippedByDateFilter++;
           if (runId && skippedByDateFilter <= 3) { // Log solo i primi 3 per evitare spam
             LOG.debug(runId, 'MAG_ROW_SKIP_DATE', 'Riga fuori intervallo date', {
-              dataDoc: dataDoc instanceof Date ? dataDoc.toISOString() : String(dataDoc),
+              dataDoc: dataDocRaw instanceof Date ? dataDocRaw.toISOString() : String(dataDocRaw),
               docDateParsed: docDateValid ? docDate.toISOString() : 'INVALID_DATE',
               filterStart: dateFilter.startDate.toISOString().substring(0, 10),
               filterEnd: dateFilter.endDate.toISOString().substring(0, 10),
@@ -413,15 +403,15 @@ const MAGAZZINO_CORE = (() => {
 
       // Estrai mese dalla data documento (se disponibile)
       let mese = null;
-      if (dataDoc instanceof Date && !isNaN(dataDoc.getTime())) {
-        mese = dataDoc.getMonth() + 1; // 1-12
+      if (docDate instanceof Date && !isNaN(docDate.getTime())) {
+        mese = docDate.getMonth() + 1; // 1-12
       }
 
       // Aggiungi rowBase
       rowsBase.push({
         anno,
         mese,  // ⭐ Aggiunto per KPI_ANALYSIS
-        dataDoc,  // ⭐ Aggiunto per riferimento completo
+        dataDoc: docDate || dataDocRaw,  // ⭐ Aggiunto per riferimento completo
         sede: sedeRaw,
         codiceInterno: prod.codiceInterno,
         codiceFornitore: prod.codiceFornitore,
@@ -469,6 +459,30 @@ const MAGAZZINO_CORE = (() => {
     }
 
     return rowsBase;
+  }
+
+  // Parsing robusto della data documento (supporta Date e stringhe italiane)
+  function _parseDocDate(value) {
+    if (!value) return null;
+    if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+
+      const parsed = UTIL?.date?.parseItalianDate(trimmed) || UTIL?.date?.parseXmlDate(trimmed);
+      if (parsed) return parsed;
+
+      const fallback = new Date(trimmed);
+      return isNaN(fallback.getTime()) ? null : fallback;
+    }
+
+    if (typeof value === 'number') {
+      const asDate = new Date(value);
+      return isNaN(asDate.getTime()) ? null : asDate;
+    }
+
+    return null;
   }
 
   /**
@@ -751,8 +765,12 @@ const MAGAZZINO_CORE = (() => {
         aggregati[key].totEuro += rb.euro;
       });
 
-      // 3. Scrivi foglio Magazzino
-      _writeMagazzinoSheet(aggregati);
+      // 3. Scrivi foglio Magazzino con lock per evitare concorrenza
+      if (typeof SHARED_UTILS !== 'undefined' && SHARED_UTILS.withScriptLock) {
+        SHARED_UTILS.withScriptLock(() => _writeMagazzinoSheet(aggregati));
+      } else {
+        _writeMagazzinoSheet(aggregati);
+      }
 
       const numRows = Object.keys(aggregati).length;
       SHARED_UTILS.showToast(`Report Magazzino completato: ${numRows} righe.`, 'Completato', 5);
@@ -984,8 +1002,12 @@ const MAGAZZINO_CORE = (() => {
         aggregati[key].totEuro += rb.euro;
       });
 
-      // 3. Scrivi foglio Magazzino_Ingredienti
-      _writeMagazzinoIngredientiSheet(aggregati);
+      // 3. Scrivi foglio Magazzino_Ingredienti con lock per evitare concorrenza
+      if (typeof SHARED_UTILS !== 'undefined' && SHARED_UTILS.withScriptLock) {
+        SHARED_UTILS.withScriptLock(() => _writeMagazzinoIngredientiSheet(aggregati));
+      } else {
+        _writeMagazzinoIngredientiSheet(aggregati);
+      }
 
       const numRows = Object.keys(aggregati).length;
       SHARED_UTILS.showToast(`Report Magazzino Ingredienti completato: ${numRows} righe.`, 'Completato', 5);

@@ -185,6 +185,7 @@ const PRODUCTS = (() => {
           codiceFornitore: String(r[idx.CodiceFornitore] ?? '').trim().replace(/^'+/, ''),
           descrizione: String(r[idx.Descrizione] ?? '').trim(),
           um: String(r[idx.UM] ?? '').trim(),
+          categoriaProdotto: idx.CategoriaProdotto !== undefined ? String(r[idx.CategoriaProdotto] ?? '').trim() : '',
           codiceInterno: idx.CodiceInterno !== undefined ? String(r[idx.CodiceInterno] ?? '').trim() : '',
           codiceInternoBreve: idx.CodiceInternoBreve !== undefined ? String(r[idx.CodiceInternoBreve] ?? '').trim() : '',
           chiaveDescrizione: idx.ChiaveDescrizione !== undefined ? String(r[idx.ChiaveDescrizione] ?? '').trim() : ''
@@ -317,6 +318,7 @@ const PRODUCTS = (() => {
     
     // Caso 1: Trovato per codice reale. Questo è il match più forte.
     if (foundByCode) {
+      _ensureCategoria(foundByCode, categoriaFornitore, cache, runId);
       // Se il prodotto trovato non ha ancora una chiave descrizione, la aggiungiamo.
       if (!foundByCode.chiaveDescrizione && chiaveDesc) {
         _updateProductField(foundByCode.codiceInternoBreve, 'ChiaveDescrizione', chiaveDesc);
@@ -347,6 +349,7 @@ const PRODUCTS = (() => {
 
     // Caso 2: Non trovato per codice reale, ma trovato per descrizione.
     if (foundByDesc) {
+      _ensureCategoria(foundByDesc, categoriaFornitore, cache, runId);
       // Ora abbiamo un codice reale per un prodotto che prima era identificato solo dalla descrizione (o da un TEMP_ code).
       // Questo è il momento dell'"auto-correzione".
       const isTempCode = foundByDesc.codiceFornitore && foundByDesc.codiceFornitore.startsWith('TEMP_');
@@ -476,6 +479,7 @@ const PRODUCTS = (() => {
       codiceFornitore: codFornitore,
       descrizione,
       um,
+      categoriaProdotto: categoriaFornitore || '',
       codiceInterno,
       codiceInternoBreve,
       chiaveDescrizione
@@ -525,6 +529,33 @@ const PRODUCTS = (() => {
       }
     } catch (e) {
       LOG.error('PRODUCTS_UPDATE', 'Errore aggiornamento campo.', { error: e.message });
+    }
+  }
+
+  // Se arriva una categoria valorizzata, aggiorna il prodotto solo se era vuota
+  function _ensureCategoria(prodotto, categoriaFornitore, cache, runId) {
+    const categoria = String(categoriaFornitore ?? '').trim();
+    if (!prodotto || !categoria) return;
+
+    const current = String(prodotto.categoriaProdotto ?? '').trim();
+    if (current) return; // già presente, non sovrascrivere
+
+    // Aggiorna lo sheet e la cache
+    _updateProductField(prodotto.codiceInternoBreve, 'CategoriaProdotto', categoria);
+    prodotto.categoriaProdotto = categoria;
+
+    // Aggiorna cache byFornitoreCodice se disponibile
+    if (prodotto.fornitoreId && prodotto.codiceFornitore && cache?.byFornitoreCodice) {
+      const key = `${prodotto.fornitoreId}|${normalizeCodiceFornitore(prodotto.codiceFornitore)}`;
+      const cached = cache.byFornitoreCodice.get(key);
+      if (cached) cached.categoriaProdotto = categoria;
+    }
+
+    if (runId) {
+      LOG.info(runId, 'PRODUCTS_CATEGORY_BACKFILL', 'Categoria prodotto aggiornata (era vuota)', {
+        codiceInternoBreve: prodotto.codiceInternoBreve,
+        categoria
+      });
     }
   }
 
@@ -663,7 +694,7 @@ const PRODUCTS = (() => {
         UM: um || 'PZ', // Default PZ se mancante
         FornitoreID: fornitoreId,
         DenominazioneFornitore: denominazioneFornitore,
-        CategoriaProdotto: categoriaFornitore || '',
+         CategoriaProdotto: categoriaFornitore || '', // Changed from categoriaFornitore to categoriaProdotto
         Note: '',
         CreatoIl: now,
         UltimoAgg: now,
@@ -687,16 +718,17 @@ const PRODUCTS = (() => {
       rowsToWrite.push(newRow);
 
       // Prepara oggetto per ritorno
-      const prodotto = {
-        fornitoreId,
-        codiceFornitore: codiceValore,
-        descrizione,
-        um: um || 'PZ',
-        codiceInterno,
-        codiceInternoBreve,
-        chiaveDescrizione,
-        lookupKey // Mantieni lookup key per aggiornamento Hash Map
-      };
+        const prodotto = {
+          fornitoreId,
+          codiceFornitore: codiceValore,
+          descrizione,
+          um: um || 'PZ',
+          categoriaProdotto: categoriaFornitore || '',
+          codiceInterno,
+          codiceInternoBreve,
+          chiaveDescrizione,
+          lookupKey // Mantieni lookup key per aggiornamento Hash Map
+        };
 
       createdProducts.push(prodotto);
 

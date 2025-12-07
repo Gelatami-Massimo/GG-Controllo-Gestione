@@ -27,130 +27,137 @@ const MANUAL_SALES = (() => {
     LOG.info(runId, 'MANUAL_SALES_CREATE', 'Creazione foglio vendite manuali', { year, month });
 
     try {
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
-      const sheetName = `Vendite_${year}_${month}`;
-      
-      // Elimina foglio esistente se presente
-      const existingSheet = ss.getSheetByName(sheetName);
-      if (existingSheet) {
-        ss.deleteSheet(existingSheet);
-        LOG.info(runId, 'MANUAL_SALES_DELETE_OLD', 'Foglio esistente eliminato', { sheetName });
-      }
+      const createSheet = () => {
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
+        const sheetName = `Vendite_${year}_${month}`;
 
-      // Crea nuovo foglio
-      const sheet = ss.insertSheet(sheetName);
-      
-      // ✅ STEP 1: Recupera e raggruppa prodotti ingredienti attivi
-      const groupedProducts = _getGroupedIngredientsForSales();
-      
-      LOG.info(runId, 'MANUAL_SALES_GROUPS', 'Prodotti raggruppati', {
-        totalGroups: groupedProducts.length
-      });
-
-      // ✅ STEP 2: Crea intestazioni
-      const headers = [
-        'Categoria',           // A
-        'Prodotto/Ingrediente', // B
-        'Fornitore',           // C
-        'UM',                  // D
-        'Quantità Venduta',    // E
-        'Note',                // F
-        'CodiciInterni'        // G (nascosta - JSON array)
-      ];
-
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      
-      // Formattazione header
-      const headerRange = sheet.getRange(1, 1, 1, headers.length);
-      headerRange.setBackground('#4A86E8');
-      headerRange.setFontColor('#FFFFFF');
-      headerRange.setFontWeight('bold');
-      headerRange.setHorizontalAlignment('center');
-
-      // ✅ STEP 3: Inserisci righe raggruppate
-      if (groupedProducts.length > 0) {
-        const dataRows = groupedProducts.map(group => [
-          group.categoria || '',
-          group.nomeVisualizzato,
-          group.fornitore,
-          group.um,
-          '', // Quantità (da compilare manualmente)
-          '', // Note
-          JSON.stringify(group.codiciInterni) // JSON nascosto
-        ]);
-
-        sheet.getRange(2, 1, dataRows.length, headers.length).setValues(dataRows);
-        
-        // Formattazione zebrata
-        for (let i = 0; i < dataRows.length; i++) {
-          const rowNum = i + 2;
-          const rowRange = sheet.getRange(rowNum, 1, 1, headers.length);
-          if (i % 2 === 0) {
-            rowRange.setBackground('#F3F3F3');
-          }
+        // Elimina foglio esistente se presente
+        const existingSheet = ss.getSheetByName(sheetName);
+        if (existingSheet) {
+          ss.deleteSheet(existingSheet);
+          LOG.info(runId, 'MANUAL_SALES_DELETE_OLD', 'Foglio esistente eliminato', { sheetName });
         }
 
-        LOG.info(runId, 'MANUAL_SALES_ROWS', 'Righe inserite', { count: dataRows.length });
+        // Crea nuovo foglio
+        const sheet = ss.insertSheet(sheetName);
+        
+        // ✅ STEP 1: Recupera e raggruppa prodotti ingredienti attivi
+        const groupedProducts = _getGroupedIngredientsForSales();
+        
+        LOG.info(runId, 'MANUAL_SALES_GROUPS', 'Prodotti raggruppati', {
+          totalGroups: groupedProducts.length
+        });
+
+        // ✅ STEP 2: Crea intestazioni
+        const headers = [
+          'Categoria',           // A
+          'Prodotto/Ingrediente', // B
+          'Fornitore',           // C
+          'UM',                  // D
+          'Quantità Venduta',    // E
+          'Note',                // F
+          'CodiciInterni'        // G (nascosta - JSON array)
+        ];
+
+        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+        
+        // Formattazione header
+        const headerRange = sheet.getRange(1, 1, 1, headers.length);
+        headerRange.setBackground('#4A86E8');
+        headerRange.setFontColor('#FFFFFF');
+        headerRange.setFontWeight('bold');
+        headerRange.setHorizontalAlignment('center');
+
+        // ✅ STEP 3: Inserisci righe raggruppate
+        if (groupedProducts.length > 0) {
+          const dataRows = groupedProducts.map(group => [
+            group.categoria || '',
+            group.nomeVisualizzato,
+            group.fornitore,
+            group.um,
+            '', // Quantità (da compilare manualmente)
+            '', // Note
+            JSON.stringify(group.codiciInterni) // JSON nascosto
+          ]);
+
+          sheet.getRange(2, 1, dataRows.length, headers.length).setValues(dataRows);
+          
+          // Formattazione zebrata (batch optimization - single I/O call)
+          const backgrounds = dataRows.map((_, i) =>
+            Array(headers.length).fill(i % 2 === 0 ? '#F3F3F3' : '#FFFFFF') // Grigio chiaro per pari
+          );
+          if (backgrounds.length > 0) {
+            sheet.getRange(2, 1, backgrounds.length, headers.length).setBackgrounds(backgrounds);
+          }
+
+          LOG.info(runId, 'MANUAL_SALES_ROWS', 'Righe inserite', { count: dataRows.length });
+        }
+
+        // ✅ STEP 4: Formattazione colonne
+        sheet.setColumnWidth(1, 120);  // Categoria
+        sheet.setColumnWidth(2, 250);  // Prodotto/Ingrediente
+        sheet.setColumnWidth(3, 180);  // Fornitore
+        sheet.setColumnWidth(4, 60);   // UM
+        sheet.setColumnWidth(5, 120);  // Quantità
+        sheet.setColumnWidth(6, 200);  // Note
+        sheet.setColumnWidth(7, 100);  // CodiciInterni (nascosta)
+
+        // Nascondi colonna G (CodiciInterni JSON)
+        sheet.hideColumns(7);
+
+        // Proteggi colonne informative (solo Quantità e Note editabili)
+        const protection = sheet.protect();
+        protection.setDescription('Protezione vendite manuali');
+        
+        // Sblocca solo colonne E (Quantità) e F (Note)
+        const unprotectedRanges = [
+          sheet.getRange(2, 5, Math.max(1, groupedProducts.length), 1), // Colonna E
+          sheet.getRange(2, 6, Math.max(1, groupedProducts.length), 1)  // Colonna F
+        ];
+        protection.setUnprotectedRanges(unprotectedRanges);
+        
+        // Rimuovi tutti gli editor per rendere effettiva la protezione
+        protection.removeEditors(protection.getEditors());
+        if (protection.canDomainEdit()) {
+          protection.setDomainEdit(false);
+        }
+
+        // ✅ STEP 5: Freeze header
+        sheet.setFrozenRows(1);
+
+        // ✅ STEP 6: Aggiungi istruzioni in nota
+        const instructionCell = sheet.getRange(1, 1);
+        instructionCell.setNote(
+          `FOGLIO VENDITE MANUALI - ${month}/${year}\n\n` +
+          `ISTRUZIONI:\n` +
+          `1. Compila la colonna "Quantità Venduta" con i valori venduti\n` +
+          `2. Usa le Note per dettagli aggiuntivi\n` +
+          `3. I prodotti sono raggruppati per ingrediente\n` +
+          `4. La colonna "CodiciInterni" (nascosta) contiene i riferimenti ai prodotti\n\n` +
+          `Generato il: ${new Date().toLocaleString('it-IT')}`
+        );
+
+        // Attiva il foglio
+        sheet.activate();
+
+        LOG.info(runId, 'MANUAL_SALES_COMPLETE', 'Foglio vendite creato con successo', {
+          sheetName,
+          productsCount: groupedProducts.length
+        });
+
+        SpreadsheetApp.getUi().alert(
+          '✅ Foglio Vendite Creato',
+          `Foglio "${sheetName}" creato con ${groupedProducts.length} prodotti raggruppati.\n\n` +
+          `Compila la colonna "Quantità Venduta" per registrare le vendite.`,
+          SpreadsheetApp.getUi().ButtonSet.OK
+        );
+      };
+
+      if (typeof SHARED_UTILS !== 'undefined' && SHARED_UTILS.withScriptLock) {
+        return SHARED_UTILS.withScriptLock(createSheet);
       }
 
-      // ✅ STEP 4: Formattazione colonne
-      sheet.setColumnWidth(1, 120);  // Categoria
-      sheet.setColumnWidth(2, 250);  // Prodotto/Ingrediente
-      sheet.setColumnWidth(3, 180);  // Fornitore
-      sheet.setColumnWidth(4, 60);   // UM
-      sheet.setColumnWidth(5, 120);  // Quantità
-      sheet.setColumnWidth(6, 200);  // Note
-      sheet.setColumnWidth(7, 100);  // CodiciInterni (nascosta)
-
-      // Nascondi colonna G (CodiciInterni JSON)
-      sheet.hideColumns(7);
-
-      // Proteggi colonne informative (solo Quantità e Note editabili)
-      const protection = sheet.protect();
-      protection.setDescription('Protezione vendite manuali');
-      
-      // Sblocca solo colonne E (Quantità) e F (Note)
-      const unprotectedRanges = [
-        sheet.getRange(2, 5, Math.max(1, groupedProducts.length), 1), // Colonna E
-        sheet.getRange(2, 6, Math.max(1, groupedProducts.length), 1)  // Colonna F
-      ];
-      protection.setUnprotectedRanges(unprotectedRanges);
-      
-      // Rimuovi tutti gli editor per rendere effettiva la protezione
-      protection.removeEditors(protection.getEditors());
-      if (protection.canDomainEdit()) {
-        protection.setDomainEdit(false);
-      }
-
-      // ✅ STEP 5: Freeze header
-      sheet.setFrozenRows(1);
-
-      // ✅ STEP 6: Aggiungi istruzioni in nota
-      const instructionCell = sheet.getRange(1, 1);
-      instructionCell.setNote(
-        `FOGLIO VENDITE MANUALI - ${month}/${year}\n\n` +
-        `ISTRUZIONI:\n` +
-        `1. Compila la colonna "Quantità Venduta" con i valori venduti\n` +
-        `2. Usa le Note per dettagli aggiuntivi\n` +
-        `3. I prodotti sono raggruppati per ingrediente\n` +
-        `4. La colonna "CodiciInterni" (nascosta) contiene i riferimenti ai prodotti\n\n` +
-        `Generato il: ${new Date().toLocaleString('it-IT')}`
-      );
-
-      // Attiva il foglio
-      sheet.activate();
-
-      LOG.info(runId, 'MANUAL_SALES_COMPLETE', 'Foglio vendite creato con successo', {
-        sheetName,
-        productsCount: groupedProducts.length
-      });
-
-      SpreadsheetApp.getUi().alert(
-        '✅ Foglio Vendite Creato',
-        `Foglio "${sheetName}" creato con ${groupedProducts.length} prodotti raggruppati.\n\n` +
-        `Compila la colonna "Quantità Venduta" per registrare le vendite.`,
-        SpreadsheetApp.getUi().ButtonSet.OK
-      );
+      return createSheet();
 
     } catch (e) {
       LOG.error(runId, 'MANUAL_SALES_ERROR', 'Errore creazione foglio vendite', {
