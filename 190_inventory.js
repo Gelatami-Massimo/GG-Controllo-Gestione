@@ -9,13 +9,15 @@ const INVENTORY = (() => {
 
   /**
    * Crea dizionario prezzi da Magazzino_Ingredienti per lookup veloce.
-   * Chiave: "anno|ingrediente" → Valore: Tot €
+   * Chiave: "anno|ingrediente" → Valore: { totEuro, kgTot, pzTot, umBase }
+   * Serve per calcolare prezzo unitario (€/KG o €/PZ)
    * 
-   * @returns {Object} Dizionario { "2025|KINDER CEREALI": 1500.50, ... }
+   * @returns {Object} Dizionario { "2025|KINDER CEREALI": { totEuro: 1500, kgTot: 10, pzTot: 50, umBase: "KG" }, ... }
    * @private
    */
   function _getPrezziIngredienti() {
-    const prezzi = {};
+    const prezziByYear = {}; // key: "AZIENDA|ANNO|INGREDIENTE_UPPER" => dati
+    const latestByIngred = {}; // key: "AZIENDA|INGREDIENTE_UPPER" => { year, entry }
     
     try {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -35,24 +37,42 @@ const INVENTORY = (() => {
       // Leggi tutto il foglio
       const data = sh.getRange(2, 1, lastRow - 1, 9).getValues();
       
-      // Mappa: [Anno(0), Ingrediente(1), Categoria(2), UMBase(3), PZ(4), KG(5), TotEuro(6), ...
+      // Mappa: [Anno(0), Azienda(1), Ingrediente(2), Categoria(3), UMBase(4), PZ(5), KG(6), TotEuro(7), ...
       data.forEach(row => {
         const anno = row[0];
-        const ingrediente = String(row[1] || '').trim();
-        const totEuro = row[6] || 0;
+        const aziendaRaw = String(row[1] || '').trim();
+        const aziendaKey = aziendaRaw ? aziendaRaw.toUpperCase() : 'ALL';
+        const ingredienteRaw = String(row[2] || '').trim();
+        const ingredienteKey = ingredienteRaw.toUpperCase();
+        const umBase = String(row[4] || 'KG').trim().toUpperCase();
+        const pzTot = Number(row[5]) || 0;
+        const kgTot = Number(row[6]) || 0;
+        const totEuro = Number(row[7]) || 0;
         
-        if (anno && ingrediente) {
-          const key = `${anno}|${ingrediente}`;
-          prezzi[key] = Number(totEuro) || 0;
+        if (anno && ingredienteKey) {
+          const key = `${aziendaKey}|${anno}|${ingredienteKey}`;
+          const entry = {
+            totEuro: totEuro,
+            kgTot: kgTot,
+            pzTot: pzTot,
+            umBase: umBase
+          };
+          prezziByYear[key] = entry;
+
+          const latestKey = `${aziendaKey}|${ingredienteKey}`;
+          // Aggiorna latest per ingrediente/azienda (scegli anno più recente disponibile)
+          if (!latestByIngred[latestKey] || Number(anno) > latestByIngred[latestKey].year) {
+            latestByIngred[latestKey] = { year: Number(anno), entry };
+          }
         }
       });
 
-      LOG.info('INVENTORY', 'Prezzi ingredienti caricati', { count: Object.keys(prezzi).length });
-      return prezzi;
+      LOG.info('INVENTORY', 'Prezzi ingredienti caricati', { count: Object.keys(prezziByYear).length });
+      return { byYear: prezziByYear, latest: latestByIngred };
 
     } catch (e) {
       LOG.warn('INVENTORY', 'Errore caricamento prezzi ingredienti', { error: e.message });
-      return prezzi;
+      return { byYear: prezziByYear, latest: latestByIngred };
     }
   }
 
@@ -413,6 +433,19 @@ const INVENTORY = (() => {
       const sheetName = 'INVENTARIO_ATTIVO';
       const sheet = ss.getSheetByName(sheetName);
 
+      // Prompt azienda (Gemma/Zaffiro/ALL)
+      const ui = SpreadsheetApp.getUi();
+      const aziendaResp = ui.prompt(
+        'Azienda per import inventario',
+        'Inserisci GEMMA o ZAFFIRO, oppure lascia vuoto per ALL:',
+        ui.ButtonSet.OK_CANCEL
+      );
+      if (aziendaResp.getSelectedButton() !== ui.Button.OK) {
+        ui.alert('Operazione annullata.');
+        return;
+      }
+      const aziendaKey = (aziendaResp.getResponseText() || '').trim().toUpperCase() || 'ALL';
+
       if (!sheet) {
         throw new Error(`Foglio "${sheetName}" non trovato. Creare prima il foglio inventario.`);
       }
@@ -508,17 +541,49 @@ const INVENTORY = (() => {
           
           // ⭐ Recupera prezzo da Magazzino_Ingredienti
           const annoCorrente = new Date().getFullYear();
-          const prezzoKey = `${annoCorrente}|${nomeGruppo}`; // Key: anno|ingrediente
-          const prezzo = prezzoDizionario[prezzoKey] || 0; // Default 0 se non trovato
+          const ingredienteKey = String(nomeGruppo || '').trim().toUpperCase();
+
+          const keysToTry = [
+            `${aziendaKey}|${annoCorrente}|${ingredienteKey}`,
+            `ALL|${annoCorrente}|${ingredienteKey}`
+          ];
+
+          let prezziData = null;
+          for (const k of keysToTry) {
+            if (prezzoDizionario.byYear[k]) {
+              prezziData = prezzoDizionario.byYear[k];
+              break;
+            }
+          }
+
+          if (!prezziData) {
+            // fallback ultimo anno per azienda specifica o ALL
+            const latestAzi = prezzoDizionario.latest[`${aziendaKey}|${ingredienteKey}`];
+            const latestAll = prezzoDizionario.latest[`ALL|${ingredienteKey}`];
+            prezziData = (latestAzi?.entry) || (latestAll?.entry) || { totEuro: 0, kgTot: 0, pzTot: 0, umBase: 'KG' };
+          }
+          
+          // Calcola prezzo unitario (€/KG o €/PZ)
+          let prezzoUnitario = 0;
+          if (umBase.toUpperCase() === 'KG' && prezziData.kgTot > 0) {
+            prezzoUnitario = prezziData.totEuro / prezziData.kgTot; // €/KG
+          } else if (umBase.toUpperCase() === 'PZ' && prezziData.pzTot > 0) {
+            prezzoUnitario = prezziData.totEuro / prezziData.pzTot; // €/PZ
+          }
+          
+          // Calcola valore totale (prezzo unitario × quantità conteggiata)
+          const valoreTotale = prezzoUnitario * quantitaNum;
           
           imported.push({
             dataInventario,
+            azienda: aziendaKey,
             nomeIngrediente: nomeGruppo,  // Nome ingrediente/gruppo
             descrizione: '', // Verrà arricchito se necessario
             categoria,
             quantita: quantitaNum, // Quantità totale del gruppo
             umBase,
-            prezzo: prezzo, // ⭐ Prezzo da Magazzino_Ingredienti
+            prezzoUnitario: prezzoUnitario, // ⭐ €/KG o €/PZ
+            valoreTotale: valoreTotale,     // ⭐ Prezzo unitario × Quantità
             codiciInterni: codiciInterni, // Array di tutti i codici (salva come JSON)
             note: note || '',
             operatore: Session.getEffectiveUser().getEmail() || 'Sistema'
@@ -548,24 +613,26 @@ const INVENTORY = (() => {
         // ⭐ 1 riga per ingrediente, non per codice
         const rowsToWrite = imported.map(item => [
           item.dataInventario,
+          item.azienda,
           item.nomeIngrediente,           // Nome ingrediente/gruppo
           item.descrizione,
           item.categoria,
           item.quantita,                  // Quantità totale del gruppo
           item.umBase,
-          item.prezzo,                    // ⭐ Prezzo da Magazzino_Ingredienti
+          item.prezzoUnitario,            // ⭐ €/KG o €/PZ
+          item.valoreTotale,              // ⭐ Prezzo unitario × Quantità
           JSON.stringify(item.codiciInterni), // Salva array codici come JSON
           item.note,
           item.operatore
         ]);
 
-        dbSheet.getRange(startRow, 1, rowsToWrite.length, 10).setValues(rowsToWrite);
+        dbSheet.getRange(startRow, 1, rowsToWrite.length, 12).setValues(rowsToWrite);
         
-        // ⭐ Forza formato NUMERO sulla colonna E (QuantitaConteggio) nel database
+        // ⭐ Forza formato NUMERO sulla colonna F (QuantitaConteggio) nel database
         if (rowsToWrite.length > 0) {
-          dbSheet.getRange(startRow, 5, rowsToWrite.length, 1).setNumberFormat('0.00');
-          // Forza formato CURRENCY sulla colonna G (Prezzo)
-          dbSheet.getRange(startRow, 7, rowsToWrite.length, 1).setNumberFormat('€ #,##0.00');
+          dbSheet.getRange(startRow, 6, rowsToWrite.length, 1).setNumberFormat('0.00');
+          // Forza formato CURRENCY sulla colonna H (PrezzoUnitario) e I (ValoreTotale)
+          dbSheet.getRange(startRow, 8, rowsToWrite.length, 2).setNumberFormat('€ #,##0.00');
         }
         
         LOG.info(runId, 'INVENTORY_DB_WRITE', 'Dati scritti su Inventari_DB', {

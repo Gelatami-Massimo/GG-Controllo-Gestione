@@ -203,8 +203,18 @@ const SHEETS = (function () {
     'Righe_Duplicate': ['FileID', 'NumeroDoc', 'NumeroLinea', 'CodiceValore', 'Descrizione', 'RowIndex'],
     // --- Database Inventari Fisici ---
     'Inventari_DB': [
-      'DataInventario', 'CodiceInternoBreve', 'Descrizione', 'CategoriaProdotto',
-      'QuantitaConteggio', 'UMBase', 'GruppoInventario', 'Note', 'Operatore'
+      'DataInventario',
+      'Azienda',
+      'NomeIngrediente',
+      'Descrizione',
+      'CategoriaProdotto',
+      'QuantitaConteggio',
+      'UMBase',
+      'PrezzoUnitario',
+      'ValoreTotale',
+      'CodiciInterni',
+      'Note',
+      'Operatore'
     ]
   };
 

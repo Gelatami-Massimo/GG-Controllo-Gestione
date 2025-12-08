@@ -59,6 +59,7 @@ function onOpen() {
     .addSeparator()
     .addItem('📦 Magazzino Prodotti', 'buildMagazzinoByYear')
     .addItem('🧪 Magazzino Ingredienti', 'buildMagazzinoIngredientiByYear')
+    .addItem('📅 Magazzino Ingredienti Mensile', 'runBuildMagazzinoIngredientiMensile')
     .addSeparator()
     .addItem('📉 KPI Consumi (Acquisti/Scontrini)', 'runKpiConsumptionReport')
     .addSeparator()
@@ -731,6 +732,14 @@ function runResetAndReimportAll() {
     LOG?.error('RESET', `Errore durante l'avvio del reset: ${e.message}`, { stack: e.stack });
     SpreadsheetApp.getUi().alert(`Impossibile avviare il processo di reset: ${e.message}`);
   }
+}
+
+/**
+ * Wrapper per buildMagazzinoIngredientiMensile
+ * Chiamato dal menu GELATAMI > Report > Magazzino Ingredienti Mensile
+ */
+function runBuildMagazzinoIngredientiMensile() {
+  MAGAZZINO_CORE.buildMagazzinoIngredientiMensile();
 }
 
 // =============================================================

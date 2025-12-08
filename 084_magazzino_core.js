@@ -1150,10 +1150,269 @@ const MAGAZZINO_CORE = (() => {
     }
   }
 
+  /**
+   * Genera report Magazzino Ingredienti MENSILE
+   * Breakdown KG/PZ per ingrediente per ogni mese dell'anno
+   * @public
+   */
+  function buildMagazzinoIngredientiMensile() {
+    const runId = LOG.generateRunId();
+    LOG.info(runId, 'MAG_ING_MENSILE_START', 'Inizio report Magazzino Ingredienti Mensile');
+
+    try {
+      const ui = SpreadsheetApp.getUi();
+
+      // Selezione Anno
+      const annoResponse = ui.prompt(
+        'Report Mensile Ingredienti',
+        'Inserisci ANNO (es: 2025):',
+        ui.ButtonSet.OK_CANCEL
+      );
+      if (annoResponse.getSelectedButton() !== ui.Button.OK) {
+        ui.alert('Operazione annullata.');
+        return;
+      }
+      const anno = parseInt(annoResponse.getResponseText().trim(), 10);
+      if (isNaN(anno) || anno < 2000 || anno > 2100) {
+        ui.alert('Anno non valido.');
+        return;
+      }
+
+      // Selezione Azienda
+      const aziendaResponse = ui.prompt(
+        'Report Mensile Ingredienti',
+        'Inserisci azienda (Gemma / Zaffiro) oppure lascia vuoto per tutte:',
+        ui.ButtonSet.OK_CANCEL
+      );
+      if (aziendaResponse.getSelectedButton() !== ui.Button.OK) {
+        ui.alert('Operazione annullata.');
+        return;
+      }
+      const aziendaFilterRaw = aziendaResponse.getResponseText().trim();
+      const aziendaFilter = aziendaFilterRaw ? aziendaFilterRaw.toUpperCase() : 'ALL';
+
+      LOG.info(runId, 'MAG_ING_MENSILE_PARAMS', 'Parametri report', {
+        anno,
+        aziendaFilter
+      });
+
+      SHARED_UTILS.showToast(
+        `Creazione Report Mensile Ingredienti (${anno}, ${aziendaFilter === 'ALL' ? 'Tutte' : aziendaFilter})...`,
+        'Magazzino Mensile',
+        10
+      );
+
+      // Aggrega per mese
+      const aggregatiPerMese = {};
+
+      // Per ogni mese dell'anno, ottieni righe base e aggrega
+      for (let mese = 1; mese <= 12; mese++) {
+        const startDate = new Date(anno, mese - 1, 1);
+        const endDate = new Date(anno, mese, 1);
+        endDate.setMilliseconds(endDate.getMilliseconds() - 1);
+
+        const dateFilter = { startDate, endDate };
+        const rowsBase = buildMagazzinoBaseRows_(dateFilter, true, runId);
+
+        LOG.info(runId, 'MAG_ING_MENSILE_ROWS', `Righe mese ${mese}`, {
+          mese,
+          rowCount: rowsBase.length
+        });
+
+        if (!aggregatiPerMese[mese]) {
+          aggregatiPerMese[mese] = {};
+        }
+
+        // Aggrega per ingrediente
+        rowsBase.forEach(rb => {
+          const sedeKey = (rb.sede || '').trim().toUpperCase() || 'ALL';
+          if (aziendaFilter !== 'ALL' && sedeKey !== aziendaFilter) {
+            return;
+          }
+
+          const keyIng = [rb.ingrediente, rb.categoriaProdotto, rb.umBase].join('||');
+
+          if (!aggregatiPerMese[mese][keyIng]) {
+            aggregatiPerMese[mese][keyIng] = {
+              ingrediente: rb.ingrediente,
+              categoria: rb.categoriaProdotto,
+              umBase: rb.umBase,
+              pzTot: 0,
+              kgTot: 0,
+              totEuro: 0
+            };
+          }
+
+          aggregatiPerMese[mese][keyIng].pzTot += rb.pzBase;
+          aggregatiPerMese[mese][keyIng].kgTot += rb.kgBase;
+          aggregatiPerMese[mese][keyIng].totEuro += rb.euro;
+        });
+      }
+
+      // Raccogli tutti gli ingredienti unici
+      const ingredientiSet = new Set();
+      for (const mese in aggregatiPerMese) {
+        for (const key in aggregatiPerMese[mese]) {
+          ingredientiSet.add(key);
+        }
+      }
+      const ingredientiList = Array.from(ingredientiSet).sort();
+
+      // Scrivi foglio Magazzino_Ingredienti_Mensile
+      if (typeof SHARED_UTILS !== 'undefined' && SHARED_UTILS.withScriptLock) {
+        SHARED_UTILS.withScriptLock(() => 
+          _writeMagazzinoIngredientiMensileSheet(anno, aziendaFilter, aggregatiPerMese, ingredientiList, runId)
+        );
+      } else {
+        _writeMagazzinoIngredientiMensileSheet(anno, aziendaFilter, aggregatiPerMese, ingredientiList, runId);
+      }
+
+      SHARED_UTILS.showToast(`Report Mensile Ingredienti completato.`, 'Completato', 5);
+      LOG?.info('MAG_CORE', `Report Mensile Ingredienti completato.`);
+
+    } catch (e) {
+      SHARED_UTILS.showToast('Errore durante la generazione del report Mensile Ingredienti.', 'Errore', 10);
+      LOG?.error('MAG_CORE', 'Errore in buildMagazzinoIngredientiMensile.', {
+        error: e.message,
+        stack: e.stack
+      });
+    }
+  }
+
+  /**
+   * Scrive il foglio Magazzino_Ingredienti_Mensile
+   * @private
+   */
+  function _writeMagazzinoIngredientiMensileSheet(anno, aziendaFilter, aggregatiPerMese, ingredientiList, runId) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sh = ss.getSheetByName('Magazzino_Ingredienti_Mensile');
+    
+    if (!sh) {
+      sh = ss.insertSheet('Magazzino_Ingredienti_Mensile');
+      LOG?.info('MAG_CORE', 'Foglio Magazzino_Ingredienti_Mensile creato.');
+    } else {
+      if (sh.getLastRow() > 1) {
+        sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).clear();
+      }
+    }
+
+    const fixedHeaders = ['Ingrediente', 'Categoria', 'UMBase'];
+    const mesiNomi = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 
+                      'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+    const meseHeaders = [];
+    for (let i = 0; i < 12; i++) {
+      meseHeaders.push(`${mesiNomi[i]} - Qta`);
+      meseHeaders.push(`${mesiNomi[i]} - Qta/Scontrino`);
+      meseHeaders.push(`${mesiNomi[i]} - €`);
+    }
+
+    const allHeaders = [...fixedHeaders, ...meseHeaders];
+
+    sh.getRange(1, 1, 1, allHeaders.length).setValues([allHeaders]);
+    sh.getRange(1, 1, 1, allHeaders.length).setFontWeight('bold');
+
+    const rows = [];
+    ingredientiList.forEach(keyIng => {
+      const [ingrediente, categoria, umBase] = keyIng.split('||');
+      const row = [ingrediente, categoria, umBase];
+
+      for (let mese = 1; mese <= 12; mese++) {
+        const aggData = aggregatiPerMese[mese] ? aggregatiPerMese[mese][keyIng] : null;
+
+        if (aggData) {
+          const qta = umBase === 'KG' ? aggData.kgTot : aggData.pzTot;
+          row.push(qta);
+
+          const numeroScontrini = _getNumeroScontriniMese(anno, mese, aziendaFilter, runId);
+          const qtaPerScontrino = numeroScontrini > 0 ? (qta / numeroScontrini) : '';
+          row.push(qtaPerScontrino);
+
+          row.push(aggData.totEuro);
+        } else {
+          row.push('');
+          row.push('');
+          row.push('');
+        }
+      }
+
+      rows.push(row);
+    });
+
+    if (rows.length > 0) {
+      sh.getRange(2, 1, rows.length, allHeaders.length).setValues(rows);
+
+      for (let mese = 0; mese < 12; mese++) {
+        const colQta = 4 + mese * 3;
+        const colQtaScontrino = 5 + mese * 3;
+        const colEuro = 6 + mese * 3;
+
+        sh.getRange(2, colQta, rows.length, 1).setNumberFormat('#,##0.####');
+        sh.getRange(2, colQtaScontrino, rows.length, 1).setNumberFormat('#,##0.####');
+        sh.getRange(2, colEuro, rows.length, 1).setNumberFormat('€ #,##0.00;[Red]-€ #,##0.00;€ 0.00');
+      }
+    }
+
+    sh.setFrozenRows(1);
+    ss.setActiveSheet(sh);
+  }
+
+  /**
+   * Recupera il numero di scontrini per un mese specifico e azienda
+   * @private
+   */
+  function _getNumeroScontriniMese(anno, mese, aziendaFilter, runId = '') {
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const sh = ss.getSheetByName('Dati Mensili');
+      if (!sh) {
+        return 0;
+      }
+
+      const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+      const idx = {};
+      headers.forEach((h, i) => { idx[String(h).trim()] = i; });
+
+      const colAnno = idx['Anno'];
+      const colMese = idx['Mese'];
+      const colSede = idx['Sede'];
+      const colScontrini = idx['N. Scontrini'] ?? idx['N.Scontrini'] ?? idx['N. Doc'] ?? idx['N.Doc'];
+
+      if ([colAnno, colMese, colScontrini].some(c => c === undefined)) {
+        return 0;
+      }
+
+      const data = sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues();
+      let total = 0;
+
+      data.forEach(row => {
+        const rowAnno = Number(row[colAnno]);
+        const rowMese = Number(row[colMese]);
+        if (rowAnno !== anno || rowMese !== mese) return;
+
+        const sedeVal = colSede !== undefined ? String(row[colSede] || '').trim().toUpperCase() : '';
+        if (aziendaFilter !== 'ALL' && sedeVal && sedeVal !== aziendaFilter) return;
+
+        const nScontrini = Number(row[colScontrini]) || 0;
+        total += nScontrini;
+      });
+
+      return total;
+    } catch (e) {
+      LOG?.warn(runId || 'MAG_CORE', 'Errore in _getNumeroScontriniMese', {
+        error: e.message,
+        anno,
+        mese,
+        azienda: aziendaFilter
+      });
+      return 0;
+    }
+  }
+
   // API pubblica
   return {
     buildMagazzinoByYear,
     buildMagazzinoIngredientiByYear,
+    buildMagazzinoIngredientiMensile,
     updatePrezziMediMagazzino,
     buildMagazzinoBaseRows_  // ⭐ Esposta per KPI_ANALYSIS
   };
