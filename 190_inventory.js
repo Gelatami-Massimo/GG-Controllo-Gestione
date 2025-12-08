@@ -8,6 +8,55 @@
 const INVENTORY = (() => {
 
   /**
+   * Crea dizionario prezzi da Magazzino_Ingredienti per lookup veloce.
+   * Chiave: "anno|ingrediente" → Valore: Tot €
+   * 
+   * @returns {Object} Dizionario { "2025|KINDER CEREALI": 1500.50, ... }
+   * @private
+   */
+  function _getPrezziIngredienti() {
+    const prezzi = {};
+    
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const sh = ss.getSheetByName('Magazzino_Ingredienti');
+      
+      if (!sh) {
+        LOG.warn('INVENTORY', 'Foglio Magazzino_Ingredienti non trovato, prezzi non disponibili');
+        return prezzi;
+      }
+
+      const lastRow = sh.getLastRow();
+      if (lastRow <= 1) {
+        LOG.warn('INVENTORY', 'Foglio Magazzino_Ingredienti vuoto');
+        return prezzi;
+      }
+
+      // Leggi tutto il foglio
+      const data = sh.getRange(2, 1, lastRow - 1, 9).getValues();
+      
+      // Mappa: [Anno(0), Ingrediente(1), Categoria(2), UMBase(3), PZ(4), KG(5), TotEuro(6), ...
+      data.forEach(row => {
+        const anno = row[0];
+        const ingrediente = String(row[1] || '').trim();
+        const totEuro = row[6] || 0;
+        
+        if (anno && ingrediente) {
+          const key = `${anno}|${ingrediente}`;
+          prezzi[key] = Number(totEuro) || 0;
+        }
+      });
+
+      LOG.info('INVENTORY', 'Prezzi ingredienti caricati', { count: Object.keys(prezzi).length });
+      return prezzi;
+
+    } catch (e) {
+      LOG.warn('INVENTORY', 'Errore caricamento prezzi ingredienti', { error: e.message });
+      return prezzi;
+    }
+  }
+
+  /**
    * Crea il foglio per il conteggio inventario fisico.
    * 
    * LOGICA RAGGRUPPAMENTO SMART INGREDIENTE:
@@ -107,6 +156,11 @@ const INVENTORY = (() => {
       sheet.setColumnWidth(6, 200);  // Note
       sheet.setColumnWidth(7, 100);  // CodiciInterni (nascosta)
 
+      // ⭐ Forza formato TESTO sulla colonna E (Quantità) per evitare che "-" diventi formula
+      if (groupedProducts.length > 0) {
+        sheet.getRange(2, 5, groupedProducts.length, 1).setNumberFormat('@'); // @ = formato testo
+      }
+
       // Nascondi colonna G (CodiciInterni JSON)
       sheet.hideColumns(7);
 
@@ -130,19 +184,22 @@ const INVENTORY = (() => {
       // ✅ STEP 5: Freeze header
       sheet.setFrozenRows(1);
 
-      // ✅ STEP 6: Aggiungi istruzioni in nota
+      // Aggiungi istruzioni in nota
       const instructionCell = sheet.getRange(1, 1);
       instructionCell.setNote(
         `FOGLIO INVENTARIO FISICO\n\n` +
         `ISTRUZIONI:\n` +
         `1. Compila la colonna "Quantità Conteggio" con i valori reali conteggiati\n` +
-        `2. Usa la colonna "UM" come riferimento per il conteggio:\n` +
+        `2. Per prodotti esauriti, scrivi "-" (trattino) al posto di 0\n` +
+        `3. Usa la colonna "UM" come riferimento per il conteggio:\n` +
         `   - PZ = conta singoli pezzi (non cartoni)\n` +
         `   - KG = pesa in chilogrammi\n` +
-        `3. I prodotti sono raggruppati per ingrediente comune\n` +
-        `4. La colonna "CodiciInterni" (nascosta) contiene i riferimenti ai prodotti\n\n` +
-        `💡 ESEMPIO: Se vedi "KINDER CEREALI | UM: PZ", conta i singoli pezzi totali,\n` +
-        `    non i cartoni o confezioni multiple.\n\n` +
+        `4. I prodotti sono raggruppati per ingrediente comune\n` +
+        `5. La colonna "CodiciInterni" (nascosta) contiene i riferimenti ai prodotti\n\n` +
+        `💡 ESEMPI:\n` +
+        `   • Se vedi "KINDER CEREALI | UM: PZ", conta i singoli pezzi totali\n` +
+        `   • Se è esaurito: scrivi "-"\n` +
+        `   • Se non lo hai controllato: lascia vuoto\n\n` +
         `Generato il: ${new Date().toLocaleString('it-IT')}`
       );
 
@@ -157,8 +214,11 @@ const INVENTORY = (() => {
       SpreadsheetApp.getUi().alert(
         '✅ Foglio Inventario Creato',
         `Foglio "${sheetName}" creato con ${groupedProducts.length} prodotti raggruppati.\n\n` +
-        `Compila la colonna "Quantità Conteggio" durante l'inventario fisico.\n\n` +
-        `💡 La colonna "UM" indica l'unità di misura da usare per il conteggio:\n` +
+        `Compila la colonna "Quantità Conteggio" durante l'inventario fisico:\n` +
+        `   • Numero: quantità conteggiata (es. 15, 25.5)\n` +
+        `   • "-" (trattino): prodotto esaurito\n` +
+        `   • Vuoto: non ancora controllato (verrà saltato)\n\n` +
+        `💡 La colonna "UM" indica l'unità di misura da usare:\n` +
         `   - PZ = conta i pezzi singoli\n` +
         `   - KG = pesa in chilogrammi`,
         SpreadsheetApp.getUi().ButtonSet.OK
@@ -339,6 +399,7 @@ const INVENTORY = (() => {
   /**
    * Importa i dati inventario dal foglio compilato.
    * Legge il foglio "INVENTARIO_ATTIVO", decodifica i JSON dei codici interni,
+   * recupera il prezzo dal foglio "Magazzino_Ingredienti",
    * e salva le giacenze fisiche nel foglio "Inventari_DB".
    * 
    * @returns {Object} Risultato importazione con statistiche
@@ -360,6 +421,9 @@ const INVENTORY = (() => {
       if (lastRow < 2) {
         throw new Error('Nessun dato da importare (foglio vuoto).');
       }
+
+      // ⭐ PRE-CARICA dizionario prezzi da Magazzino_Ingredienti per lookup veloce
+      const prezzoDizionario = _getPrezziIngredienti();
 
       // Leggi dati (salta header)
       const data = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
@@ -390,9 +454,23 @@ const INVENTORY = (() => {
           return; // Non contare come skipped, è solo padding vuoto
         }
 
-        // Salta righe senza quantità
-        if (!quantita || quantita === '' || Number(quantita) <= 0) {
-          skipped.push({ rowNum, reason: 'Quantità mancante o zero', nomeGruppo: String(nomeGruppo).substring(0, 40) });
+        // Salta righe senza quantità (cioè non ancora controllate)
+        // Nota: quantita = 0 è VALIDA (significa terminato)
+        // Nota: quantita = "-" è VALIDA (marcatore esaurito, converti a 0)
+        // quantita vuota/mancante è SKIPPA (non controllato)
+        
+        // Converti a numero per i controlli
+        // Se è "-", convertilo a 0 (marcatore esaurito)
+        let quantitaNum = 0;
+        if (quantita === '-' || String(quantita).trim() === '-') {
+          quantitaNum = 0; // Marcatore esaurito
+        } else {
+          quantitaNum = Number(quantita);
+        }
+        
+        // Se quantita è stringa vuota, null, undefined, o non è un numero valido → SALTA
+        if (quantita === '' || quantita === null || quantita === undefined || (isNaN(quantitaNum) && quantita !== '-')) {
+          skipped.push({ rowNum, reason: 'Quantità non compilata (inventario non controllato)', nomeGruppo: String(nomeGruppo).substring(0, 40) });
           return;
         }
 
@@ -425,19 +503,25 @@ const INVENTORY = (() => {
             return;
           }
 
-          // Registra giacenza per ogni codice del gruppo
-          codiciInterni.forEach(codice => {
-            imported.push({
-              dataInventario,
-              codiceInternoBreve: codice,
-              descrizione: '', // Verrà arricchito da Prodotti se necessario
-              categoria,
-              quantita: Number(quantita),
-              umBase,
-              gruppoInventario: nomeGruppo,
-              note: note || '',
-                            operatore: Session.getEffectiveUser().getEmail() || 'Sistema'
-            });
+          // ⭐ NUOVA LOGICA: Crea 1 RIGA PER INGREDIENTE (non per codice)
+          // Salva: ingrediente, quantità totale, tutti i codici, categoria, fornitore
+          
+          // ⭐ Recupera prezzo da Magazzino_Ingredienti
+          const annoCorrente = new Date().getFullYear();
+          const prezzoKey = `${annoCorrente}|${nomeGruppo}`; // Key: anno|ingrediente
+          const prezzo = prezzoDizionario[prezzoKey] || 0; // Default 0 se non trovato
+          
+          imported.push({
+            dataInventario,
+            nomeIngrediente: nomeGruppo,  // Nome ingrediente/gruppo
+            descrizione: '', // Verrà arricchito se necessario
+            categoria,
+            quantita: quantitaNum, // Quantità totale del gruppo
+            umBase,
+            prezzo: prezzo, // ⭐ Prezzo da Magazzino_Ingredienti
+            codiciInterni: codiciInterni, // Array di tutti i codici (salva come JSON)
+            note: note || '',
+            operatore: Session.getEffectiveUser().getEmail() || 'Sistema'
           });
 
         } catch (e) {
@@ -461,24 +545,41 @@ const INVENTORY = (() => {
         const startRow = Math.max(dbSheet.getLastRow() + 1, headerRow + 1);
 
         // Prepara righe per scrittura
+        // ⭐ 1 riga per ingrediente, non per codice
         const rowsToWrite = imported.map(item => [
           item.dataInventario,
-          item.codiceInternoBreve,
+          item.nomeIngrediente,           // Nome ingrediente/gruppo
           item.descrizione,
           item.categoria,
-          item.quantita,
+          item.quantita,                  // Quantità totale del gruppo
           item.umBase,
-          item.gruppoInventario,
+          item.prezzo,                    // ⭐ Prezzo da Magazzino_Ingredienti
+          JSON.stringify(item.codiciInterni), // Salva array codici come JSON
           item.note,
           item.operatore
         ]);
 
-        dbSheet.getRange(startRow, 1, rowsToWrite.length, 9).setValues(rowsToWrite);
+        dbSheet.getRange(startRow, 1, rowsToWrite.length, 10).setValues(rowsToWrite);
+        
+        // ⭐ Forza formato NUMERO sulla colonna E (QuantitaConteggio) nel database
+        if (rowsToWrite.length > 0) {
+          dbSheet.getRange(startRow, 5, rowsToWrite.length, 1).setNumberFormat('0.00');
+          // Forza formato CURRENCY sulla colonna G (Prezzo)
+          dbSheet.getRange(startRow, 7, rowsToWrite.length, 1).setNumberFormat('€ #,##0.00');
+        }
         
         LOG.info(runId, 'INVENTORY_DB_WRITE', 'Dati scritti su Inventari_DB', {
           rowsWritten: rowsToWrite.length,
           startRow
         });
+
+        // ⭐ ELIMINA il foglio INVENTARIO_ATTIVO dopo importazione riuscita
+        try {
+          ss.deleteSheet(sheet);
+          LOG.info(runId, 'INVENTORY_DELETE_TEMP', 'Foglio INVENTARIO_ATTIVO eliminato dopo importazione');
+        } catch (delErr) {
+          LOG.warn(runId, 'INVENTORY_DELETE_FAIL', 'Errore eliminazione foglio INVENTARIO_ATTIVO', { error: delErr.message });
+        }
       }
 
       const result = {
@@ -492,9 +593,9 @@ const INVENTORY = (() => {
       LOG.info(runId, 'INVENTORY_IMPORT_DONE', 'Importazione completata', result);
 
       // Mostra riepilogo all'utente con dettagli errori
-      let message = `Dati ${imported.length > 0 ? 'salvati nel foglio "Inventari_DB"' : 'NON salvati (nessun prodotto valido)'}:\n\n` +
+      let message = `Dati ${imported.length > 0 ? 'salvati nel foglio "Inventari_DB"' : 'NON salvati (nessun prodotto controllato)'}:\n\n` +
         `✓ Importati: ${imported.length} prodotti\n` +
-        `⊗ Saltati: ${skipped.length} (quantità zero o mancante)\n` +
+        `⊗ Saltati: ${skipped.length} (quantità non compilata - inventario non controllato)\n` +
         `✗ Errori: ${errors.length}\n\n`;
 
       if (imported.length > 0) {
