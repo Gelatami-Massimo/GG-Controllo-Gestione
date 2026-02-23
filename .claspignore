@@ -17,6 +17,10 @@ TESTING_GUIDE.md
 .git/
 .gitignore
 
+# Claude Code internal files
+.claude/**
+**/.claude/**
+
 # IDE
 .vscode/
 
