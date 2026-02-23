@@ -1,758 +1,392 @@
 // =============================================================
-// PROGETTO: GG GESTIONE GELATAMI V1
+// PROGETTO: GG-Controllo-Gestione
 // FILE: 010_main.js
-// RUOLO: Menu principale GELATAMI e sidebar UI.
-// NOTE: Entry point UI con onOpen(), wrapper funzioni pubbliche.
+// VERSIONE: 27 (Hardening Granitico)
+// DESCRIZIONE:
+//  - Entry point unico per menu, UI e trigger manuali
+//  - Usa App.ui.fn come "contratto" delle funzioni pubbliche
+//  - Tutte le chiamate passano da _runSafely (lock + log + UI)
 // =============================================================
 
 /**
- * Crea il menu principale "GELATAMI" nella UI del foglio.
- * Entry point principale per la UI, eseguito all'apertura del foglio.
- * Valida le dipendenze dei moduli e crea il menu con tutte le funzionalità disponibili.
- * 
- * @returns {void}
+ * onOpen: crea il menu all'apertura del file.
  */
-function onOpen() {
-  // --- VALIDAZIONE DIPENDENZE MODULI ---
-  if (typeof ModuleRegistry !== 'undefined') {
-    const allDepsOk = ModuleRegistry.validateAll();
-    if (!allDepsOk) {
-      LOG?.warn('MAIN', 'Alcuni moduli hanno dipendenze non soddisfatte');
+function onOpen(e) {
+  try {
+    _createMainMenu();
+  } catch (err) {
+    // Fallback minimale se LOG non è disponibile
+    if (typeof LOG !== 'undefined') {
+      LOG.error('ON_OPEN', err);
+    } else {
+      console && console.error && console.error('ON_OPEN ERROR', err);
     }
   }
-  // --- FINE VALIDAZIONE ---
-
-  // --- DIAGNOSTICA NAMESPACE GG ---
-  if (typeof GG !== 'undefined') {
-    LOG?.info('MAIN', `Namespace GG disponibile con ${GG.count()} moduli registrati`);
-  }
-  // --- FINE DIAGNOSTICA ---
-
-  // Protegge getUi() per contesti non interattivi (test, trigger)
-  let ui;
-  try {
-    ui = SpreadsheetApp.getUi();
-  } catch (e) {
-    LOG?.warn('MAIN', 'onOpen() chiamato in contesto non interattivo - menu UI non disponibile');
-    return; // Esci silenziosamente se getUi() non è disponibile
-  }
-
-  const menu = ui.createMenu('🧊 GELATAMI')
-    .addItem('🎛️ Pannello di Controllo', App.ui.fn.openSidebar)
-    .addSeparator();
-
-  // --- Importazione ---
-  menu.addSubMenu(ui.createMenu('📥 Import Fatture')
-    .addItem('▶️ Continua Import', App.ui.fn.runContinue)
-    .addSeparator()
-    .addItem('📋 Import Intestazioni', App.ui.fn.runImportHeaders)
-    .addItem('📦 Import Righe Prodotti', App.ui.fn.runImportRows)
-    .addSeparator()
-    .addItem('📄 Genera PDF', App.ui.fn.runCreatePdfs)
-  );
-
-  // --- Report e Analisi ---
-  menu.addSubMenu(ui.createMenu('📊 Report')
-    .addItem('📈 Dashboard Finanziaria', App.ui.fn.runCreateDashboard)
-    .addItem('💰 Conto Economico (P&L)', App.ui.fn.runCreatePnlSheet)
-    .addItem('📊 Confronto Sedi', 'runCreatePnlConfrontoGemmaZaffiro')
-    .addSeparator()
-    .addItem('📦 Magazzino Prodotti', 'buildMagazzinoByYear')
-    .addItem('🧪 Magazzino Ingredienti', 'buildMagazzinoIngredientiByYear')
-    .addItem('📅 Magazzino Ingredienti Mensile', 'runBuildMagazzinoIngredientiMensile')
-    .addSeparator()
-    .addItem('📉 KPI Consumi (Acquisti/Scontrini)', 'runKpiConsumptionReport')
-    .addSeparator()
-    .addItem('🔍 Audit Integrità Dati', App.ui.fn.runReconciliationReport)
-    .addItem('✅ Validazione Dati Completa', App.ui.fn.runDataValidation)
-  );
-
-  // --- Vendite Manuali ---
-  menu.addSubMenu(ui.createMenu('🛒 Vendite Manuali')
-    .addItem('📋 Crea Foglio Vendite', 'runCreateSalesEntrySheet')
-    .addItem('📥 Importa Vendite', 'runImportSalesFromSheet')
-  );
-
-  // --- Inventario Fisico ---
-  menu.addSubMenu(ui.createMenu('📦 Inventario Fisico')
-    .addItem('📋 Crea Scheda Conteggio', 'runCreateInventoryCountSheet')
-    .addItem('📥 Importa Conteggi', 'runImportInventoryCountData')
-  );
-
-  // --- Manutenzione ---
-  menu.addSubMenu(ui.createMenu('🔧 Manutenzione')
-    .addItem('✨ Manutenzione Completa', App.ui.fn.runCompleteMaintenance)
-    .addSeparator()
-    .addItem('👥 Aggiorna Fornitori', App.ui.fn.runSyncSuppliers)
-    .addItem('🏷️ Riallinea Categorie', App.ui.fn.runSyncCategoriesRetroactive)
-    .addItem('📦 Sincronizza Prodotti', 'runSyncProdotti')
-    .addSeparator()
-    .addItem('🔄 Duplicati Fatture', App.ui.fn.runMarkDuplicateInvoices)
-    .addItem('🗑️ Pulisci Cache', App.ui.fn.runClearCache)
-    .addItem('🧹 Elimina Duplicati Esatti (Prodotti)', 'runCleanupExactDuplicates')
-    .addItem('🗑️ Pulisci Righe Vuote', 'runDeleteEmptyRowsFromRigheSheet')
-    .addSeparator()
-    .addItem('💾 Esegui Backup adesso', 'runBackupNow')
-    .addItem('⏰ Installa trigger Backup', 'runInstallBackupTrigger')
-    .addSeparator()
-    .addItem('👋 Test - Ciao!', 'runTestHello')
-  );
-
-  // --- Configurazione ---
-  menu.addSubMenu(ui.createMenu('⚙️ Configurazione')
-    .addItem('🚀 Setup Iniziale', App.ui.fn.runInitialSetup)
-    .addItem('⚙️ Impostazioni', runConfigDialog)
-    .addSeparator()
-    .addItem('▶️ Attiva Import Auto', App.ui.fn.runCreateTrigger)
-    .addItem('⏸️ Disattiva Import Auto', App.ui.fn.runDeleteTriggers)
-  );
-
-  // --- Strumenti Avanzati (PERICOLOSI) ---
-  menu.addSeparator();
-  menu.addSubMenu(ui.createMenu('🛠️ Strumenti Avanzati')
-    .addItem('🔥 Reset e Re-importa Tutto', 'runResetAndReimportAll')
-  );
-
-  menu.addToUi();
 }
 
 /**
- * Installa il menu al primo deploy dell'add-on.
- * Trigger di installazione che configura l'ambiente iniziale.
- * 
- * @param {Object} e - Evento di installazione fornito da Google Apps Script
- * @returns {void}
+ * onInstall: richiama onOpen dopo installazione.
  */
 function onInstall(e) {
   onOpen(e);
 }
 
-/**
- * Apre la sidebar "Pannello di Controllo" nell'interfaccia utente.
- * Carica il template HTML Sidebar.html e lo visualizza come pannello laterale.
- * 
- * @returns {void}
- * @throws {Error} Se il file Sidebar.html non è presente nel progetto
- */
+// =============================================================
+// MENU
+// =============================================================
+
+function _createMainMenu() {
+  const ui = SpreadsheetApp.getUi();
+  const menu = ui.createMenu('GG - Controllo Gestione');
+
+  // Pannello & controllo
+  menu.addItem('Apri Pannello di Controllo', App.ui.fn.openSidebar);
+  menu.addItem('Continua ultimo processo', App.ui.fn.runContinue);
+  menu.addSeparator();
+
+  // Import
+  menu.addItem('1) Importa Testate (XML)', App.ui.fn.runImportHeaders);
+  menu.addItem('2) Importa Righe (XML)', App.ui.fn.runImportRows);
+  menu.addItem('3) Genera PDF Fatture', App.ui.fn.runCreatePdfs);
+  menu.addSeparator();
+
+  // Report & analisi
+  menu.addItem('Dashboard Controllo', App.ui.fn.runCreateDashboard);
+  menu.addItem('Conto Economico Riclassificato', App.ui.fn.runCreatePnlSheet);
+  menu.addItem('Magazzino Analitico', App.ui.fn.runCreateWarehouse);
+  menu.addItem('Report Riconciliazione', App.ui.fn.runReconciliationReport);
+  menu.addSeparator();
+
+  // Setup & diagnostica
+  menu.addItem('Setup iniziale', App.ui.fn.runInitialSetup);
+  menu.addItem('Verifica / Crea Struttura', App.ui.fn.runSheetCheckAndSetup);
+  menu.addItem('Sanity Check Sistema', App.ui.fn.runSanityCheck);
+  menu.addSeparator();
+
+  // Trigger
+  menu.addItem('Crea Trigger Automatico', App.ui.fn.runCreateTrigger);
+  menu.addItem('Elimina Trigger Automatici', App.ui.fn.runDeleteTriggers);
+  menu.addSeparator();
+
+  // Duplicati fatture
+  menu.addItem('Segna Duplicati Fatture', App.ui.fn.runMarkDuplicateInvoices);
+  menu.addItem('Pulisci Segnatura Duplicati', App.ui.fn.runClearDuplicateMarkings);
+  menu.addItem('Snapshot Duplicati', App.ui.fn.createDuplicateSnapshot);
+  menu.addSeparator();
+
+  // Utility / Sync
+  menu.addItem('Forza Formato Testo Codici', App.ui.fn.runForceTextFormatOnCodes);
+  menu.addItem('Sync Fornitori', App.ui.fn.runSyncSuppliers);
+  menu.addItem('Sync Categorie (Retroattivo)', App.ui.fn.runSyncCategoriesRetroactive);
+  menu.addItem('Svuota Cache / Stato', App.ui.fn.runClearCache);
+  menu.addSeparator();
+
+  // Status
+  menu.addItem('Mostra Stato Sistema', App.ui.fn.getSystemStatus);
+
+  menu.addToUi();
+}
+
+// =============================================================
+// WRAPPER PUBBLICI
+// Ogni funzione qui:
+//  - È referenziata in App.ui.fn
+//  - Usa _runSafely
+//  - Chiama il modulo logico dedicato
+// =============================================================
+
+// --- UI / Pannello ---
+
 function openSidebar() {
-  const ui = SpreadsheetApp.getUi();
-  try {
-    // Verifica esistenza file prima di caricarlo
-    let html;
-    try {
-      html = HtmlService.createHtmlOutputFromFile('Sidebar')
-        .setTitle('Pannello di Controllo')
-        .setWidth(300);
-    } catch (fileErr) {
-      // Se fallisce, prova con un messaggio di debug
-      LOG?.error('UI', 'File Sidebar.html non trovato', { error: fileErr.message });
-      throw new Error('File Sidebar.html non accessibile: ' + fileErr.message);
-    }
-    ui.showSidebar(html);
-  } catch (e) {
-    ui.alert(
-      'Errore',
-      'Impossibile aprire la Sidebar. Dettagli: ' + e.message,
-      ui.ButtonSet.OK
-    );
-    LOG?.error('UI', 'Apertura Sidebar fallita', { error: e.message, stack: e.stack });
-  }
-}
-
-// =============================================================
-// GESTORE GLOBALE SICURO (_runSafely)
-// =============================================================
-/**
- * Esegue una funzione in modo sicuro con Lock globale,
- * messaggi di stato e gestione errori centralizzata.
- * Acquisisce un lock per evitare esecuzioni concorrenti, mostra toast di progresso
- * e gestisce automaticamente gli errori con alert all'utente.
- *
- * @param {Function} fn - Funzione da eseguire
- * @param {string} scope - Etichetta logica per logging (es: 'Import', 'PDF')
- * @param {string} startMsg - Messaggio toast di avvio operazione
- * @param {string} successMsg - Messaggio toast di completamento con successo
- * @returns {void}
- */
-function _runSafely(fn, scope, startMsg, successMsg) {
-  const LOCK_TIMEOUT_MS = 30000; // 30s timeout per lock manuali
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const ui = SpreadsheetApp.getUi();
-
-  try {
-    ss.toast('Richiesta esecuzione, attendo processi in corso...', 'Attendere...', LOCK_TIMEOUT_MS / 1000);
-
-    if (!UTIL.acquireLock(LOCK_TIMEOUT_MS)) {
-      const busyMsg = 'Un altro processo è attualmente in esecuzione. Riprova tra qualche minuto.';
-      LOG?.warn(scope, `Tentativo di esecuzione fallito (Lock attivo): ${startMsg}`);
-      ui.alert('Sistema Occupato', busyMsg, ui.ButtonSet.OK);
-      return;
-    }
-
-    LOG?.info(scope, startMsg);
-    ss.toast(startMsg, 'In corso...', -1); // Toast infinito
-    fn(); // Esecuzione effettiva
-    LOG?.info(scope, successMsg);
-    ss.toast(successMsg, 'Fatto!', 5); // Toast per 5 secondi
-
-  } catch (e) {
-    const message = `Dettagli: ${e.message}\nFile: ${e.fileName || 'Sconosciuto'}\nRiga: ${e.lineNumber || 'Sconosciuta'}`;
-    LOG?.error(scope, `ERRORE: ${e.message}`, {
-      stack: e.stack,
-      file: e.fileName,
-      line: e.lineNumber
-    });
-    ui.alert(`Errore in [${scope}]`, message, ui.ButtonSet.OK);
-  } finally {
-    UTIL.releaseLock();
-    // Flush dei log nel finally
-    if (typeof LOG !== 'undefined' && LOG.flush) {
-        try { LOG.flush(); } catch(eFlush) { console.error("Errore flush log:", eFlush); }
-    }
-    ss.toast('', '', 1); // Pulisce il toast precedente
-  }
-}
-
-// =============================================================
-// WRAPPER FUNZIONALI — Disaccoppiati e centralizzati
-// =============================================================
-
-/** Esegue il setup iniziale guidato del sistema. @returns {void} */
-function runInitialSetup() { _runSafely(() => SETUP.run(), 'Setup', 'Avvio Setup Guidato...', 'Setup completato!'); }
-
-/** Riprende l'importazione intestazioni dal punto di interruzione. @returns {void} */
-function runContinue() { _runSafely(() => IMPORT_HEADERS.runContinue(), 'Import', 'Ripresa importazione...', 'Ciclo di importazione completato.'); }
-
-/** Importa le intestazioni delle fatture XML. @returns {void} */
-function runImportHeaders() { _runSafely(() => IMPORT_HEADERS.run(), 'Import', 'Avvio importazione/conteggio...', 'Importazione intestazioni e conteggio file completati.'); }
-
-/** Importa le righe di dettaglio delle fatture. @returns {void} */
-function runImportRows() { _runSafely(() => IMPORT_ROWS.run(), 'Import', 'Avvio importazione righe...', 'Importazione righe completata.'); }
-
-/** Genera i PDF delle fatture mancanti. @returns {void} */
-function runCreatePdfs() { _runSafely(() => PDF.run(), 'PDF', 'Creazione PDF in corso...', 'Creazione PDF completata.'); }
-
-/** Riprende creazione PDF solo per fatture TODO/SKIPPED. @returns {void} */
-function runResumePdfs() { _runSafely(() => PDF.runPdfOnly(), 'PDF', 'Ripresa creazione PDF...', 'PDF ripresi completati.'); }
-
-/** Genera il report di audit e riconciliazione. @returns {void} */
-function runReconciliationReport() { _runSafely(() => REPORTING.run(), 'Reporting', 'Generazione Report di Audit...', 'Report generato.'); }
-
-/**
- * Esegue la manutenzione completa del sistema.
- * Include: verifica struttura fogli, applicazione formati, gestione duplicati,
- * sanity check integrità dati.
- * 
- * @returns {void}
- */
-function runCompleteMaintenance() {
-  _runSafely(() => {
-    const runId = LOG?.generateRunId ? LOG.generateRunId() : Utilities.getUuid();
-    LOG?.info(runId, 'MAINT_START', 'Avvio manutenzione completa');
-
-    // 0. Verifica e riallinea intestazioni fogli secondo SCHEMAS
-    try {
-      const summary = (typeof SETUP !== 'undefined' && SETUP.verifyAlignment) ? SETUP.verifyAlignment() : null;
-      LOG?.info(runId, 'MAINT_SETUP_VERIFY', 'Verifica setup eseguita', { summary });
-    } catch (e) {
-      LOG?.warn(runId, 'MAINT_SETUP_VERIFY_FAIL', 'Errore verifica setup', { error: e.message });
-    }
-
-    // 1. Verifica struttura fogli e applica filtri su TUTTI i fogli
-    SHEETS.ensureAll();
-    SHEETS.applyFormats();
-    
-    // 2. Forza formato testo su colonne codici (evita '001' → 1)
-    DEBUG.forceTextFormatOnCodes();
-    
-    // 3. Gestione duplicati (silenzioso, solo log) - PROTEZIONE AUTOMATICA
-    DEBUG.manageDuplicateInvoices(); // Marca fatture duplicate (giallo)
-    DEBUG.manageDuplicateRows();     // Marca righe duplicate (rosa)
-    
-    // 4. Controlla integrità dati (sanity check)
-    DEBUG.sanityCheck();
-
-    LOG?.info(runId, 'MAINT_DONE', 'Manutenzione completa terminata');
-  }, 'Maintenance', 'Manutenzione completa in corso...', 'Manutenzione completata! Fogli verificati, codici formattati, duplicati marcati, integrità controllata.');
-}
-
-/** Pulisce la cache e azzera i cursori di ripresa import. @returns {void} */
-function runClearCache() { 
-  // Esecuzione diretta senza lock (operazione veloce read-only cache)
-  const ui = SpreadsheetApp.getUi();
-  try {
-    DEBUG.clearCache();
-  } catch (e) {
-    ui.alert('Errore', `Impossibile pulire cache: ${e.message}`, ui.ButtonSet.OK);
-  }
-}
-
-/** Esegue pulizia duplicati esatti in Prodotti (Distruttiva). @returns {void} */
-function runCleanupExactDuplicates() {
-  _runSafely(
-    () => cleanupExactDuplicates(),
-    'Maintenance',
-    'Avvio analisi duplicati esatti...',
-    'Operazione completata.'
-  );
-}
-
-/** Aggiorna la dashboard finanziaria con i dati più recenti. @returns {void} */
-function runCreateDashboard() { _runSafely(() => DASHBOARD.create(), 'Dashboard', 'Aggiornamento dashboard...', 'Dashboard aggiornata.'); }
-
-/** Crea o aggiorna il report magazzino. @returns {void} */
-function runCreateWarehouse() { _runSafely(() => MAGAZZINO_CORE.buildMagazzinoByYear(), 'Warehouse', 'Creazione/Aggiornamento magazzino...', 'Magazzino aggiornato!'); }
-
-/** Attiva l'import automatico programmato. @returns {void} */
-function runCreateTrigger() { _runSafely(() => createTimeBasedTrigger(), 'Trigger', 'Installazione import automatico...', 'Operazione trigger completata.'); }
-
-/** Disattiva tutti i trigger di import automatico. @returns {void} */
-function runDeleteTriggers() { _runSafely(() => deleteTriggers(), 'Trigger', 'Rimozione import automatico...', 'Operazione trigger completata.'); }
-
-/** Esegue immediatamente un backup rotativo ERP. @returns {void} */
-function runBackupNow() {
-  _runSafely(
-    () => {
-      const result = (typeof BACKUP_SERVICE !== 'undefined' && BACKUP_SERVICE.runNightlyBackup)
-        ? BACKUP_SERVICE.runNightlyBackup()
-        : runNightlyBackup();
-      const ui = SpreadsheetApp.getUi();
-      const backupName = result?.backupName || 'Backup completato';
-      const trashed = result?.trashedCount ?? 0;
-      ui.alert('💾 Backup ERP', `${backupName}\nFile vecchi eliminati: ${trashed}`, ui.ButtonSet.OK);
-    },
-    'Backup',
-    'Esecuzione backup in corso...',
-    'Backup completato!'
-  );
-}
-
-/** Installa il trigger notturno per il backup ERP. @returns {void} */
-function runInstallBackupTrigger() {
-  _runSafely(
-    () => {
-      if (typeof BACKUP_SERVICE !== 'undefined' && BACKUP_SERVICE.setupBackupTrigger) {
-        BACKUP_SERVICE.setupBackupTrigger();
-      } else {
-        setupBackupTrigger();
-      }
-    },
-    'Backup',
-    'Installazione trigger backup...',
-    'Trigger backup notturno installato!'
-  );
-}
-
-/** Genera il foglio Conto Economico (P&L). @returns {void} */
-function runCreatePnlSheet() { _runSafely(() => createPnlSheet(), 'PNL', 'Creazione/Aggiornamento P&L...', 'P&L aggiornato.'); }
-
-// --- WRAPPER FUNCTIONS FOR DEBUG MODULE ---
-
-/** Marca visivamente le fatture duplicate nel foglio Fatture. @returns {void} */
-function runMarkDuplicateInvoices() {
-    _runSafely(() => DEBUG.markDuplicateInvoices(), 'Debug', 'Marcatura Duplicati in corso...', 'Marcatura completata!');
-}
-
-/** Sincronizza l'anagrafica fornitori con le nuove fatture importate. @returns {void} */
-function runSyncSuppliers() { _runSafely(() => DEBUG.syncSuppliersFromInvoices(), 'Debug', 'Sincronizzazione fornitori (nuovi)...', 'Anagrafica fornitori sincronizzata!'); }
-
-/** Riallinea le categorie prodotti storiche con la configurazione attuale. @returns {void} */
-function runSyncCategoriesRetroactive() { _runSafely(() => DEBUG.syncCategoriesRetroactive(), 'Debug', 'Riallineamento categorie storiche...', 'Categorie storiche riallineate!'); }
-
-/** Diagnostica costi Hotel - verifica configurazione e dati. @returns {void} */
-function runDiagnoseHotelCosts() { _runSafely(() => DEBUG.DEV_DiagnoseHotelCosts(), 'Debug Hotel', 'Analisi configurazione costi Hotel...', 'Diagnosi completata!'); }
-
-/** Confronta costi Hotel tra Fatture e P&L generato. @returns {void} */
-function runCompareHotelCostsWithPnL() { _runSafely(() => DEBUG.DEV_CompareHotelCostsWithPnL(), 'Debug Hotel', 'Confronto Fatture vs P&L...', 'Analisi completata!'); }
-
-/** Ispeziona aggregazione costi dal foglio Fatture. @returns {void} */
-function runInspectAggregatedCosts() { _runSafely(() => DEBUG.DEV_InspectAggregatedCosts(), 'Debug Hotel', 'Ispezione aggregazione...', 'Analisi completata!'); }
-
-/** Debug dettagliato loop aggregazione costi Hotel. @returns {void} */
-function runDebugCostiHotelLoop() { _runSafely(() => DEBUG.DEV_DebugCostiHotelLoop(), 'Debug Hotel', 'Debug loop in corso...', 'Debug completato!'); }
-
-/**
- * Scansiona il catalogo Prodotti e disattiva quelli con descrizioni "spazzatura".
- * Controlla le descrizioni contro il foglio "Filtro Righe Spazzatura" e imposta NonInUso=TRUE.
- * @returns {void}
- */
-function runMarkJunkProducts() {
-  _runSafely(() => {
-    const result = PRODUCTS.markJunkAsUnused();
-    const message = `Scansione completata!\n\n` +
-                   `✅ Prodotti scansionati: ${result.scanned}\n` +
-                   `🧹 Prodotti disattivati: ${result.disabled}\n` +
-                   `❌ Errori: ${result.errors}`;
-    SpreadsheetApp.getUi().alert('🧹 Pulizia Prodotti Spazzatura', message, SpreadsheetApp.getUi().ButtonSet.OK);
-  }, 'Products', 'Scansione prodotti spazzatura in corso...', 'Scansione completata!');
-}
-
-/**
- * Recupera retroattivamente i codici fornitore mancanti dal foglio Righe.
- * Per prodotti senza CodiceFornitore, cerca il codice nelle righe già importate.
- * @returns {void}
- */
-function runBackfillProductCodes() {
-  _runSafely(() => {
-    const result = PRODUCTS.backfillMissingCodes();
-    const message = `Recupero codici completato!\n\n` +
-                   `✅ Prodotti analizzati: ${result.scanned}\n` +
-                   `🔧 Codici recuperati: ${result.updated}\n` +
-                   `❌ Errori: ${result.errors}`;
-    SpreadsheetApp.getUi().alert('🔧 Recupero Codici Fornitore', message, SpreadsheetApp.getUi().ButtonSet.OK);
-  }, 'Products', 'Recupero codici fornitore in corso...', 'Recupero completato!');
-}
-
-/**
- * Pulisce retroattivamente le descrizioni prodotti rimuovendo codici ridondanti.
- * Alcuni fornitori includono il codice nella descrizione (es: "80761761-KINDER BUENO...").
- * @returns {void}
- */
-function runCleanProductDescriptions() {
-  _runSafely(() => {
-    const result = PRODUCTS.cleanDescriptions();
-    const message = `Pulizia descrizioni completata!\n\n` +
-                   `✅ Prodotti analizzati: ${result.scanned}\n` +
-                   `🧼 Descrizioni pulite: ${result.cleaned}\n` +
-                   `❌ Errori: ${result.errors}`;
-    SpreadsheetApp.getUi().alert('🧼 Pulizia Descrizioni', message, SpreadsheetApp.getUi().ButtonSet.OK);
-  }, 'Products', 'Pulizia descrizioni in corso...', 'Pulizia completata!');
-}
-
-/** Apre il dialog di configurazione delle impostazioni sistema. @returns {void} */
-function runConfigDialog() { _runSafely(() => CONFIG_UI.openDialog(), 'Config', 'Apertura dialog configurazione...', 'Dialog chiuso.'); }
-
-/**
- * Pulisce i log vecchi mantenendo solo gli ultimi 30 giorni.
- * Chiede conferma prima di procedere all'eliminazione.
- * @returns {void}
- */
-function runCleanupLogs() {
-  const ui = SpreadsheetApp.getUi();
-  const response = ui.alert(
-    '🗑️ Pulizia Log',
-    'Vuoi eliminare i log più vecchi di 30 giorni?\n\nQuesta operazione non può essere annullata.',
-    ui.ButtonSet.YES_NO
-  );
-  
-  if (response === ui.Button.YES) {
-    _runSafely(() => {
-      const result = LOG.cleanup(30);
-      const message = result.success 
-        ? `✅ ${result.message}\n\nLog eliminati: ${result.deleted}`
-        : `❌ Errore: ${result.message}`;
-      ui.alert('🗑️ Pulizia Log', message, ui.ButtonSet.OK);
-    }, 'Log', 'Pulizia log in corso...', 'Pulizia completata!');
-  }
-}
-
-/**
- * Apre il foglio Trigger Status per visualizzare lo stato dei trigger automatici.
- * @returns {void}
- */
-function openTriggerStatusSheet() {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName('Trigger Status');
-    if (sheet) {
-      sheet.activate();
-      LOG?.info('UI', 'Foglio Trigger Status aperto dalla sidebar.');
+  _runSafely('OPEN_SIDEBAR', function () {
+    if (typeof UI !== 'undefined' && UI.openSidebar) {
+      UI.openSidebar();
+    } else if (typeof SIDEBAR !== 'undefined' && SIDEBAR.open) {
+      SIDEBAR.open();
     } else {
-      SpreadsheetApp.getUi().alert('Foglio "Trigger Status" non trovato. Esegui prima il Setup.');
-      LOG?.warn('UI', 'Foglio Trigger Status non trovato.');
+      throw new Error('Modulo UI/Sidebar non trovato.');
     }
-  } catch (e) {
-    LOG?.error('UI', 'Errore apertura Trigger Status', { error: e.message });
-    throw e;
-  }
+  });
 }
 
-/**
- * Wrapper per menu: crea confronto P&L Gemma vs Zaffiro
- * @returns {void}
- */
-function runCreatePnlConfrontoGemmaZaffiro() {
-  try {
-    createPnlConfrontoGemmaZaffiro();
-  } catch (e) {
-    LOG?.error('UI', 'Errore creazione confronto Gemma-Zaffiro', { error: e.message });
-    SpreadsheetApp.getUi().alert('Errore durante la creazione del confronto: ' + e.message);
-  }
+function runContinue() {
+  _runSafely('RUN_CONTINUE', function () {
+    if (typeof STATUS !== 'undefined' && STATUS.continueLastProcess) {
+      STATUS.continueLastProcess();
+    } else {
+      throw new Error('Funzione di continuazione non disponibile.');
+    }
+  });
 }
 
-/**
- * Esegue validazione completa di tutti i dati (Fatture, Righe, Prodotti, Magazzino).
- * Mostra report dettagliato con integrità, coerenza e completezza dei dati.
- * @returns {void}
- */
-function runDataValidation() {
-  _runSafely(
-    () => DATA_VALIDATOR.runCompleteValidation(),
-    'DataValidation',
-    'Validazione dati completa in corso...',
-    'Validazione completata! Controlla i log per il report dettagliato.'
-  );
+// --- Import ---
+
+function runImportHeaders() {
+  _runSafely('IMPORT_HEADERS', function () {
+    IMPORT_HEADERS.run();
+  });
 }
 
-/** Pulisce le righe vuote dal foglio 'Righe'. @returns {void} */
-function runDeleteEmptyRowsFromRigheSheet() {
-  _runSafely(
-    () => SHEET_CLEANUP.deleteEmptyRows('Righe'),
-    'SheetCleanup',
-    'Pulizia righe vuote dal foglio "Righe" in corso...',
-    'Pulizia del foglio "Righe" completata!'
-  );
+function runImportRows() {
+  _runSafely('IMPORT_ROWS', function () {
+    IMPORT_ROWS.run();
+  });
 }
 
-/**
- * Sincronizza il catalogo prodotti con i dati delle righe importate.
- * Aggiorna informazioni prodotti esistenti e crea nuovi prodotti se necessario.
- * @returns {void}
- */
-function runSyncProdotti() {
-  _runSafely(
-    () => {
-      // Richiama la funzione di riallineamento prodotti dal modulo PRODUCTS
-      if (typeof PRODUCTS !== 'undefined' && PRODUCTS.realignAll) {
-        PRODUCTS.realignAll();
-      } else {
-        // Fallback: usa la cache prime per forzare refresh
-        LOG?.info('SYNC_PRODOTTI', 'Esecuzione refresh cache prodotti');
-        PRODUCTS.primeCache();
-        SpreadsheetApp.getUi().alert('✅ Cache prodotti aggiornata!');
-      }
-    },
-    'Products',
-    'Sincronizzazione prodotti in corso...',
-    'Sincronizzazione prodotti completata!'
-  );
+function runCreatePdfs() {
+  _runSafely('CREATE_PDFS', function () {
+    if (typeof PDF !== 'undefined' && PDF.run) {
+      PDF.run();
+    } else if (typeof IMPORT_PDFS !== 'undefined' && IMPORT_PDFS.run) {
+      IMPORT_PDFS.run();
+    } else {
+      throw new Error('Modulo generazione PDF non trovato.');
+    }
+  });
 }
 
-/**
- * Crea il foglio per inserimento vendite manuali.
- * Richiede anno e mese, genera foglio con prodotti raggruppati per ingrediente.
- * @returns {void}
- */
-function runCreateSalesEntrySheet() {
-  _runSafely(
-    () => {
-      const ui = SpreadsheetApp.getUi();
-      
-      // Richiedi anno
-      const yearResponse = ui.prompt(
-        '📅 Anno di riferimento',
-        'Inserisci l\'anno (es. 2025):',
-        ui.ButtonSet.OK_CANCEL
-      );
-      
-      if (yearResponse.getSelectedButton() !== ui.Button.OK) {
-        return; // Operazione annullata
-      }
-      
-      const year = yearResponse.getResponseText().trim();
-      if (!/^\d{4}$/.test(year)) {
-        ui.alert('❌ Errore', 'Anno non valido. Inserire un anno a 4 cifre (es. 2025).', ui.ButtonSet.OK);
-        return;
-      }
-      
-      // Richiedi mese
-      const monthResponse = ui.prompt(
-        '📅 Mese di riferimento',
-        'Inserisci il mese (01-12):',
-        ui.ButtonSet.OK_CANCEL
-      );
-      
-      if (monthResponse.getSelectedButton() !== ui.Button.OK) {
-        return; // Operazione annullata
-      }
-      
-      const month = monthResponse.getResponseText().trim();
-      if (!/^(0[1-9]|1[0-2])$/.test(month)) {
-        ui.alert('❌ Errore', 'Mese non valido. Inserire un mese tra 01 e 12.', ui.ButtonSet.OK);
-        return;
-      }
-      
-      // Crea foglio vendite
-      if (typeof MANUAL_SALES !== 'undefined' && MANUAL_SALES.createSalesEntrySheet) {
-        MANUAL_SALES.createSalesEntrySheet(year, month);
-      } else {
-        throw new Error('Modulo MANUAL_SALES non disponibile');
-      }
-    },
-    'ManualSales',
-    'Creazione foglio vendite in corso...',
-    'Foglio vendite creato con successo!'
-  );
+// --- Report & Analisi ---
+
+function runCreateDashboard() {
+  _runSafely('CREATE_DASHBOARD', function () {
+    DASHBOARD.run();
+  });
 }
 
-/**
- * Importa le vendite dal foglio manuale al sistema.
- * Richiede anno e mese, legge il foglio e importa i dati.
- * @returns {void}
- */
-function runImportSalesFromSheet() {
-  _runSafely(
-    () => {
-      const ui = SpreadsheetApp.getUi();
-      
-      // Richiedi anno
-      const yearResponse = ui.prompt(
-        '📅 Anno di riferimento',
-        'Inserisci l\'anno (es. 2025):',
-        ui.ButtonSet.OK_CANCEL
-      );
-      
-      if (yearResponse.getSelectedButton() !== ui.Button.OK) {
-        return; // Operazione annullata
-      }
-      
-      const year = yearResponse.getResponseText().trim();
-      if (!/^\d{4}$/.test(year)) {
-        ui.alert('❌ Errore', 'Anno non valido. Inserire un anno a 4 cifre (es. 2025).', ui.ButtonSet.OK);
-        return;
-      }
-      
-      // Richiedi mese
-      const monthResponse = ui.prompt(
-        '📅 Mese di riferimento',
-        'Inserisci il mese (01-12):',
-        ui.ButtonSet.OK_CANCEL
-      );
-      
-      if (monthResponse.getSelectedButton() !== ui.Button.OK) {
-        return; // Operazione annullata
-      }
-      
-      const month = monthResponse.getResponseText().trim();
-      if (!/^(0[1-9]|1[0-2])$/.test(month)) {
-        ui.alert('❌ Errore', 'Mese non valido. Inserire un mese tra 01 e 12.', ui.ButtonSet.OK);
-        return;
-      }
-      
-      // Importa vendite
-      if (typeof MANUAL_SALES !== 'undefined' && MANUAL_SALES.importSalesFromSheet) {
-        const result = MANUAL_SALES.importSalesFromSheet(year, month);
-        
-        // Mostra riepilogo
-        let message = `✅ Importazione completata!\n\n`;
-        message += `📥 Vendite importate: ${result.imported}\n`;
-        message += `⏭️ Righe saltate: ${result.skipped}\n`;
-        message += `❌ Errori: ${result.errors}`;
-        
-        ui.alert('📊 Riepilogo Importazione', message, ui.ButtonSet.OK);
-      } else {
-        throw new Error('Modulo MANUAL_SALES non disponibile');
-      }
-    },
-    'ManualSales',
-    'Importazione vendite in corso...',
-    'Importazione vendite completata!'
-  );
+function runCreatePnlSheet() {
+  _runSafely('CREATE_PNL', function () {
+    if (typeof PNL !== 'undefined' && PNL.run) {
+      PNL.run();
+    } else if (typeof createPnlSheet === 'function') {
+      createPnlSheet();
+    } else {
+      throw new Error('Modulo PNL non trovato.');
+    }
+  });
 }
 
-/**
- * Crea il foglio per il conteggio inventario fisico.
- * Genera scheda con prodotti raggruppati per ingrediente e UMBase.
- * @returns {void}
- */
-function runCreateInventoryCountSheet() {
-  _runSafely(
-    () => {
-      if (typeof INVENTORY !== 'undefined' && INVENTORY.createCountSheet) {
-        INVENTORY.createCountSheet();
-      } else {
-        throw new Error('Modulo INVENTORY non disponibile');
-      }
-    },
-    'Inventory',
-    'Creazione scheda inventario in corso...',
-    'Scheda inventario creata con successo!'
-  );
+function runCreateWarehouse() {
+  _runSafely('CREATE_WAREHOUSE', function () {
+    WAREHOUSE.run();
+  });
 }
 
-/**
- * Importa i conteggi inventario dal foglio compilato.
- * Legge il foglio INVENTARIO_ATTIVO e importa i dati.
- * @returns {void}
- */
-function runImportInventoryCountData() {
-  _runSafely(
-    () => {
-      const ui = SpreadsheetApp.getUi();
-      
-      if (typeof INVENTORY !== 'undefined' && INVENTORY.importCountData) {
-        const result = INVENTORY.importCountData();
-        
-        // Mostra riepilogo
-        let message = `✅ Importazione completata!\n\n`;
-        message += `📥 Conteggi importati: ${result.imported}\n`;
-        message += `⏭️ Righe saltate: ${result.skipped}\n`;
-        message += `❌ Errori: ${result.errors}`;
-        
-        ui.alert('📦 Riepilogo Importazione Inventario', message, ui.ButtonSet.OK);
-      } else {
-        throw new Error('Modulo INVENTORY non disponibile');
-      }
-    },
-    'Inventory',
-    'Importazione conteggi inventario in corso...',
-    'Importazione inventario completata!'
-  );
+function runReconciliationReport() {
+  _runSafely('RECONCILIATION_REPORT', function () {
+    if (typeof RECONCILE !== 'undefined' && RECONCILE.run) {
+      RECONCILE.run();
+    } else {
+      throw new Error('Modulo riconciliazione non trovato.');
+    }
+  });
 }
 
-/**
- * Genera report KPI consumi (Acquisti / N. Scontrini).
- * Calcola KG/Scontrino, PZ/Scontrino, €/Scontrino per Sede/Mese/Categoria.
- * @returns {void}
- */
-function runKpiConsumptionReport() {
-  _runSafely(
-    () => {
-      if (typeof KPI_ANALYSIS !== 'undefined' && KPI_ANALYSIS.runConsumptionReport) {
-        KPI_ANALYSIS.runConsumptionReport();
-      } else {
-        throw new Error('Modulo KPI_ANALYSIS non disponibile');
-      }
-    },
-    'KPI Analysis',
-    'Generazione report KPI consumi in corso...',
-    'Report KPI consumi completato!'
-  );
+// --- Setup & Diagnostica ---
+
+function runInitialSetup() {
+  _runSafely('INITIAL_SETUP', function () {
+    if (typeof SETUP !== 'undefined' && SETUP.initialSetup) {
+      SETUP.initialSetup();
+    } else if (typeof SETUP !== 'undefined' && SETUP.run) {
+      SETUP.run();
+    } else {
+      throw new Error('Modulo SETUP non trovato.');
+    }
+  });
 }
 
-/**
- * Esegue il reset completo del sistema e la re-importazione.
- * Funzione ad alto rischio, da usare con cautela.
- * @returns {void}
- */
-function runResetAndReimportAll() {
-  try {
-    // La funzione `resetAndReimportAll` gestisce internamente UI e lock.
-    resetAndReimportAll();
-  } catch (e) {
-    LOG?.error('RESET', `Errore durante l'avvio del reset: ${e.message}`, { stack: e.stack });
-    SpreadsheetApp.getUi().alert(`Impossibile avviare il processo di reset: ${e.message}`);
-  }
+function runSheetCheckAndSetup() {
+  _runSafely('SHEET_CHECK_AND_SETUP', function () {
+    if (typeof SETUP !== 'undefined' && SETUP.sheetCheckAndSetup) {
+      SETUP.sheetCheckAndSetup();
+    } else {
+      throw new Error('Funzione di verifica struttura non trovata.');
+    }
+  });
 }
 
-/**
- * Wrapper per buildMagazzinoIngredientiMensile
- * Chiamato dal menu GELATAMI > Report > Magazzino Ingredienti Mensile
- */
-function runBuildMagazzinoIngredientiMensile() {
-  MAGAZZINO_CORE.buildMagazzinoIngredientiMensile();
+function runSanityCheck() {
+  _runSafely('SANITY_CHECK', function () {
+    if (typeof DEBUG !== 'undefined' && DEBUG.sanityCheck) {
+      DEBUG.sanityCheck();
+    } else {
+      throw new Error('Modulo DEBUG.sanityCheck non trovato.');
+    }
+  });
 }
 
-/**
- * Funzione test semplice
- * Mostra un messaggio di saluto
- */
-function runTestHello() {
-  SpreadsheetApp.getUi().alert('Ciao! 👋 Funzione test eseguita con successo!');
+// --- Trigger ---
+
+function runCreateTrigger() {
+  _runSafely('CREATE_TRIGGER', function () {
+    if (typeof TRIGGERS !== 'undefined' && TRIGGERS.create) {
+      TRIGGERS.create(App.config.triggerHandler);
+    } else if (typeof createTimeDrivenTrigger === 'function') {
+      createTimeDrivenTrigger();
+    } else {
+      throw new Error('Gestione trigger non trovata.');
+    }
+  });
+}
+
+function runDeleteTriggers() {
+  _runSafely('DELETE_TRIGGERS', function () {
+    if (typeof TRIGGERS !== 'undefined' && TRIGGERS.removeAll) {
+      TRIGGERS.removeAll();
+    } else if (typeof deleteTimeDrivenTriggers === 'function') {
+      deleteTimeDrivenTriggers();
+    } else {
+      throw new Error('Gestione trigger non trovata.');
+    }
+  });
+}
+
+// --- Duplicati ---
+
+function runMarkDuplicateInvoices() {
+  _runSafely('MARK_DUPLICATES', function () {
+    DUPLICATES.mark();
+  });
+}
+
+function runClearDuplicateMarkings() {
+  _runSafely('CLEAR_DUPLICATE_MARKINGS', function () {
+    DUPLICATES.clearMarks();
+  });
+}
+
+function createDuplicateSnapshot() {
+  _runSafely('DUPLICATE_SNAPSHOT', function () {
+    DUPLICATES.snapshot();
+  });
+}
+
+// --- Utility / Sync ---
+
+function runForceTextFormatOnCodes() {
+  _runSafely('FORCE_TEXT_CODES', function () {
+    if (typeof UTIL !== 'undefined' && UTIL.forceTextFormatOnCodes) {
+      UTIL.forceTextFormatOnCodes();
+    } else {
+      throw new Error('Utility forceTextFormatOnCodes non trovata.');
+    }
+  });
+}
+
+function runSyncSuppliers() {
+  _runSafely('SYNC_SUPPLIERS', function () {
+    if (typeof SYNC !== 'undefined' && SYNC.suppliers) {
+      SYNC.suppliers();
+    } else if (typeof DEBUG !== 'undefined' && DEBUG.syncSuppliers) {
+      DEBUG.syncSuppliers();
+    } else {
+      throw new Error('Funzione sync fornitori non trovata.');
+    }
+  });
+}
+
+function runSyncCategoriesRetroactive() {
+  _runSafely('SYNC_CATEGORIES_RETRO', function () {
+    if (typeof SYNC !== 'undefined' && SYNC.categoriesRetroactive) {
+      SYNC.categoriesRetroactive();
+    } else if (typeof DEBUG !== 'undefined' && DEBUG.syncCategoriesRetroactive) {
+      DEBUG.syncCategoriesRetroactive();
+    } else {
+      throw new Error('Funzione sync categorie retroattive non trovata.');
+    }
+  });
+}
+
+function runClearCache() {
+  _runSafely('CLEAR_CACHE', function () {
+    if (typeof STATE !== 'undefined' && STATE.clearAll) {
+      STATE.clearAll();
+    } else if (typeof DEBUG !== 'undefined' && DEBUG.clearCacheAndState) {
+      DEBUG.clearCacheAndState();
+    } else {
+      throw new Error('Funzione clear cache/state non trovata.');
+    }
+  });
+}
+
+// --- Status & Monitor ---
+
+function getSystemStatus() {
+  return _runSafely('GET_SYSTEM_STATUS', function () {
+    if (typeof STATUS !== 'undefined' && STATUS.getSystemStatus) {
+      return STATUS.getSystemStatus();
+    }
+    throw new Error('Modulo STATUS.getSystemStatus non trovato.');
+  }, { silentUi: true });
+}
+
+function getRunningStatus() {
+  return _runSafely('GET_RUNNING_STATUS', function () {
+    if (typeof STATUS !== 'undefined' && STATUS.getRunningStatus) {
+      return STATUS.getRunningStatus();
+    }
+    throw new Error('Modulo STATUS.getRunningStatus non trovato.');
+  }, { silentUi: true });
 }
 
 // =============================================================
-// FUNZIONI DEFINITE IN ALTRI FILE (NON INCLUDERE QUI)
+// _runSafely: wrapper centrale
+// - Lock (se disponibile in UTIL)
+// - Logging (LOG)
+// - Alert utente su errore (se non silent)
 // =============================================================
-// Le funzioni getSystemStatus, getRunningStatus, createTimeBasedTrigger,
-// deleteTriggers, runAutomatedImport sono definite nei rispettivi file
+
+function _runSafely(action, callback, options) {
+  options = options || {};
+  const ui = SpreadsheetApp.getUi ? SpreadsheetApp.getUi() : null;
+  const label = String(action || 'ACTION').toUpperCase();
+
+  let lock = null;
+  const hasUtilLock = (typeof UTIL !== 'undefined' && typeof UTIL.acquireLock === 'function');
+
+  try {
+    if (typeof LOG !== 'undefined' && typeof LOG.info === 'function') {
+      LOG.info(label, 'Avvio operazione.');
+    }
+
+    if (hasUtilLock) {
+      lock = UTIL.acquireLock(5000); // 5s
+      if (!lock) {
+        if (typeof LOG !== 'undefined' && LOG.warn) {
+          LOG.warn(label, 'Lock occupato, operazione saltata.');
+        }
+        if (!options.silentUi && ui) {
+          ui.alert('Sistema occupato, riprova tra qualche minuto.');
+        }
+        return;
+      }
+    }
+
+    const result = callback && callback();
+
+    if (typeof LOG !== 'undefined' && typeof LOG.info === 'function') {
+      LOG.info(label, 'Operazione completata.');
+    }
+
+    return result;
+
+  } catch (err) {
+
+    if (typeof LOG !== 'undefined' && typeof LOG.error === 'function') {
+      LOG.error(label, err);
+    } else {
+      console && console.error && console.error(label, err);
+    }
+
+    if (!options.silentUi && ui) {
+      ui.alert('Errore durante "' + label + '": ' + (err && err.message ? err.message : err));
+    }
+
+    throw err;
+
+  } finally {
+    if (lock && typeof lock.releaseLock === 'function') {
+      lock.releaseLock();
+    }
+  }
+}
