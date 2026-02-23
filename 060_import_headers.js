@@ -16,13 +16,14 @@ const IMPORT_HEADERS = (function () {
     TD27: 'Fattura per Autoconsumo'
   };
 
-  // --- CHIAVI DI STATO ---
-  const IMPORT_PHASE_KEY          = 'HEADERS_IMPORT_PHASE_V23';
-  const ALL_FILES_TO_PROCESS_KEY  = 'HEADERS_ALL_FILES_V23';
-  const ALL_FILES_IDS_KEY         = 'HEADERS_ALL_FILES_IDS_V23';
-  const EXTRACTED_DATA_KEY        = 'HEADERS_EXTRACTED_DATA_V23';
-  const EXTRACTED_DATA_CHUNKS_KEY = 'HEADERS_EXTRACTED_CHUNKS_V23';
-  const PARTIAL_COUNTS_KEY        = 'HEADERS_PARTIAL_COUNTS_V23'; // { month: {}, folder: {}, goldenTotal: 0 }
+  // --- CHIAVI DI STATO (centralizzate in App.config.keys.headersImport) ---
+  const _HK                       = App.config.keys.headersImport;
+  const IMPORT_PHASE_KEY          = _HK.phase;
+  const ALL_FILES_TO_PROCESS_KEY  = _HK.filesToProcess;
+  const ALL_FILES_IDS_KEY         = _HK.allFileIds;
+  const EXTRACTED_DATA_KEY        = _HK.extractedData;
+  const EXTRACTED_DATA_CHUNKS_KEY = _HK.dataChunks;
+  const PARTIAL_COUNTS_KEY        = _HK.partialCounts; // { month: {}, folder: {}, goldenTotal: 0 }
 
   const PHASES = { DISCOVERY: 'DISCOVERY', SCAN_EXTRACT: 'SCAN_EXTRACT' };
   const SAVE_EVERY_N = 100;

@@ -124,6 +124,16 @@ const App = {
       auditCountsFolder: 'AUDIT_COUNTS_FOLDER_V1',
       auditTotalCount: 'AUDIT_TOTAL_COUNT_V1',
 
+      // Chiavi interne import intestazioni (060_import_headers.js)
+      headersImport: {
+        phase:         'HEADERS_IMPORT_PHASE_V23',
+        filesToProcess:'HEADERS_ALL_FILES_V23',
+        allFileIds:    'HEADERS_ALL_FILES_IDS_V23',
+        extractedData: 'HEADERS_EXTRACTED_DATA_V23',
+        dataChunks:    'HEADERS_EXTRACTED_CHUNKS_V23',
+        partialCounts: 'HEADERS_PARTIAL_COUNTS_V23'
+      },
+
       // Cursori di processo (ripartenza sicura)
       cursors: {
         headers: 'HEADERS_CURSOR_V2_RECURSIVE',

@@ -181,7 +181,7 @@ const MAGAZZINO_CORE = (() => {
 
       // Mappa con codice fornitore
       if (codiceFornitore) {
-        const codiceNorm = codiceFornitore.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        const codiceNorm = PRODUCTS.normalizeCodiceFornitore(codiceFornitore);
         const key = `${fornitoreID}||${codiceNorm}`;
         prodottiByKey.set(key, prodData);
         
@@ -328,11 +328,11 @@ const MAGAZZINO_CORE = (() => {
 
       if (codiceArticolo) {
         // Normalizza codice articolo (rimuove underscore, trattini, ecc.)
-        const codiceNorm = codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        const codiceNorm = PRODUCTS.normalizeCodiceFornitore(codiceArticolo);
         const keyRiga = `${fornitoreID}||${codiceNorm}`;
         prod = prodottiByKey.get(keyRiga);
         matchReason = prod ? 'matched_by_code' : 'no_match_code';
-        
+
         // Log dettagliato per le prime 10 righe che non matchano
         if (!prod && noMatchSamples.length < 10 && runId) {
           LOG.debug(runId, 'MAG_NO_MATCH_DETAIL', 'Dettaglio mancato match per codice', {
@@ -359,13 +359,14 @@ const MAGAZZINO_CORE = (() => {
         skippedNoMatch++;
         // Raccogli sample (primi 10)
         if (noMatchSamples.length < 10) {
-          const keyAttempted = codiceArticolo 
-            ? `${fornitoreID}||${codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase()}`
+          const codiceArticoloNorm = PRODUCTS.normalizeCodiceFornitore(codiceArticolo);
+          const keyAttempted = codiceArticolo
+            ? `${fornitoreID}||${codiceArticoloNorm}`
             : `${fornitoreID}||${descrizione.toUpperCase()}||${um.toUpperCase()}`;
           noMatchSamples.push({
             fornitoreID,
             codiceArticolo,
-            codiceArticoloNorm: codiceArticolo ? codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase() : '',
+            codiceArticoloNorm,
             descrizione: descrizione.substring(0, 30),
             um,
             keyAttempted,
@@ -374,16 +375,19 @@ const MAGAZZINO_CORE = (() => {
             matchReason
           });
         }
-        
+
         if (runId && noMatchSamples.length <= 10) {
+          const codiceNormLog = PRODUCTS.normalizeCodiceFornitore(codiceArticolo);
           LOG.warn(runId, 'MAG_ROW_NO_MATCH', 'Riga non trova prodotto', {
             fornitoreID,
             codiceArticolo,
-            codiceNorm: codiceArticolo ? codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase() : '',
+            codiceNorm: codiceNormLog,
             descrizione: descrizione.substring(0, 30),
             um,
             matchReason,
-            keyTentata: codiceArticolo ? `${fornitoreID}||${codiceArticolo.replace(/[^A-Z0-9]/gi, '').toUpperCase()}` : `${fornitoreID}||${descrizione.toUpperCase()}||${um.toUpperCase()}`
+            keyTentata: codiceArticolo
+              ? `${fornitoreID}||${codiceNormLog}`
+              : `${fornitoreID}||${descrizione.toUpperCase()}||${um.toUpperCase()}`
           });
         }
         return;
@@ -1421,7 +1425,7 @@ const MAGAZZINO_CORE = (() => {
 
 // Registra nel ModuleRegistry
 if (typeof ModuleRegistry !== 'undefined') {
-  ModuleRegistry.register('MAGAZZINO_CORE', ['UTIL', 'SHARED_UTILS', 'LOG']);
+  ModuleRegistry.register('MAGAZZINO_CORE', ['UTIL', 'SHARED_UTILS', 'LOG', 'PRODUCTS']);
 }
 
 // Registra nel namespace GG

@@ -682,9 +682,9 @@ const IMPORT_ROWS = (function () {
             if (tipoRiga !== 'ARTICOLO') continue;
             
             // Lookup prodotto nella hash map
-            const codiceNorm = String(codiceValore || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const codiceNorm = PRODUCTS.normalizeCodiceFornitore(codiceValore);
             const lookupKey = `${fornitoreIdNorm}|${codiceNorm}`;
-            
+
             if (!productHashMap.has(lookupKey)) {
               // Prodotto mancante: accumula per batch creation
               productsToCreateInChunk.push({
@@ -1030,9 +1030,9 @@ const IMPORT_ROWS = (function () {
           let codiceInternoBreve = null;
           if (tipoRiga === 'ARTICOLO') {
             // Normalizza codice fornitore per lookup
-            const codiceNorm = String(codiceValore || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const codiceNorm = PRODUCTS.normalizeCodiceFornitore(codiceValore);
             const lookupKey = `${fornitoreIdNorm}|${codiceNorm}`;
-            
+
             // Lookup O(1) nella Hash Map (prodotto già creato in STEP 1)
             const foundProduct = productHashMap.get(lookupKey);
             

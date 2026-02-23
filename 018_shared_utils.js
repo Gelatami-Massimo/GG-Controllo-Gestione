@@ -448,11 +448,16 @@ const SHARED_UTILS = (function () {
       
       const groups = CONSTANTS.DATE_REGEX_GROUPS.ISO;
       const year = +isoMatch[groups.YEAR];
-      const month = +isoMatch[groups.MONTH] - 1;
+      const month = +isoMatch[groups.MONTH] - 1; // 0-based
       const day = +isoMatch[groups.DAY];
-      
+
+      // Range check rapido
+      if (month < 0 || month > 11 || day < 1 || day > 31 || year < 1970 || year > 2100) return null;
+
       const date = new Date(year, month, day);
-      return isNaN(date.getTime()) ? null : date;
+      // Round-trip check: rileva overflow (es: 30/02 → 02/03)
+      if (isNaN(date.getTime()) || date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
+      return date;
     },
 
     /**
@@ -582,11 +587,16 @@ const SHARED_UTILS = (function () {
       
       const groups = CONSTANTS.DATE_REGEX_GROUPS.ITALIAN;
       const day = +match[groups.DAY];
-      const month = +match[groups.MONTH] - 1;
+      const month = +match[groups.MONTH] - 1; // 0-based
       const year = +match[groups.YEAR];
-      
+
+      // Range check rapido
+      if (month < 0 || month > 11 || day < 1 || day > 31 || year < 1970 || year > 2100) return null;
+
       const date = new Date(year, month, day);
-      return isNaN(date.getTime()) ? null : date;
+      // Round-trip check: rileva overflow (es: 30/02 → 02/03)
+      if (isNaN(date.getTime()) || date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
+      return date;
     },
 
     /**
