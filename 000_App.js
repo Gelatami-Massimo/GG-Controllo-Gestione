@@ -167,10 +167,15 @@ const App = {
 
       // --- Manutenzione e Debug UI ---
       runInitialSetup: 'runInitialSetup',
+      runSheetCheckAndSetup: 'runSheetCheckAndSetup',
+      runSanityCheck: 'runSanityCheck',
       runCompleteMaintenance: 'runCompleteMaintenance',
       runCreateTrigger: 'runCreateTrigger',
       runDeleteTriggers: 'runDeleteTriggers',
       runMarkDuplicateInvoices: 'runMarkDuplicateInvoices',
+      runClearDuplicateMarkings: 'runClearDuplicateMarkings',
+      createDuplicateSnapshot: 'createDuplicateSnapshot',
+      runForceTextFormatOnCodes: 'runForceTextFormatOnCodes',
       runSyncSuppliers: 'runSyncSuppliers',
       runSyncCategoriesRetroactive: 'runSyncCategoriesRetroactive',
       runClearCache: 'runClearCache',
