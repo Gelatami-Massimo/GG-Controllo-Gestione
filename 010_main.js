@@ -104,7 +104,10 @@ function openSidebar() {
     } else if (typeof SIDEBAR !== 'undefined' && SIDEBAR.open) {
       SIDEBAR.open();
     } else {
-      throw new Error('Modulo UI/Sidebar non trovato.');
+      var html = HtmlService.createHtmlOutputFromFile('Sidebar')
+        .setTitle('GG Controllo Gestione')
+        .setWidth(320);
+      SpreadsheetApp.getUi().showSidebar(html);
     }
   });
 }
