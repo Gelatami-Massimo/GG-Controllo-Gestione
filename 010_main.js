@@ -95,6 +95,7 @@ function onOpen() {
     .addItem('💾 Esegui Backup adesso', 'runBackupNow')
     .addItem('⏰ Installa trigger Backup', 'runInstallBackupTrigger')
     .addSeparator()
+    .addItem('👋 Test - Ciao!', 'runTestHello')
   );
 
   // --- Configurazione ---
@@ -740,6 +741,14 @@ function runResetAndReimportAll() {
  */
 function runBuildMagazzinoIngredientiMensile() {
   MAGAZZINO_CORE.buildMagazzinoIngredientiMensile();
+}
+
+/**
+ * Funzione test semplice
+ * Mostra un messaggio di saluto
+ */
+function runTestHello() {
+  SpreadsheetApp.getUi().alert('Ciao! 👋 Funzione test eseguita con successo!');
 }
 
 // =============================================================
